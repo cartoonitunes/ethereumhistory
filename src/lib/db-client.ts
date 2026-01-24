@@ -28,6 +28,15 @@ function getDatabaseUrl(): string | undefined {
   return process.env.POSTGRES_URL || process.env.DATABASE_URL;
 }
 
+function isPoolerUrl(dbUrl: string): boolean {
+  try {
+    const host = new URL(dbUrl).hostname;
+    return host.includes("pooler");
+  } catch {
+    return dbUrl.includes("pooler");
+  }
+}
+
 function getDb() {
   if (!db) {
     const dbUrl = getDatabaseUrl();
@@ -36,7 +45,8 @@ function getDb() {
     }
 
     // In serverless, keep pool tiny to avoid connection explosion
-    const client = postgres(dbUrl, { max: 1 });
+    // For Neon pooler/pgbouncer, disable prepared statements.
+    const client = postgres(dbUrl, { max: 1, prepare: !isPoolerUrl(dbUrl) });
     db = drizzlePostgres(client, { schema });
   }
   return db;
@@ -94,6 +104,7 @@ function dbRowToContract(row: schema.Contract): AppContract {
     tokenName: row.tokenName,
     tokenSymbol: row.tokenSymbol,
     tokenDecimals: row.tokenDecimals,
+    tokenLogo: row.tokenLogo,
     tokenTotalSupply: null,
     shortDescription: row.shortDescription,
     description: row.description,
@@ -122,6 +133,76 @@ export async function getContractByAddress(
     .limit(1);
 
   return result.length > 0 ? dbRowToContract(result[0]) : null;
+}
+
+/**
+ * Update token metadata fields for a contract (idempotent).
+ * Useful for filling in missing DB fields using RPC lookups.
+ */
+export async function updateContractTokenMetadataFromDb(
+  address: string,
+  patch: {
+    tokenName?: string | null;
+    tokenSymbol?: string | null;
+    tokenDecimals?: number | null;
+    tokenLogo?: string | null;
+  }
+): Promise<void> {
+  const database = getDb();
+
+  const updates: Partial<schema.NewContract> = {
+    updatedAt: new Date(),
+  };
+
+  if (patch.tokenName !== undefined) updates.tokenName = patch.tokenName;
+  if (patch.tokenSymbol !== undefined) updates.tokenSymbol = patch.tokenSymbol;
+  if (patch.tokenDecimals !== undefined) updates.tokenDecimals = patch.tokenDecimals;
+  if (patch.tokenLogo !== undefined) updates.tokenLogo = patch.tokenLogo;
+
+  // Nothing to update besides updatedAt
+  if (Object.keys(updates).length <= 1) return;
+
+  await database
+    .update(schema.contracts)
+    .set(updates)
+    .where(eq(schema.contracts.address, address.toLowerCase()));
+}
+
+/**
+ * Update optional Etherscan-enriched fields for a contract (idempotent).
+ */
+export async function updateContractEtherscanEnrichmentFromDb(
+  address: string,
+  patch: {
+    deployerAddress?: string | null;
+    deploymentTxHash?: string | null;
+    deploymentBlock?: number | null;
+    deploymentTimestamp?: Date | null;
+    etherscanContractName?: string | null;
+    abi?: string | null;
+    sourceCode?: string | null;
+  }
+): Promise<void> {
+  const database = getDb();
+
+  const updates: Partial<schema.NewContract> = {
+    updatedAt: new Date(),
+  };
+
+  if (patch.deployerAddress !== undefined) updates.deployerAddress = patch.deployerAddress;
+  if (patch.deploymentTxHash !== undefined) updates.deploymentTxHash = patch.deploymentTxHash;
+  if (patch.deploymentBlock !== undefined) updates.deploymentBlock = patch.deploymentBlock;
+  if (patch.deploymentTimestamp !== undefined) updates.deploymentTimestamp = patch.deploymentTimestamp;
+  if (patch.etherscanContractName !== undefined) updates.etherscanContractName = patch.etherscanContractName;
+  if (patch.abi !== undefined) updates.abi = patch.abi;
+  if (patch.sourceCode !== undefined) updates.sourceCode = patch.sourceCode;
+
+  if (Object.keys(updates).length <= 1) return;
+
+  await database
+    .update(schema.contracts)
+    .set(updates)
+    .where(eq(schema.contracts.address, address.toLowerCase()));
 }
 
 /**

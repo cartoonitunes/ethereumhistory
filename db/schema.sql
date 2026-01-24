@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   token_name TEXT,
   token_symbol TEXT,
   token_decimals INTEGER,
+  token_logo TEXT,
 
   -- Editorial / historical content
   short_description TEXT,

@@ -28,7 +28,7 @@ if (!dbUrl) {
   process.exit(1);
 }
 
-const client = postgres(dbUrl);
+const client = postgres(dbUrl, { prepare: false });
 const db = drizzle(client, { schema });
 
 // =============================================================================

@@ -107,6 +107,7 @@ function transformContract(raw: RawContract): Contract {
     tokenName: raw.token_name || null,
     tokenSymbol: raw.token_symbol || null,
     tokenDecimals: raw.token_decimals ?? null,
+    tokenLogo: null,
     tokenTotalSupply: null,
     shortDescription: null,
     description: null,

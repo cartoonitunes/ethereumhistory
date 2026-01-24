@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Copy,
@@ -14,11 +15,9 @@ import {
   GitCompare,
   History,
   Users,
-  RefreshCw,
   Coins,
   Code,
 } from "lucide-react";
-import type { ExternalContractData } from "@/types";
 import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
 import { EraCompact } from "@/components/EraTimeline";
@@ -53,9 +52,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [activeTab, setActiveTab] = useState<"overview" | "bytecode" | "similarity" | "history">(
     "overview"
   );
-  const [externalData, setExternalData] = useState<ExternalContractData | null>(null);
-  const [externalDataLoading, setExternalDataLoading] = useState(false);
-  const [externalDataError, setExternalDataError] = useState<string | null>(null);
 
   const handleCopy = async () => {
     const success = await copyToClipboard(address);
@@ -64,24 +60,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
       setTimeout(() => setCopied(false), 2000);
     }
   };
-
-  const fetchExternalData = useCallback(async () => {
-    setExternalDataLoading(true);
-    setExternalDataError(null);
-    try {
-      const response = await fetch(`/api/contract/${address}/external`);
-      const result = await response.json();
-      if (result.error) {
-        setExternalDataError(result.error);
-      } else {
-        setExternalData(result.data);
-      }
-    } catch (err) {
-      setExternalDataError("Failed to fetch external data");
-    } finally {
-      setExternalDataLoading(false);
-    }
-  }, [address]);
 
   // Not found state
   if (!data && !error) {
@@ -161,6 +139,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const { contract, bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures } =
     data!;
 
+  const displayName = contract.tokenName || contract.etherscanContractName || null;
+  const title = displayName || `Contract ${formatAddress(address, 12)}`;
+
   return (
     <div className="min-h-screen">
       <Header />
@@ -185,9 +166,25 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <div>
               {/* Contract name */}
               <div className="flex items-center gap-3 mb-2">
-                {contract.etherscanContractName && (
-                  <h1 className="text-2xl font-bold">{contract.etherscanContractName}</h1>
+                {contract.tokenLogo && (
+                  <div className="w-9 h-9 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
+                    <Image
+                      src={contract.tokenLogo}
+                      alt={displayName ? `${displayName} logo` : "Token logo"}
+                      width={36}
+                      height={36}
+                      className="w-9 h-9 object-cover"
+                    />
+                  </div>
                 )}
+                <h1 className="text-2xl font-bold">
+                  {title}
+                  {displayName && contract.tokenSymbol ? (
+                    <span className="ml-2 text-base font-medium text-obsidian-400">
+                      ({contract.tokenSymbol})
+                    </span>
+                  ) : null}
+                </h1>
                 {contract.heuristics.contractType && (
                   <span className="text-sm px-2 py-0.5 rounded-full bg-obsidian-800 text-obsidian-400 heuristic-badge">
                     {getContractTypeLabel(contract.heuristics.contractType)}
@@ -306,10 +303,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <OverviewTab
               contract={contract}
               bytecodeAnalysis={bytecodeAnalysis}
-              externalData={externalData}
-              externalDataLoading={externalDataLoading}
-              externalDataError={externalDataError}
-              onFetchExternalData={fetchExternalData}
             />
           )}
           {activeTab === "bytecode" && (
@@ -375,24 +368,16 @@ function TabButton({
 function OverviewTab({
   contract,
   bytecodeAnalysis,
-  externalData,
-  externalDataLoading,
-  externalDataError,
-  onFetchExternalData,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
-  externalData: ExternalContractData | null;
-  externalDataLoading: boolean;
-  externalDataError: string | null;
-  onFetchExternalData: () => void;
 }) {
-  // Check if we have token info from contract or external data
-  const tokenName = contract.tokenName || externalData?.tokenName;
-  const tokenSymbol = contract.tokenSymbol || externalData?.tokenSymbol;
-  const tokenDecimals = contract.tokenDecimals ?? externalData?.tokenDecimals;
-  const tokenSupply = contract.tokenTotalSupply || externalData?.totalSupply;
-  const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply;
+  // Token info is sourced from DB (and optionally filled server-side from RPC)
+  const tokenName = contract.tokenName;
+  const tokenSymbol = contract.tokenSymbol;
+  const tokenDecimals = contract.tokenDecimals;
+  const tokenSupply = contract.tokenTotalSupply;
+  const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply || contract.tokenLogo;
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">
@@ -406,6 +391,25 @@ function OverviewTab({
               <h2 className="text-lg font-semibold">Token Information</h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
+              {contract.tokenLogo && (
+                <FactItem
+                  label="Logo"
+                  value={
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
+                        <Image
+                          src={contract.tokenLogo}
+                          alt={tokenName ? `${tokenName} logo` : "Token logo"}
+                          width={32}
+                          height={32}
+                          className="w-8 h-8 object-cover"
+                        />
+                      </div>
+                      <span className="text-xs text-obsidian-500">via RPC</span>
+                    </div>
+                  }
+                />
+              )}
               {tokenName && (
                 <FactItem label="Token Name" value={tokenName} />
               )}
@@ -590,66 +594,8 @@ function OverviewTab({
           </section>
         )}
 
-        {/* Fetch External Data */}
-        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-          <h3 className="font-semibold mb-4">Fetch Live Data</h3>
-          <p className="text-xs text-obsidian-500 mb-4">
-            Fetch token name, symbol, and verified source from Etherscan and on-chain calls.
-          </p>
-          <button
-            onClick={onFetchExternalData}
-            disabled={externalDataLoading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-ether-500/20 hover:bg-ether-500/30 text-ether-400 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {externalDataLoading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Fetching...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                Fetch External Data
-              </>
-            )}
-          </button>
-          {externalDataError && (
-            <p className="mt-2 text-xs text-red-400">{externalDataError}</p>
-          )}
-          {externalData && (
-            <div className="mt-4 pt-4 border-t border-obsidian-800 space-y-2 text-xs">
-              {externalData.isVerified && (
-                <div className="flex items-center gap-2 text-green-400">
-                  <Check className="w-3 h-3" />
-                  Verified on Etherscan
-                </div>
-              )}
-              {externalData.contractName && (
-                <div className="text-obsidian-400">
-                  Contract: <span className="text-obsidian-300">{externalData.contractName}</span>
-                </div>
-              )}
-              {externalData.compilerVersion && (
-                <div className="text-obsidian-400">
-                  Compiler: <span className="text-obsidian-300">{externalData.compilerVersion}</span>
-                </div>
-              )}
-              {externalData.tokenName && (
-                <div className="text-obsidian-400">
-                  Token: <span className="text-obsidian-300">{externalData.tokenName} ({externalData.tokenSymbol})</span>
-                </div>
-              )}
-              {externalData.fetchErrors.length > 0 && (
-                <div className="text-yellow-500 text-xs">
-                  {externalData.fetchErrors.join(", ")}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
         {/* Verified Source Code */}
-        {(externalData?.sourceCode || contract.sourceCode) && (
+        {contract.sourceCode && (
           <section className="p-6 rounded-xl border border-green-500/20 bg-green-500/5">
             <div className="flex items-center gap-2 mb-3">
               <Code className="w-4 h-4 text-green-400" />

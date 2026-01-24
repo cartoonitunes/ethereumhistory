@@ -63,6 +63,7 @@ export const contracts = pgTable(
     tokenName: text("token_name"),
     tokenSymbol: text("token_symbol"),
     tokenDecimals: integer("token_decimals"),
+    tokenLogo: text("token_logo"),
 
     // Editorial / historical content
     shortDescription: text("short_description"),

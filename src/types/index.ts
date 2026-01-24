@@ -152,6 +152,7 @@ export interface Contract {
   tokenName: string | null;
   tokenSymbol: string | null;
   tokenDecimals: number | null;
+  tokenLogo: string | null;
   tokenTotalSupply: string | null;
 
   // Editorial fields (human-written)
@@ -359,32 +360,4 @@ export interface ContractMetadataItem {
 export interface ContractHistoryData {
   links: HistoricalLink[];
   metadata: ContractMetadataItem[];
-}
-
-// =============================================================================
-// External Contract Data (fetched from APIs)
-// =============================================================================
-
-export interface ExternalContractData {
-  // From Etherscan
-  contractName: string | null;
-  compilerVersion: string | null;
-  optimizationUsed: boolean | null;
-  sourceCode: string | null;
-  abi: string | null;
-  constructorArguments: string | null;
-  evmVersion: string | null;
-  library: string | null;
-  licenseType: string | null;
-  isVerified: boolean;
-
-  // From on-chain calls (ERC-20/721 standard)
-  tokenName: string | null;
-  tokenSymbol: string | null;
-  tokenDecimals: number | null;
-  totalSupply: string | null;
-
-  // Fetch metadata
-  fetchedAt: string;
-  fetchErrors: string[];
 }

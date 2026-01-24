@@ -41,6 +41,8 @@ import {
 import {
   isDatabaseConfigured,
   getContractByAddress as dbGetContract,
+  updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
+  updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
   getContractsByEra as dbGetContractsByEra,
   getContractsByDeployerFromDb as dbGetContractsByDeployer,
   getRecentContractsFromDb as dbGetRecentContracts,
@@ -51,6 +53,12 @@ import {
   getFeaturedContracts as dbGetFeatured,
   getSimilarContractsFromDb,
 } from "./db-client";
+import { fetchTokenMetadataFromRpc } from "./token-metadata";
+import {
+  fetchEtherscanAbi,
+  fetchEtherscanContractCreation,
+  fetchEtherscanSourceCode,
+} from "./etherscan";
 
 // =============================================================================
 // Data Source Selection
@@ -125,6 +133,157 @@ export async function getContract(address: string): Promise<Contract | null> {
 
   // Priority 3: Mock data (fallback)
   return MOCK_CONTRACTS[normalizedAddress] || null;
+}
+
+/**
+ * If token metadata fields are missing in DB, try to fill them via RPC at render time.
+ * (No UI button needed; this happens automatically.)
+ */
+export async function getContractWithTokenMetadata(address: string): Promise<Contract | null> {
+  const contract = await getContract(address);
+  if (!contract) return null;
+
+  // ---------------------------------------------------------------------------
+  // Optional Etherscan enrichment (ABI, verified source, creator + creation tx)
+  // ---------------------------------------------------------------------------
+  const etherscanKey = process.env.ETHERSCAN_API_KEY;
+  const mayNeedEtherscan =
+    !contract.abi ||
+    !contract.deployerAddress ||
+    !contract.deploymentTxHash ||
+    !contract.deploymentBlock ||
+    !contract.deploymentTimestamp ||
+    (!contract.sourceCode && !contract.etherscanContractName);
+
+  if (etherscanKey && mayNeedEtherscan) {
+    const patch: Parameters<typeof dbUpdateContractEtherscanEnrichment>[1] = {};
+    const merged: Partial<Contract> = {};
+
+    // Deployer + creation tx + block/timestamp
+    if (
+      !contract.deployerAddress ||
+      !contract.deploymentTxHash ||
+      !contract.deploymentBlock ||
+      !contract.deploymentTimestamp
+    ) {
+      try {
+        const creation = await fetchEtherscanContractCreation(contract.address);
+        if (creation) {
+          if (!contract.deployerAddress && creation.contractCreator) {
+            merged.deployerAddress = creation.contractCreator;
+            patch.deployerAddress = creation.contractCreator;
+          }
+          if (!contract.deploymentTxHash && creation.txHash) {
+            merged.deploymentTxHash = creation.txHash;
+            patch.deploymentTxHash = creation.txHash;
+          }
+          if (!contract.deploymentBlock && creation.blockNumber != null) {
+            merged.deploymentBlock = creation.blockNumber;
+            patch.deploymentBlock = creation.blockNumber;
+          }
+          if (!contract.deploymentTimestamp && creation.timestamp) {
+            merged.deploymentTimestamp = creation.timestamp;
+            patch.deploymentTimestamp = new Date(creation.timestamp);
+          }
+        }
+      } catch (error) {
+        console.warn("[etherscan] contract creation lookup failed:", error);
+      }
+    }
+
+    // ABI
+    if (!contract.abi) {
+      try {
+        const abi = await fetchEtherscanAbi(contract.address);
+        if (abi) {
+          merged.abi = abi;
+          patch.abi = abi;
+        }
+      } catch (error) {
+        console.warn("[etherscan] abi lookup failed:", error);
+      }
+    }
+
+    // Verified source + contract name (only if verified)
+    if (!contract.sourceCode || !contract.etherscanContractName) {
+      try {
+        const source = await fetchEtherscanSourceCode(contract.address);
+        if (source?.isVerified) {
+          if (!contract.etherscanContractName && source.contractName) {
+            merged.etherscanContractName = source.contractName;
+            patch.etherscanContractName = source.contractName;
+          }
+          if (!contract.sourceCode && source.sourceCode) {
+            merged.sourceCode = source.sourceCode;
+            patch.sourceCode = source.sourceCode;
+          }
+          // ABI is also returned here; fill if still missing.
+          if (!contract.abi && source.abi) {
+            merged.abi = source.abi;
+            patch.abi = source.abi;
+          }
+        }
+      } catch (error) {
+        console.warn("[etherscan] source lookup failed:", error);
+      }
+    }
+
+    if (Object.keys(merged).length > 0) {
+      Object.assign(contract, merged);
+
+      // Persist back to DB so future renders don't need Etherscan calls.
+      if (isDatabaseEnabled() && Object.keys(patch).length > 0) {
+        try {
+          await dbUpdateContractEtherscanEnrichment(contract.address, patch);
+        } catch (error) {
+          console.warn("[db] Failed to persist Etherscan enrichment:", error);
+        }
+      }
+    }
+  }
+
+  const needsTokenMeta =
+    (!contract.tokenName && !contract.tokenSymbol && contract.tokenDecimals == null && !contract.tokenLogo) ||
+    !contract.tokenLogo ||
+    !contract.tokenName ||
+    !contract.tokenSymbol ||
+    contract.tokenDecimals == null;
+
+  if (!needsTokenMeta) return contract;
+
+  const rpcUrl = process.env.ETHEREUM_RPC_URL;
+  if (!rpcUrl) return contract;
+
+  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address);
+  if (!fetched) return contract;
+
+  const merged: Contract = {
+    ...contract,
+    tokenName: contract.tokenName ?? fetched.name,
+    tokenSymbol: contract.tokenSymbol ?? fetched.symbol,
+    tokenDecimals: contract.tokenDecimals ?? fetched.decimals,
+    tokenLogo: contract.tokenLogo ?? fetched.logo,
+  };
+
+  // Persist back to DB so future renders don't need RPC calls.
+  if (isDatabaseEnabled()) {
+    const patch: Parameters<typeof dbUpdateContractTokenMetadata>[1] = {};
+    if (contract.tokenName == null && fetched.name != null) patch.tokenName = fetched.name;
+    if (contract.tokenSymbol == null && fetched.symbol != null) patch.tokenSymbol = fetched.symbol;
+    if (contract.tokenDecimals == null && fetched.decimals != null) patch.tokenDecimals = fetched.decimals;
+    if (contract.tokenLogo == null && fetched.logo != null) patch.tokenLogo = fetched.logo;
+
+    if (Object.keys(patch).length > 0) {
+      try {
+        await dbUpdateContractTokenMetadata(contract.address, patch);
+      } catch (error) {
+        // Non-fatal: page should still render even if persistence fails.
+        console.warn("[db] Failed to persist token metadata:", error);
+      }
+    }
+  }
+
+  return merged;
 }
 
 export async function getContractsByDeployer(deployerAddress: string): Promise<Contract[]> {
@@ -398,7 +557,7 @@ export async function getFunctionSignatures(address: string): Promise<FunctionSi
 // =============================================================================
 
 export async function getContractPageData(address: string): Promise<ContractPageData | null> {
-  const contract = await getContract(address);
+  const contract = await getContractWithTokenMetadata(address);
 
   if (!contract) {
     return null;
