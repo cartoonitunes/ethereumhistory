@@ -1,14 +1,10 @@
 /**
  * Database Client for Ethereum History
  *
- * Uses Drizzle ORM with:
- * - Vercel Postgres (Neon) for production (WebSocket connection)
- * - Standard postgres driver for local development
+ * Uses Drizzle ORM (postgres-js) for all environments.
  */
 
-import { drizzle as drizzleVercel } from "drizzle-orm/vercel-postgres";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
-import { sql as vercelSql } from "@vercel/postgres";
 import postgres from "postgres";
 import { eq, like, ilike, desc, asc, and, SQL, sql, inArray, isNotNull, ne } from "drizzle-orm";
 import * as schema from "./schema";
@@ -25,11 +21,8 @@ import { ERAS } from "@/types";
 // Database Connection
 // =============================================================================
 
-// Determine if we're in a Vercel environment
-const isVercel = !!process.env.VERCEL;
-
-// Create drizzle instance - adapts based on environment
-let db: ReturnType<typeof drizzleVercel<typeof schema>> | ReturnType<typeof drizzlePostgres<typeof schema>> | null = null;
+// Create drizzle instance (singleton per runtime instance)
+let db: ReturnType<typeof drizzlePostgres<typeof schema>> | null = null;
 
 function getDatabaseUrl(): string | undefined {
   return process.env.POSTGRES_URL || process.env.DATABASE_URL;
@@ -42,14 +35,9 @@ function getDb() {
       throw new Error("POSTGRES_URL (or DATABASE_URL) not configured");
     }
 
-    if (isVercel) {
-      // Use Vercel Postgres driver in production (WebSocket)
-      db = drizzleVercel(vercelSql, { schema });
-    } else {
-      // Use standard postgres driver for local development
-      const client = postgres(dbUrl);
-      db = drizzlePostgres(client, { schema });
-    }
+    // In serverless, keep pool tiny to avoid connection explosion
+    const client = postgres(dbUrl, { max: 1 });
+    db = drizzlePostgres(client, { schema });
   }
   return db;
 }
