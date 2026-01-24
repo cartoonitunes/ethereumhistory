@@ -25,7 +25,7 @@ export function Header() {
               </svg>
             </div>
             <span className="font-semibold text-lg group-hover:text-ether-400 transition-colors">
-              ethereumhistory
+              Ethereum History
             </span>
           </Link>
 
