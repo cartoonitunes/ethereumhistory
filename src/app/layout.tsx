@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Ethereum History - Historical Smart Contract Archive",
   description:
     "A historical archive and analysis tool for Ethereum smart contracts from 2015-2017. Explore the origins of decentralized applications.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+  },
   keywords: [
     "Ethereum",
     "smart contracts",
