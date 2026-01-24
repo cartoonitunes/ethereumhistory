@@ -1,0 +1,15 @@
+# Bytecode Similarity Pipeline Dependencies
+# No ML, no GPU, no heavy dependencies
+
+# Core
+psycopg2-binary>=2.9.9    # PostgreSQL adapter
+python-dotenv>=1.0.0       # Environment variables
+
+# Data handling
+orjson>=3.10.0             # Fast JSON (optional, falls back to json)
+
+# Progress display (optional)
+tqdm>=4.66.0               # Progress bars
+
+# Testing
+pytest>=8.0.0

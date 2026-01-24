@@ -1,0 +1,699 @@
+/**
+ * Database connection and query utilities
+ *
+ * Data source priority:
+ * 1. PostgreSQL (Vercel Postgres) - for production
+ * 2. JSON files (data/) - for local development
+ * 3. Mock data - as final fallback
+ */
+
+import type {
+  Contract,
+  BytecodeAnalysis,
+  ContractSimilarity,
+  DetectedPattern,
+  FunctionSignature,
+  ContractPageData,
+  EthereumEra,
+  SearchResult,
+  FeaturedContract,
+  BytecodeSearchResult,
+} from "@/types";
+import { ERAS } from "@/types";
+import {
+  MOCK_CONTRACTS,
+  MOCK_BYTECODE_ANALYSIS,
+  MOCK_SIMILARITIES,
+  MOCK_PATTERNS,
+  MOCK_SIGNATURES,
+  MOCK_FEATURED,
+} from "./mock-data";
+import {
+  getContractFromData,
+  loadAllContracts,
+  searchContractsInData,
+  getContractsByEraFromData,
+  getFeaturedContractsFromData,
+  getTotalContractsCount,
+  getDecompiledContractsCount,
+  hasLocalDataFiles,
+} from "./data-loader";
+import {
+  isDatabaseConfigured,
+  getContractByAddress as dbGetContract,
+  getContractsByEra as dbGetContractsByEra,
+  getContractsByDeployerFromDb as dbGetContractsByDeployer,
+  getRecentContractsFromDb as dbGetRecentContracts,
+  getContractsByAddressesFromDb as dbGetContractsByAddresses,
+  searchDecompiledCode as dbSearchDecompiled,
+  getTotalContractCount as dbGetTotalCount,
+  getDecompiledContractCount as dbGetDecompiledCount,
+  getFeaturedContracts as dbGetFeatured,
+  getSimilarContractsFromDb,
+} from "./db-client";
+
+// =============================================================================
+// Data Source Selection
+// =============================================================================
+
+/**
+ * Check if PostgreSQL database is available and configured.
+ * Returns true if POSTGRES_URL is set.
+ */
+function useDatabase(): boolean {
+  return isDatabaseConfigured();
+}
+
+/**
+ * Try to use JSON file data, fall back to mock data if not available.
+ */
+function useRealData(): boolean {
+  return hasLocalDataFiles();
+}
+
+/**
+ * JSON fallback is expensive (parses large files). Default behavior:
+ * - If a database is configured, do NOT fall back to JSON unless explicitly enabled.
+ * - If no database is configured, allow JSON fallback if local data exists.
+ */
+function allowJsonFallback(): boolean {
+  if (!useRealData()) return false;
+  if (!useDatabase()) return true;
+  return process.env.ALLOW_JSON_FALLBACK === "1";
+}
+
+const FEATURED_ADDRESSES = [
+  "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+  "0xf4eCEd2f682CE333f96f2D8966C613DeD8fC95DD",
+  "0x8374f5CC22eDA52e960D9558fb48DD4b7946609a",
+  "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
+  "0xED6aC8de7c7CA7e3A22952e09C2a2A1232DDef9A",
+  "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+] as const;
+
+// =============================================================================
+// Contract Queries
+// =============================================================================
+
+export async function getContract(address: string): Promise<Contract | null> {
+  const normalizedAddress = address.toLowerCase();
+
+  // Priority 1: PostgreSQL database (production)
+  if (useDatabase()) {
+    try {
+      const dbContract = await dbGetContract(normalizedAddress);
+      if (dbContract) {
+        return dbContract;
+      }
+    } catch (error) {
+      console.error("[db] Database query failed, falling back:", error);
+    }
+
+    // If DB is configured, don't accidentally load huge JSON files unless opted in
+    if (!allowJsonFallback()) {
+      return null;
+    }
+  }
+
+  // Priority 2: JSON file data (local development)
+  if (allowJsonFallback()) {
+    const realContract = getContractFromData(normalizedAddress);
+    if (realContract) {
+      return realContract;
+    }
+  }
+
+  // Priority 3: Mock data (fallback)
+  return MOCK_CONTRACTS[normalizedAddress] || null;
+}
+
+export async function getContractsByDeployer(deployerAddress: string): Promise<Contract[]> {
+  const normalizedAddress = deployerAddress.toLowerCase();
+
+  // Priority 1: PostgreSQL database
+  if (useDatabase()) {
+    try {
+      return await dbGetContractsByDeployer(normalizedAddress, 200);
+    } catch (error) {
+      console.error("[db] Database query failed, falling back:", error);
+    }
+
+    if (!allowJsonFallback()) {
+      return [];
+    }
+  }
+
+  if (allowJsonFallback()) {
+    const contracts = loadAllContracts();
+    return contracts.filter(
+      (c) => c.deployerAddress?.toLowerCase() === normalizedAddress
+    );
+  }
+
+  return Object.values(MOCK_CONTRACTS).filter(
+    (c) => c.deployerAddress?.toLowerCase() === normalizedAddress
+  );
+}
+
+export async function getContractsByEra(eraId: string, limit = 50): Promise<Contract[]> {
+  // Priority 1: PostgreSQL database
+  if (useDatabase()) {
+    try {
+      return await dbGetContractsByEra(eraId, limit);
+    } catch (error) {
+      console.error("[db] Database query failed, falling back:", error);
+    }
+
+    if (!allowJsonFallback()) {
+      return [];
+    }
+  }
+
+  // Priority 2: JSON file data
+  if (allowJsonFallback()) {
+    return getContractsByEraFromData(eraId, limit);
+  }
+
+  // Priority 3: Mock data
+  return Object.values(MOCK_CONTRACTS)
+    .filter((c) => c.eraId === eraId)
+    .slice(0, limit);
+}
+
+export async function getRecentContracts(limit = 10): Promise<Contract[]> {
+  // Priority 1: PostgreSQL database
+  if (useDatabase()) {
+    try {
+      return await dbGetRecentContracts(limit);
+    } catch (error) {
+      console.error("[db] Database query failed, falling back:", error);
+    }
+
+    if (!allowJsonFallback()) {
+      return [];
+    }
+  }
+
+  if (allowJsonFallback()) {
+    const contracts = loadAllContracts();
+    return contracts
+      .sort((a, b) => {
+        if (a.deploymentTimestamp && b.deploymentTimestamp) {
+          return new Date(b.deploymentTimestamp).getTime() - new Date(a.deploymentTimestamp).getTime();
+        }
+        return 0;
+      })
+      .slice(0, limit);
+  }
+
+  return Object.values(MOCK_CONTRACTS).slice(0, limit);
+}
+
+// =============================================================================
+// Bytecode Analysis Queries
+// =============================================================================
+
+export async function getBytecodeAnalysis(address: string): Promise<BytecodeAnalysis | null> {
+  const normalizedAddress = address.toLowerCase();
+
+  // For now, generate basic analysis from contract data if available
+  const contract = await getContract(normalizedAddress);
+  if (contract && contract.runtimeBytecode) {
+    const bytecode = contract.runtimeBytecode;
+    const hexStr = bytecode.startsWith("0x") ? bytecode.slice(2) : bytecode;
+
+    // Basic bytecode analysis
+    return {
+      contractAddress: normalizedAddress,
+      opcodeCount: Math.floor(hexStr.length / 2),
+      uniqueOpcodeCount: new Set(hexStr.match(/.{2}/g) || []).size,
+      jumpCount: (hexStr.match(/56|57/g) || []).length,
+      jumpdestCount: (hexStr.match(/5b/g) || []).length,
+      branchDensity: 0.05,
+      storageOpsCount: (hexStr.match(/54|55/g) || []).length,
+      callOpsCount: (hexStr.match(/f1|f2|f4|fa/g) || []).length,
+      hasLoops: contract.decompiledCode?.includes("while") || contract.decompiledCode?.includes("for") || false,
+      loopCount: 0,
+      trigramHash: hexStr.slice(0, 16),
+      controlFlowSignature: `J${(hexStr.match(/56|57/g) || []).length}D${(hexStr.match(/5b/g) || []).length}`,
+      shapeSignature: `O${Math.floor(hexStr.length / 2)}`,
+    };
+  }
+
+  return MOCK_BYTECODE_ANALYSIS[normalizedAddress] || null;
+}
+
+// =============================================================================
+// Similarity Queries
+// =============================================================================
+
+import { findSimilarContracts } from "./similarity";
+
+export async function getSimilarContracts(
+  address: string,
+  limit = 10
+): Promise<ContractSimilarity[]> {
+  const normalizedAddress = address.toLowerCase();
+
+  // Priority 1: Pre-computed similarity index from database
+  if (useDatabase()) {
+    try {
+      const dbSimilarities = await getSimilarContractsFromDb(normalizedAddress, limit);
+      if (dbSimilarities.length > 0) {
+        return dbSimilarities;
+      }
+    } catch (error) {
+      console.error("[db] Database similarity query failed, falling back:", error);
+    }
+  }
+
+  // Priority 2: Real-time similarity matching using JSON data
+  if (allowJsonFallback()) {
+    const targetContract = await getContract(normalizedAddress);
+    if (targetContract && targetContract.runtimeBytecode) {
+      const allContracts = loadAllContracts();
+      // Limit candidates to improve performance - sample contracts with bytecode
+      const candidates = allContracts
+        .filter((c) => c.runtimeBytecode && c.address !== normalizedAddress)
+        .slice(0, 500); // Limit to 500 for performance
+
+      const similarities = findSimilarContracts(targetContract, candidates, limit);
+      if (similarities.length > 0) {
+        return similarities;
+      }
+    }
+  }
+
+  // Priority 3: Mock similarities
+  return (MOCK_SIMILARITIES[normalizedAddress] || []).slice(0, limit);
+}
+
+// =============================================================================
+// Pattern Detection Queries
+// =============================================================================
+
+export async function getDetectedPatterns(address: string): Promise<DetectedPattern[]> {
+  const normalizedAddress = address.toLowerCase();
+
+  // Generate patterns from decompiled code if available
+  const contract = await getContract(normalizedAddress);
+  if (contract && contract.decompiledCode && contract.decompilationSuccess) {
+    const patterns: DetectedPattern[] = [];
+    const code = contract.decompiledCode.toLowerCase();
+
+    if (code.includes("selfdestruct")) {
+      patterns.push({
+        id: 1,
+        contractAddress: normalizedAddress,
+        patternName: "selfdestruct",
+        patternCategory: "lifecycle",
+        bytecodeOffset: null,
+        matchedSignature: "SELFDESTRUCT",
+        confidence: 1.0,
+        description: "Contains SELFDESTRUCT opcode - contract can be destroyed.",
+        historicalNote: "Early contracts often included kill switches.",
+      });
+    }
+
+    if (code.includes("transfer") || code.includes("sendcoin")) {
+      patterns.push({
+        id: 2,
+        contractAddress: normalizedAddress,
+        patternName: "token_transfer",
+        patternCategory: "token",
+        bytecodeOffset: null,
+        matchedSignature: null,
+        confidence: 0.85,
+        description: "Implements token transfer functionality.",
+        historicalNote: null,
+      });
+    }
+
+    if (code.includes("owner") || code.includes("require caller ==")) {
+      patterns.push({
+        id: 3,
+        contractAddress: normalizedAddress,
+        patternName: "owner_check",
+        patternCategory: "access_control",
+        bytecodeOffset: null,
+        matchedSignature: null,
+        confidence: 0.8,
+        description: "Has owner/admin access control pattern.",
+        historicalNote: null,
+      });
+    }
+
+    if (patterns.length > 0) {
+      return patterns;
+    }
+  }
+
+  return MOCK_PATTERNS[normalizedAddress] || [];
+}
+
+// =============================================================================
+// Function Signature Queries
+// =============================================================================
+
+export async function getFunctionSignatures(address: string): Promise<FunctionSignature[]> {
+  const normalizedAddress = address.toLowerCase();
+
+  // Extract function signatures from decompiled code if available
+  const contract = await getContract(normalizedAddress);
+  if (contract && contract.decompiledCode && contract.decompilationSuccess) {
+    const signatures: FunctionSignature[] = [];
+    const funcPattern = /def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/g;
+    let match;
+    let id = 1;
+
+    while ((match = funcPattern.exec(contract.decompiledCode)) !== null) {
+      const funcName = match[1];
+      const params = match[2];
+
+      // Skip fallback
+      if (funcName === "_fallback") continue;
+
+      signatures.push({
+        id: id++,
+        contractAddress: normalizedAddress,
+        selector: "0x" + funcName.slice(0, 8).padEnd(8, "0"),
+        signature: `${funcName}(${params})`,
+        source: "decompiled",
+        confidence: 0.85,
+        appearsToBeDescription: null,
+        callCount: null,
+      });
+    }
+
+    if (signatures.length > 0) {
+      return signatures;
+    }
+  }
+
+  return MOCK_SIGNATURES[normalizedAddress] || [];
+}
+
+// =============================================================================
+// Full Contract Page Data
+// =============================================================================
+
+export async function getContractPageData(address: string): Promise<ContractPageData | null> {
+  const contract = await getContract(address);
+
+  if (!contract) {
+    return null;
+  }
+
+  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures] =
+    await Promise.all([
+      getBytecodeAnalysis(address),
+      getSimilarContracts(address),
+      getDetectedPatterns(address),
+      getFunctionSignatures(address),
+    ]);
+
+  return {
+    contract,
+    bytecodeAnalysis,
+    similarContracts,
+    detectedPatterns,
+    functionSignatures,
+  };
+}
+
+// =============================================================================
+// Search
+// =============================================================================
+
+export async function searchAddress(query: string): Promise<SearchResult | null> {
+  const normalized = query.toLowerCase().trim();
+
+  // Check if it looks like an address
+  if (!normalized.startsWith("0x") || normalized.length !== 42) {
+    return null;
+  }
+
+  const contract = await getContract(normalized);
+  if (contract) {
+    return {
+      address: contract.address,
+      isContract: true,
+      deploymentBlock: contract.deploymentBlock,
+      eraId: contract.eraId,
+      heuristicContractType: contract.heuristics.contractType,
+      ensName: contract.ensName,
+    };
+  }
+
+  return {
+    address: normalized,
+    isContract: false,
+    deploymentBlock: null,
+    eraId: null,
+    heuristicContractType: null,
+    ensName: null,
+  };
+}
+
+// =============================================================================
+// Featured Content
+// =============================================================================
+
+export async function getFeaturedContracts(): Promise<FeaturedContract[]> {
+  // Priority 1: PostgreSQL database
+  if (useDatabase()) {
+    try {
+      const featured = await dbGetContractsByAddresses([...FEATURED_ADDRESSES]);
+      return featured.map((c) => ({
+        address: c.address,
+        name: c.etherscanContractName || `Contract ${c.address.slice(0, 10)}...`,
+        shortDescription:
+          c.shortDescription ||
+          c.historicalSummary ||
+          (c.decompiledCode
+            ? `Decompiled contract with ${c.heuristics.contractType} patterns detected.`
+            : "Early Ethereum contract from the Frontier/Homestead era."),
+        eraId: c.eraId || "frontier",
+        deploymentDate: c.deploymentTimestamp?.split("T")[0] || "Unknown",
+        significance: c.historicalSignificance || "Historical early Ethereum contract.",
+      }));
+    } catch (error) {
+      console.error("[db] Database featured query failed, falling back:", error);
+    }
+
+    if (!allowJsonFallback()) {
+      return MOCK_FEATURED;
+    }
+  }
+
+  // Priority 2: JSON file data
+  if (allowJsonFallback()) {
+    const featured = getFeaturedContractsFromData(6);
+    return featured.map((c) => ({
+      address: c.address,
+      name: c.etherscanContractName || `Contract ${c.address.slice(0, 10)}...`,
+      shortDescription: c.decompiledCode
+        ? `Decompiled contract with ${c.heuristics.contractType} patterns detected.`
+        : "Early Ethereum contract from the Frontier/Homestead era.",
+      eraId: c.eraId || "frontier",
+      deploymentDate: c.deploymentTimestamp?.split("T")[0] || "Unknown",
+      significance: c.historicalSignificance || "Historical early Ethereum contract.",
+    }));
+  }
+
+  // Priority 3: Mock data
+  return MOCK_FEATURED;
+}
+
+// =============================================================================
+// Bytecode/Decompiled Code Search
+// =============================================================================
+
+export async function searchBytecodeContent(
+  query: string,
+  searchType: "decompiled" | "bytecode" | "all" = "all",
+  limit: number = 20
+): Promise<BytecodeSearchResult[]> {
+  const results: BytecodeSearchResult[] = [];
+  const lowerQuery = query.toLowerCase();
+
+  // Determine data source
+  let contracts: Contract[] = [];
+
+  // Priority 1: PostgreSQL database (for decompiled code search)
+  if (useDatabase() && (searchType === "decompiled" || searchType === "all")) {
+    try {
+      contracts = await dbSearchDecompiled(query, limit * 2);
+    } catch (error) {
+      console.error("[db] Database search failed, falling back:", error);
+    }
+  }
+
+  // Priority 2: JSON file data
+  if (contracts.length === 0 && allowJsonFallback()) {
+    contracts = searchContractsInData(query, searchType, limit * 2);
+  }
+
+  // Priority 3: Mock data
+  if (contracts.length === 0) {
+    contracts = Object.values(MOCK_CONTRACTS);
+  }
+
+  for (const contract of contracts) {
+    let matchType: "bytecode" | "decompiled" | "function_name" | null = null;
+    let matchContext = "";
+
+    // Search decompiled code
+    if (
+      (searchType === "decompiled" || searchType === "all") &&
+      contract.decompiledCode &&
+      contract.decompilationSuccess
+    ) {
+      const lowerDecompiled = contract.decompiledCode.toLowerCase();
+      const matchIndex = lowerDecompiled.indexOf(lowerQuery);
+
+      if (matchIndex !== -1) {
+        // Check if it's a function name match
+        const funcMatch = contract.decompiledCode.match(
+          new RegExp(`def\\s+(${query}[a-zA-Z0-9_]*)\\s*\\(`, "i")
+        );
+        if (funcMatch) {
+          matchType = "function_name";
+          const funcIndex = lowerDecompiled.indexOf(funcMatch[0].toLowerCase());
+          const start = Math.max(0, funcIndex);
+          const end = Math.min(contract.decompiledCode.length, funcIndex + 200);
+          matchContext = contract.decompiledCode.slice(start, end).trim();
+        } else {
+          matchType = "decompiled";
+          const start = Math.max(0, matchIndex - 50);
+          const end = Math.min(contract.decompiledCode.length, matchIndex + query.length + 100);
+          matchContext = contract.decompiledCode.slice(start, end).trim();
+          if (start > 0) matchContext = "..." + matchContext;
+          if (end < contract.decompiledCode.length) matchContext = matchContext + "...";
+        }
+      }
+    }
+
+    // Search bytecode (hex patterns)
+    if (
+      !matchType &&
+      (searchType === "bytecode" || searchType === "all") &&
+      contract.runtimeBytecode
+    ) {
+      const lowerBytecode = contract.runtimeBytecode.toLowerCase();
+      const matchIndex = lowerBytecode.indexOf(lowerQuery);
+
+      if (matchIndex !== -1) {
+        matchType = "bytecode";
+        const start = Math.max(0, matchIndex - 20);
+        const end = Math.min(contract.runtimeBytecode.length, matchIndex + query.length + 40);
+        matchContext = contract.runtimeBytecode.slice(start, end);
+        if (start > 0) matchContext = "..." + matchContext;
+        if (end < contract.runtimeBytecode.length) matchContext = matchContext + "...";
+      }
+    }
+
+    if (matchType) {
+      results.push({
+        address: contract.address,
+        matchType,
+        matchContext,
+        deploymentTimestamp: contract.deploymentTimestamp,
+        heuristicContractType: contract.heuristics.contractType,
+        eraId: contract.eraId,
+        decompiledSnippet:
+          matchType !== "bytecode" && contract.decompiledCode
+            ? contract.decompiledCode.slice(0, 300)
+            : undefined,
+      });
+
+      if (results.length >= limit) {
+        break;
+      }
+    }
+  }
+
+  return results;
+}
+
+// =============================================================================
+// Era Information
+// =============================================================================
+
+export async function getAllEras(): Promise<EthereumEra[]> {
+  return Object.values(ERAS);
+}
+
+export async function getEra(eraId: string): Promise<EthereumEra | null> {
+  return ERAS[eraId] || null;
+}
+
+export async function getEraStats(eraId: string): Promise<{
+  contractCount: number;
+  firstContract: string | null;
+  lastContract: string | null;
+} | null> {
+  if (allowJsonFallback()) {
+    const contracts = getContractsByEraFromData(eraId, 10000);
+    return {
+      contractCount: contracts.length,
+      firstContract: contracts[0]?.address || null,
+      lastContract: contracts[contracts.length - 1]?.address || null,
+    };
+  }
+
+  const contracts = Object.values(MOCK_CONTRACTS).filter((c) => c.eraId === eraId);
+  return {
+    contractCount: contracts.length,
+    firstContract: contracts[0]?.address || null,
+    lastContract: contracts[contracts.length - 1]?.address || null,
+  };
+}
+
+// =============================================================================
+// Stats
+// =============================================================================
+
+export async function getStats(): Promise<{
+  totalContracts: number;
+  decompiledContracts: number;
+}> {
+  // Priority 1: PostgreSQL database
+  if (useDatabase()) {
+    try {
+      const [total, decompiled] = await Promise.all([
+        dbGetTotalCount(),
+        dbGetDecompiledCount(),
+      ]);
+      return {
+        totalContracts: total,
+        decompiledContracts: decompiled,
+      };
+    } catch (error) {
+      console.error("[db] Database stats query failed, falling back:", error);
+    }
+
+    if (!allowJsonFallback()) {
+      const contracts = Object.values(MOCK_CONTRACTS);
+      return {
+        totalContracts: contracts.length,
+        decompiledContracts: contracts.filter((c) => c.decompilationSuccess).length,
+      };
+    }
+  }
+
+  // Priority 2: JSON file data
+  if (allowJsonFallback()) {
+    return {
+      totalContracts: getTotalContractsCount(),
+      decompiledContracts: getDecompiledContractsCount(),
+    };
+  }
+
+  // Priority 3: Mock data
+  const contracts = Object.values(MOCK_CONTRACTS);
+  return {
+    totalContracts: contracts.length,
+    decompiledContracts: contracts.filter((c) => c.decompilationSuccess).length,
+  };
+}
