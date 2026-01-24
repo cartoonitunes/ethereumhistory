@@ -60,14 +60,14 @@ import {
  * Check if PostgreSQL database is available and configured.
  * Returns true if POSTGRES_URL is set.
  */
-function useDatabase(): boolean {
+function isDatabaseEnabled(): boolean {
   return isDatabaseConfigured();
 }
 
 /**
  * Try to use JSON file data, fall back to mock data if not available.
  */
-function useRealData(): boolean {
+function hasLocalJsonData(): boolean {
   return hasLocalDataFiles();
 }
 
@@ -77,8 +77,8 @@ function useRealData(): boolean {
  * - If no database is configured, allow JSON fallback if local data exists.
  */
 function allowJsonFallback(): boolean {
-  if (!useRealData()) return false;
-  if (!useDatabase()) return true;
+  if (!hasLocalJsonData()) return false;
+  if (!isDatabaseEnabled()) return true;
   return process.env.ALLOW_JSON_FALLBACK === "1";
 }
 
@@ -99,7 +99,7 @@ export async function getContract(address: string): Promise<Contract | null> {
   const normalizedAddress = address.toLowerCase();
 
   // Priority 1: PostgreSQL database (production)
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       const dbContract = await dbGetContract(normalizedAddress);
       if (dbContract) {
@@ -131,7 +131,7 @@ export async function getContractsByDeployer(deployerAddress: string): Promise<C
   const normalizedAddress = deployerAddress.toLowerCase();
 
   // Priority 1: PostgreSQL database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       return await dbGetContractsByDeployer(normalizedAddress, 200);
     } catch (error) {
@@ -157,7 +157,7 @@ export async function getContractsByDeployer(deployerAddress: string): Promise<C
 
 export async function getContractsByEra(eraId: string, limit = 50): Promise<Contract[]> {
   // Priority 1: PostgreSQL database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       return await dbGetContractsByEra(eraId, limit);
     } catch (error) {
@@ -182,7 +182,7 @@ export async function getContractsByEra(eraId: string, limit = 50): Promise<Cont
 
 export async function getRecentContracts(limit = 10): Promise<Contract[]> {
   // Priority 1: PostgreSQL database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       return await dbGetRecentContracts(limit);
     } catch (error) {
@@ -256,7 +256,7 @@ export async function getSimilarContracts(
   const normalizedAddress = address.toLowerCase();
 
   // Priority 1: Pre-computed similarity index from database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       const dbSimilarities = await getSimilarContractsFromDb(normalizedAddress, limit);
       if (dbSimilarities.length > 0) {
@@ -461,7 +461,7 @@ export async function searchAddress(query: string): Promise<SearchResult | null>
 
 export async function getFeaturedContracts(): Promise<FeaturedContract[]> {
   // Priority 1: PostgreSQL database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       const featured = await dbGetContractsByAddresses([...FEATURED_ADDRESSES]);
       return featured.map((c) => ({
@@ -521,7 +521,7 @@ export async function searchBytecodeContent(
   let contracts: Contract[] = [];
 
   // Priority 1: PostgreSQL database (for decompiled code search)
-  if (useDatabase() && (searchType === "decompiled" || searchType === "all")) {
+  if (isDatabaseEnabled() && (searchType === "decompiled" || searchType === "all")) {
     try {
       contracts = await dbSearchDecompiled(query, limit * 2);
     } catch (error) {
@@ -659,7 +659,7 @@ export async function getStats(): Promise<{
   decompiledContracts: number;
 }> {
   // Priority 1: PostgreSQL database
-  if (useDatabase()) {
+  if (isDatabaseEnabled()) {
     try {
       const [total, decompiled] = await Promise.all([
         dbGetTotalCount(),
