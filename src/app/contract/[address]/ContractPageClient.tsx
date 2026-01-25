@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Info,
   FileCode,
-  GitCompare,
   History,
   Users,
   Coins,
@@ -48,7 +47,7 @@ interface ContractPageClientProps {
 
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "code" | "similarity" | "history">(
+  const [activeTab, setActiveTab] = useState<"overview" | "code" | "history">(
     "overview"
   );
 
@@ -296,14 +295,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               Code
             </TabButton>
             <TabButton
-              active={activeTab === "similarity"}
-              onClick={() => setActiveTab("similarity")}
-              icon={<GitCompare className="w-4 h-4" />}
-              badge={similarContracts.length > 0 ? similarContracts.length : undefined}
-            >
-              Similar
-            </TabButton>
-            <TabButton
               active={activeTab === "history"}
               onClick={() => setActiveTab("history")}
               icon={<History className="w-4 h-4" />}
@@ -339,9 +330,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               sourceCode={contract.sourceCode}
               abi={contract.abi}
             />
-          )}
-          {activeTab === "similarity" && (
-            <SimilarityTab similarities={similarContracts} />
           )}
           {activeTab === "history" && (
             <HistoryTab contract={contract} />
@@ -419,7 +407,7 @@ function OverviewTab({
               <Coins className="w-5 h-5 text-ether-400" />
               <h2 className="text-lg font-semibold">Token Information</h2>
             </div>
-            <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {contract.tokenLogo && (
                 <FactItem
                   label="Logo"
@@ -461,7 +449,7 @@ function OverviewTab({
         {/* Key facts */}
         <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
           <h2 className="text-lg font-semibold mb-4">Key Facts</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FactItem
               label="Deployer"
               value={
@@ -527,23 +515,21 @@ function OverviewTab({
                   <span className="text-xs text-yellow-400">Partial (capped)</span>
                 )}
               </div>
-              <div className="mt-2 overflow-x-auto no-scrollbar">
-                <div className="flex gap-2 min-w-max">
-                  {Object.keys(txCountsByYear.counts)
-                    .sort((a, b) => Number(a) - Number(b))
-                    .map((year) => (
-                      <div
-                        key={year}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40"
-                      >
-                        <span className="text-xs font-mono text-obsidian-400">{year}</span>
-                        <span className="text-xs font-semibold text-obsidian-200">
-                          {txCountsByYear.counts[year]?.toLocaleString?.() ??
-                            String(txCountsByYear.counts[year] ?? 0)}
-                        </span>
-                      </div>
-                    ))}
-                </div>
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {Object.keys(txCountsByYear.counts)
+                  .sort((a, b) => Number(a) - Number(b))
+                  .map((year) => (
+                    <div
+                      key={year}
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40"
+                    >
+                      <span className="text-xs font-mono text-obsidian-400">{year}</span>
+                      <span className="text-xs font-semibold text-obsidian-200">
+                        {txCountsByYear.counts[year]?.toLocaleString?.() ??
+                          String(txCountsByYear.counts[year] ?? 0)}
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
           )}
@@ -720,7 +706,7 @@ function FactItem({
   return (
     <div>
       <dt className="text-xs text-obsidian-500 mb-1">{label}</dt>
-      <dd className="text-obsidian-200">{value}</dd>
+      <dd className="text-obsidian-200 break-words">{value}</dd>
     </div>
   );
 }
