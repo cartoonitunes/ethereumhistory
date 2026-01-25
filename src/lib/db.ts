@@ -112,7 +112,20 @@ const FEATURED_ADDRESSES = [
   "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
   "0xED6aC8de7c7CA7e3A22952e09C2a2A1232DDef9A",
   "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+  "0x3eddc7ebc7db94f54b72d8ed1f42ce6a527305bb",
+  "0xe468D26721b703D224d05563cB64746A7A40E1F4",
+  "0xc7e9dDd5358e08417b1C88ed6f1a73149BEeaa32",
+  "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
 ] as const;
+
+function shuffle<T>(items: readonly T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 // =============================================================================
 // Contract Queries
@@ -1036,7 +1049,9 @@ export async function getFeaturedContracts(): Promise<FeaturedContract[]> {
   // Priority 1: PostgreSQL database
   if (isDatabaseEnabled()) {
     try {
-      const featured = await dbGetContractsByAddresses([...FEATURED_ADDRESSES]);
+      // Select 6 featured contracts in random order on each render/request.
+      const randomizedAddresses = shuffle(FEATURED_ADDRESSES);
+      const featured = (await dbGetContractsByAddresses(randomizedAddresses)).slice(0, 6);
       return featured.map((c) => ({
         address: c.address,
         name: c.etherscanContractName || `Contract ${c.address.slice(0, 10)}...`,

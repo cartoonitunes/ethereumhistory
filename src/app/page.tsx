@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Archive, Search, GitCompare, Clock, Code } from "lucide-react";
+import { Archive, Search, Clock, Code } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
@@ -93,7 +93,7 @@ export default function HomePage() {
       {/* Features */}
       <section className="py-16 border-t border-obsidian-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={<Search className="w-6 h-6" />}
               title="Contract Analysis"
@@ -103,11 +103,6 @@ export default function HomePage() {
               icon={<Code className="w-6 h-6" />}
               title="Decompiled Code"
               description="View human-readable decompiled bytecode with function names and logic flow."
-            />
-            <FeatureCard
-              icon={<GitCompare className="w-6 h-6" />}
-              title="Similarity Detection"
-              description="Find contracts with similar bytecode structure using deterministic matching."
             />
             <FeatureCard
               icon={<Clock className="w-6 h-6" />}
@@ -129,8 +124,8 @@ export default function HomePage() {
           >
             <h2 className="text-3xl font-bold mb-4">Featured Contracts</h2>
             <p className="text-obsidian-400 max-w-2xl mx-auto">
-              These contracts shaped Ethereum's history. From the first tokens to
-              governance experiments, explore the code that started it all.
+              These are pioneering contracts in Ethereum's history. From the first tokens to
+              governance experiments, explore the smart contracts that shaped the early era.
             </p>
           </motion.div>
 
