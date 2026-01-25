@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
@@ -19,10 +19,33 @@ export function OmniSearch() {
 
   const [input, setInput] = useState(qParam);
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState<"Loading" | "Analyzing" | "Documenting" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UnifiedSearchResponse | null>(null);
 
   const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  const stageTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  // Staged loading label for long-running operations
+  useEffect(() => {
+    // Clear any prior timers
+    for (const t of stageTimers.current) clearTimeout(t);
+    stageTimers.current = [];
+
+    if (!loading) {
+      setLoadingStage(null);
+      return;
+    }
+
+    setLoadingStage("Loading");
+    stageTimers.current.push(setTimeout(() => setLoadingStage("Analyzing"), 700));
+    stageTimers.current.push(setTimeout(() => setLoadingStage("Documenting"), 1600));
+
+    return () => {
+      for (const t of stageTimers.current) clearTimeout(t);
+      stageTimers.current = [];
+    };
+  }, [loading]);
 
   // Keep input in sync when navigating back/forward
   useEffect(() => {
@@ -112,6 +135,9 @@ export function OmniSearch() {
     if (!trimmed) return;
 
     if (isValidAddress(trimmed)) {
+      // Contract page may do on-demand ingestion; show a staged loading state.
+      setError(null);
+      setLoading(true);
       router.push(`/contract/${trimmed.toLowerCase()}`);
       return;
     }
@@ -157,6 +183,7 @@ export function OmniSearch() {
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="none"
+            disabled={loading}
           />
 
           <motion.button
@@ -171,7 +198,9 @@ export function OmniSearch() {
             ) : (
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             )}
-            <span className="hidden sm:inline text-base">Search</span>
+            <span className="hidden sm:inline text-base">
+              {loading ? loadingStage || "Loading" : "Search"}
+            </span>
           </motion.button>
         </div>
       </form>
