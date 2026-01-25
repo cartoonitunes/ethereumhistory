@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -16,6 +16,10 @@ import {
   Users,
   Coins,
   Code,
+  LogIn,
+  Save,
+  X,
+  Trash2,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -37,7 +41,7 @@ import {
   getVerificationStatusLabel,
   getVerificationStatusColor,
 } from "@/lib/utils";
-import type { ContractPageData } from "@/types";
+import type { ContractHistoryData, ContractPageData, HistorianMe, HistoricalLink } from "@/types";
 
 interface ContractPageClientProps {
   address: string;
@@ -821,36 +825,311 @@ function SimilarityTab({
 }
 
 function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
+  type DraftLink = {
+    clientId: string;
+    id: number | null;
+    contractAddress: string;
+    title: string | null;
+    url: string;
+    source: string | null;
+    note: string | null;
+    createdAt: string;
+    _deleted?: boolean;
+  };
+
+  const [historyData, setHistoryData] = useState<ContractHistoryData | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [me, setMe] = useState<HistorianMe | null>(null);
+  const [loadingMe, setLoadingMe] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Local editable state (initialized from contract + fetched links)
+  const [savedSummary, setSavedSummary] = useState(contract.historicalSummary || "");
+  const [savedSignificance, setSavedSignificance] = useState(contract.historicalSignificance || "");
+  const [savedContext, setSavedContext] = useState(contract.historicalContext || "");
+  const [savedTokenLogo, setSavedTokenLogo] = useState(contract.tokenLogo || "");
+
+  const [draftSummary, setDraftSummary] = useState(savedSummary);
+  const [draftSignificance, setDraftSignificance] = useState(savedSignificance);
+  const [draftContext, setDraftContext] = useState(savedContext);
+  const [draftTokenLogo, setDraftTokenLogo] = useState(savedTokenLogo);
+  const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
+
+  useEffect(() => {
+    // Reset drafts when navigating between contracts
+    setSavedSummary(contract.historicalSummary || "");
+    setSavedSignificance(contract.historicalSignificance || "");
+    setSavedContext(contract.historicalContext || "");
+    setSavedTokenLogo(contract.tokenLogo || "");
+
+    setDraftSummary(contract.historicalSummary || "");
+    setDraftSignificance(contract.historicalSignificance || "");
+    setDraftContext(contract.historicalContext || "");
+    setDraftTokenLogo(contract.tokenLogo || "");
+    setDraftLinks([]);
+    setEditMode(false);
+    setSaveError(null);
+  }, [contract.address]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setHistoryError(null);
+      try {
+        const res = await fetch(`/api/contract/${contract.address}/history`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.error) {
+          setHistoryError(String(json.error));
+          setHistoryData(null);
+          return;
+        }
+        const data = json.data as ContractHistoryData;
+        setHistoryData(data);
+        setDraftLinks(
+          (data?.links || []).map((l) => ({
+            clientId: String(l.id),
+            id: l.id,
+            contractAddress: l.contractAddress,
+            title: l.title,
+            url: l.url,
+            source: l.source,
+            note: l.note,
+            createdAt: l.createdAt,
+          }))
+        );
+      } catch {
+        if (!cancelled) setHistoryError("Failed to load historical links.");
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [contract.address]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMe() {
+      setLoadingMe(true);
+      try {
+        const res = await fetch("/api/historian/me");
+        const json = await res.json();
+        if (cancelled) return;
+        setMe((json?.data as HistorianMe) || null);
+      } catch {
+        if (!cancelled) setMe(null);
+      } finally {
+        if (!cancelled) setLoadingMe(false);
+      }
+    }
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canEdit = !!me?.active;
+
+  const visibleLinks = useMemo(() => draftLinks.filter((l) => !l._deleted), [draftLinks]);
+  const deletedIds = useMemo(
+    () => draftLinks.filter((l) => l._deleted && l.id != null).map((l) => l.id as number),
+    [draftLinks]
+  );
+
+  async function saveHistory() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/contract/${contract.address}/history/manage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contract: {
+            historicalSummary: draftSummary,
+            historicalSignificance: draftSignificance,
+            historicalContext: draftContext,
+            tokenLogo: draftTokenLogo,
+          },
+          links: visibleLinks.map((l) => ({
+            id: l.id,
+            title: l.title,
+            url: l.url,
+            source: l.source,
+            note: l.note,
+          })),
+          deleteIds: deletedIds,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        setSaveError(String(json?.error || "Failed to save."));
+        return;
+      }
+      const updated = json.data as ContractHistoryData;
+      setHistoryData(updated);
+      setSavedSummary(draftSummary.trim());
+      setSavedSignificance(draftSignificance.trim());
+      setSavedContext(draftContext.trim());
+      setSavedTokenLogo(draftTokenLogo.trim());
+      setDraftLinks(
+        (updated.links || []).map((l) => ({
+          clientId: String(l.id),
+          id: l.id,
+          contractAddress: l.contractAddress,
+          title: l.title,
+          url: l.url,
+          source: l.source,
+          note: l.note,
+          createdAt: l.createdAt,
+        }))
+      );
+      setEditMode(false);
+    } catch {
+      setSaveError("Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addNewLink() {
+    const clientId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setDraftLinks([
+      ...draftLinks,
+      {
+        clientId,
+        id: null,
+        contractAddress: contract.address,
+        title: null,
+        url: "",
+        source: null,
+        note: null,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" id="history">
       {/* Historical narrative */}
       <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-        <h2 className="text-lg font-semibold mb-4">Historical Narrative</h2>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <h2 className="text-lg font-semibold">Historical Narrative</h2>
+          <div className="flex items-center gap-2">
+            {canEdit ? (
+              editMode ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditMode(false)}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300 disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveHistory}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-sm text-white disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setEditMode(true)}
+                  disabled={loadingMe}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300"
+                >
+                  Edit
+                </button>
+              )
+            ) : (
+              <Link
+                href={`/historian/login?next=${encodeURIComponent(`/contract/${contract.address}#history`)}`}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300 hover:text-obsidian-100"
+              >
+                <LogIn className="w-4 h-4" />
+                Historian login
+              </Link>
+            )}
+          </div>
+        </div>
 
-        {contract.historicalSummary ? (
+        {saveError && <div className="mb-3 text-sm text-red-400">{saveError}</div>}
+
+        {editMode ? (
+          <div className="space-y-4">
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Contract image URL</div>
+              <input
+                value={draftTokenLogo}
+                onChange={(e) => setDraftTokenLogo(e.target.value)}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="Optional image URL (shown next to the contract name)"
+              />
+              <div className="text-xs text-obsidian-500 mt-1">
+                Tip: this uses the existing <code className="font-mono">tokenLogo</code> field so it renders immediately.
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Summary</div>
+              <textarea
+                value={draftSummary}
+                onChange={(e) => setDraftSummary(e.target.value)}
+                className="w-full min-h-[120px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="What is this contract, historically?"
+              />
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Historical Significance</div>
+              <textarea
+                value={draftSignificance}
+                onChange={(e) => setDraftSignificance(e.target.value)}
+                className="w-full min-h-[100px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="Why does it matter?"
+              />
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Context</div>
+              <textarea
+                value={draftContext}
+                onChange={(e) => setDraftContext(e.target.value)}
+                className="w-full min-h-[100px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="What was happening around this time?"
+              />
+            </div>
+          </div>
+        ) : savedSummary ? (
           <div className="prose prose-invert max-w-none">
             <p className="text-obsidian-300 leading-relaxed mb-4">
-              {contract.historicalSummary}
+              {savedSummary}
             </p>
 
-            {contract.historicalSignificance && (
+            {savedSignificance && (
               <>
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
                   Historical Significance
                 </h3>
                 <p className="text-obsidian-300 leading-relaxed">
-                  {contract.historicalSignificance}
+                  {savedSignificance}
                 </p>
               </>
             )}
 
-            {contract.historicalContext && (
+            {savedContext && (
               <>
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
                   Context
                 </h3>
                 <p className="text-obsidian-300 leading-relaxed">
-                  {contract.historicalContext}
+                  {savedContext}
                 </p>
               </>
             )}
@@ -862,6 +1141,132 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             <p className="text-sm mt-2">
               Historical context is researched and added manually for significant contracts.
             </p>
+          </div>
+        )}
+      </section>
+
+      {/* Historical links */}
+      <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <h3 className="font-semibold">Historical Links</h3>
+          {editMode && (
+            <button
+              type="button"
+              onClick={addNewLink}
+              className="px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300"
+            >
+              Add link
+            </button>
+          )}
+        </div>
+
+        {historyError && <div className="text-sm text-red-400">{historyError}</div>}
+
+        {!editMode && (historyData?.links?.length || 0) === 0 ? (
+          <div className="text-sm text-obsidian-500">No links yet.</div>
+        ) : (
+          <div className="space-y-3">
+            {(editMode ? visibleLinks : (historyData?.links || []).map((l) => ({
+              clientId: String(l.id),
+              id: l.id,
+              contractAddress: l.contractAddress,
+              title: l.title,
+              url: l.url,
+              source: l.source,
+              note: l.note,
+              createdAt: l.createdAt,
+            }))).map((l) => (
+              <div
+                key={l.clientId}
+                className="rounded-xl border border-obsidian-800 bg-obsidian-900/20 p-4"
+              >
+                {editMode ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        value={l.title || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setDraftLinks((prev) =>
+                            prev.map((x) => (x.clientId === l.clientId ? { ...x, title: v || null } : x))
+                          );
+                        }}
+                        className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                        placeholder="Title (optional)"
+                      />
+                      <input
+                        value={l.source || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setDraftLinks((prev) =>
+                            prev.map((x) => (x.clientId === l.clientId ? { ...x, source: v || null } : x))
+                          );
+                        }}
+                        className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                        placeholder="Source (optional)"
+                      />
+                    </div>
+                    <input
+                      value={l.url}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDraftLinks((prev) =>
+                          prev.map((x) => (x.clientId === l.clientId ? { ...x, url: v } : x))
+                        );
+                      }}
+                      className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                      placeholder="URL"
+                    />
+                    <textarea
+                      value={l.note || ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDraftLinks((prev) =>
+                          prev.map((x) => (x.clientId === l.clientId ? { ...x, note: v || null } : x))
+                        );
+                      }}
+                      className="w-full min-h-[70px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                      placeholder="Note (optional)"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftLinks((prev) =>
+                            prev.map((x) => (x.clientId === l.clientId ? { ...x, _deleted: true } : x))
+                          );
+                        }}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/5 text-sm text-red-300"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-4">
+                    <div className="min-w-0 flex-1">
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-ether-400 hover:text-ether-300 break-words"
+                      >
+                        {l.title || l.url}
+                        <ExternalLink className="w-3 h-3 inline ml-1" />
+                      </a>
+                      {(l.source || l.note) && (
+                        <div className="mt-1 text-xs text-obsidian-500">
+                          {l.source ? <span>{l.source}</span> : null}
+                          {l.source && l.note ? <span> • </span> : null}
+                          {l.note ? <span className="text-obsidian-400">{l.note}</span> : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -896,12 +1301,15 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             Know something about this contract? We welcome contributions from the community
             to help preserve Ethereum's history.
           </p>
-          <button
-            disabled
-            className="px-4 py-2 rounded-lg bg-obsidian-800 text-obsidian-500 text-sm cursor-not-allowed"
+          <a
+            href="https://discord.gg/3KV6dt2euF"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-200 text-sm"
           >
-            Suggest Context (Coming Soon)
-          </button>
+            Request Historian access on Discord
+            <ExternalLink className="w-4 h-4" />
+          </a>
         </div>
       </section>
     </div>

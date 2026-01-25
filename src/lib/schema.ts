@@ -15,6 +15,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   primaryKey,
 } from "drizzle-orm/pg-core";
 
@@ -157,11 +158,35 @@ export const historicalLinks = pgTable(
     url: text("url").notNull(),
     source: text("source"),
     note: text("note"),
+    createdBy: integer("created_by"),
     createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
     contractIdx: index("historical_links_contract_idx").on(table.contractAddress),
     urlIdx: index("historical_links_url_idx").on(table.url),
+    createdByIdx: index("historical_links_created_by_idx").on(table.createdBy),
+  })
+);
+
+// =============================================================================
+// Historians (editor accounts for curated content)
+// =============================================================================
+
+export const historians = pgTable(
+  "historians",
+  {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    emailUnique: uniqueIndex("historians_email_unique").on(table.email),
+    activeIdx: index("historians_active_idx").on(table.active),
   })
 );
 
@@ -244,3 +269,5 @@ export type Person = typeof people.$inferSelect;
 export type NewPerson = typeof people.$inferInsert;
 export type PersonWallet = typeof peopleWallets.$inferSelect;
 export type NewPersonWallet = typeof peopleWallets.$inferInsert;
+export type Historian = typeof historians.$inferSelect;
+export type NewHistorian = typeof historians.$inferInsert;

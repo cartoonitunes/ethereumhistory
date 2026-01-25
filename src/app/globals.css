@@ -187,13 +187,7 @@ code, pre {
 }
 
 .heuristic-badge::after {
-  content: "~";
-  position: absolute;
-  top: -2px;
-  right: -8px;
-  font-size: 0.75rem;
-  color: #f97316;
-  font-weight: bold;
+  content: "";
 }
 
 /* Table styles */

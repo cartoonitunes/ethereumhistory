@@ -71,7 +71,7 @@ export default function HomePage() {
             {/* Subheadline */}
             <p className="text-lg md:text-xl text-obsidian-400 max-w-2xl mx-auto mb-10">
               Explore the smart contracts that shaped the early blockchain era.
-              From the genesis block to The DAO, discover where it all began.
+              From the genesis block to now, focusing on the early days.
             </p>
 
             {/* Search */}

@@ -412,3 +412,10 @@ export interface ContractHistoryData {
   links: HistoricalLink[];
   metadata: ContractMetadataItem[];
 }
+
+export interface HistorianMe {
+  id: number;
+  email: string;
+  name: string;
+  active: boolean;
+}
