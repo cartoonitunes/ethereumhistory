@@ -39,17 +39,10 @@ export const metadata: Metadata = {
     siteName: "Ethereum History",
     images: [
       {
-        url: "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/og-image-1200x630.png",
+        url: "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg",
         width: 1200,
         height: 630,
-        type: "image/png",
-        alt: "Ethereum History",
-      },
-      {
-        url: "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/social-square-512.png",
-        width: 512,
-        height: 512,
-        type: "image/png",
+        type: "image/jpeg",
         alt: "Ethereum History",
       },
     ],
@@ -59,7 +52,7 @@ export const metadata: Metadata = {
     title: "Ethereum History",
     description: "Historical archive of Ethereum smart contracts from 2015-2017",
     images: [
-      "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/og-image-1200x630.png",
+      "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg",
     ],
   },
   robots: {
