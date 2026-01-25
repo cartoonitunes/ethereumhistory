@@ -17,6 +17,7 @@ import type {
   UnifiedSearchResult,
   UnifiedMatchType,
   Person as AppPerson,
+  HistorianMe,
 } from "@/types";
 import { ERAS } from "@/types";
 
@@ -435,6 +436,133 @@ export async function getHistoricalLinksForContractFromDb(
     note: r.note,
     createdAt: r.createdAt?.toISOString() || new Date().toISOString(),
   }));
+}
+
+// =============================================================================
+// Historians (auth)
+// =============================================================================
+
+export async function getHistorianByEmailFromDb(email: string): Promise<schema.Historian | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historians)
+    .where(eq(schema.historians.email, email.toLowerCase()))
+    .limit(1);
+  return rows[0] || null;
+}
+
+export async function getHistorianByIdFromDb(id: number): Promise<schema.Historian | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historians)
+    .where(eq(schema.historians.id, id))
+    .limit(1);
+  return rows[0] || null;
+}
+
+export async function createHistorianFromDb(params: {
+  email: string;
+  name: string;
+  tokenHash: string;
+}): Promise<void> {
+  const database = getDb();
+  await database.insert(schema.historians).values({
+    email: params.email.toLowerCase(),
+    name: params.name,
+    tokenHash: params.tokenHash,
+    active: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
+export function historianRowToMe(row: schema.Historian): HistorianMe {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    active: row.active ?? true,
+  };
+}
+
+// =============================================================================
+// History editing helpers
+// =============================================================================
+
+export async function updateContractHistoryFieldsFromDb(
+  address: string,
+  patch: {
+    historicalSummary?: string | null;
+    historicalSignificance?: string | null;
+    historicalContext?: string | null;
+  }
+): Promise<void> {
+  const database = getDb();
+  const updates: Partial<schema.NewContract> = { updatedAt: new Date() };
+  if (patch.historicalSummary !== undefined) updates.historicalSummary = patch.historicalSummary;
+  if (patch.historicalSignificance !== undefined) updates.historicalSignificance = patch.historicalSignificance;
+  if (patch.historicalContext !== undefined) updates.historicalContext = patch.historicalContext;
+  if (Object.keys(updates).length <= 1) return;
+  await database.update(schema.contracts).set(updates).where(eq(schema.contracts.address, address.toLowerCase()));
+}
+
+export async function upsertHistoricalLinkFromDb(params: {
+  id?: number | null;
+  contractAddress: string;
+  title: string | null;
+  url: string;
+  source: string | null;
+  note: string | null;
+  historianId: number;
+}): Promise<void> {
+  const database = getDb();
+  const normalized = params.contractAddress.toLowerCase();
+
+  if (params.id) {
+    await database
+      .update(schema.historicalLinks)
+      .set({
+        title: params.title,
+        url: params.url,
+        source: params.source,
+        note: params.note,
+        updatedAt: new Date(),
+      } as any)
+      .where(and(eq(schema.historicalLinks.id, params.id), eq(schema.historicalLinks.contractAddress, normalized)));
+    return;
+  }
+
+  await database.insert(schema.historicalLinks).values({
+    contractAddress: normalized,
+    title: params.title,
+    url: params.url,
+    source: params.source,
+    note: params.note,
+    createdBy: params.historianId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as any);
+}
+
+export async function updateContractTokenLogoFromDb(
+  address: string,
+  tokenLogo: string | null
+): Promise<void> {
+  await updateContractTokenMetadataFromDb(address, { tokenLogo });
+}
+
+export async function deleteHistoricalLinksFromDb(params: {
+  contractAddress: string;
+  ids: number[];
+}): Promise<void> {
+  const database = getDb();
+  const normalized = params.contractAddress.toLowerCase();
+  if (!params.ids.length) return;
+  await database
+    .delete(schema.historicalLinks)
+    .where(and(eq(schema.historicalLinks.contractAddress, normalized), inArray(schema.historicalLinks.id, params.ids)));
 }
 
 export async function getContractMetadataFromDb(

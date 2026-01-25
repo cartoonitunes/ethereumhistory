@@ -49,6 +49,14 @@ export function Header() {
             >
               About
             </Link>
+            <a
+              href="https://discord.gg/3KV6dt2euF"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-obsidian-400 hover:text-obsidian-100 transition-colors"
+            >
+              Discord
+            </a>
           </nav>
 
           {/* Search hint */}

@@ -110,6 +110,23 @@ CREATE TABLE IF NOT EXISTS function_signatures (
 CREATE INDEX IF NOT EXISTS signatures_name_idx ON function_signatures (name);
 
 -- =============================================================================
+-- historians (editor accounts)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS historians (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL,
+  token_hash TEXT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS historians_email_unique ON historians (email);
+CREATE INDEX IF NOT EXISTS historians_active_idx ON historians (active);
+
+-- =============================================================================
 -- historical_links
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS historical_links (
@@ -119,11 +136,14 @@ CREATE TABLE IF NOT EXISTS historical_links (
   url TEXT NOT NULL,
   source TEXT,
   note TEXT,
+  created_by INTEGER REFERENCES historians(id) ON DELETE SET NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS historical_links_contract_idx ON historical_links (contract_address);
 CREATE INDEX IF NOT EXISTS historical_links_url_idx ON historical_links (url);
+CREATE INDEX IF NOT EXISTS historical_links_created_by_idx ON historical_links (created_by);
 
 -- =============================================================================
 -- contract_metadata
