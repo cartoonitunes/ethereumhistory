@@ -814,6 +814,16 @@ export async function insertContracts(
 }
 
 /**
+ * Insert a single contract row if missing (no updates on conflict).
+ */
+export async function insertContractIfMissing(
+  contract: schema.NewContract
+): Promise<void> {
+  const database = getDb();
+  await database.insert(schema.contracts).values(contract).onConflictDoNothing();
+}
+
+/**
  * Insert similarity records in batches
  */
 export async function insertSimilarityRecords(

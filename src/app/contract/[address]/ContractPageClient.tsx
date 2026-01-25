@@ -143,6 +143,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     functionSignatures,
     deployerPerson,
     txCountsByYear,
+    archiveNotice,
   } = data!;
 
   const displayName = contract.tokenName || contract.etherscanContractName || null;
@@ -161,6 +162,18 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           <ArrowLeft className="w-4 h-4" />
           Back to Home
         </Link>
+
+        {archiveNotice && (
+          <div className="mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-obsidian-200">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <div className="font-medium text-yellow-400">Outside the curated archive</div>
+                <div className="text-obsidian-300 mt-1">{archiveNotice}</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <motion.div

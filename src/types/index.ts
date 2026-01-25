@@ -297,6 +297,7 @@ export interface ContractPageData {
   functionSignatures: FunctionSignature[];
   deployerPerson?: Person | null;
   txCountsByYear?: { counts: Record<string, number>; truncated: boolean } | null;
+  archiveNotice?: string | null;
 }
 
 // =============================================================================
