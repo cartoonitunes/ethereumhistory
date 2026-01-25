@@ -5,6 +5,7 @@ import type { HistorianMe } from "@/types";
 import { historianRowToMe } from "./db-client";
 
 const COOKIE_NAME = "eh_historian";
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 function getSessionSecret(): string {
   const secret = process.env.HISTORIAN_SESSION_SECRET;
@@ -23,29 +24,32 @@ function sign(payload: string): string {
   return crypto.createHmac("sha256", secret).update(payload, "utf8").digest("hex");
 }
 
-export function setHistorianSessionCookie(historianId: number) {
+export function getHistorianSessionCookieName(): string {
+  return COOKIE_NAME;
+}
+
+export function buildHistorianSessionCookieValue(historianId: number): string {
   const issuedAt = Date.now();
   const payload = `${historianId}.${issuedAt}`;
   const sig = sign(payload);
   const value = `${payload}.${sig}`;
-
-  cookies().set(COOKIE_NAME, value, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  });
+  return value;
 }
 
-export function clearHistorianSessionCookie() {
-  cookies().set(COOKIE_NAME, "", {
+export function getHistorianSessionCookieOptions(): {
+  httpOnly: true;
+  sameSite: "lax";
+  secure: boolean;
+  path: "/";
+  maxAge: number;
+} {
+  return {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 0,
-  });
+    maxAge: COOKIE_MAX_AGE_SECONDS,
+  };
 }
 
 function parseSessionCookie(raw: string | undefined): { historianId: number; issuedAt: number } | null {
@@ -77,7 +81,8 @@ function parseSessionCookie(raw: string | undefined): { historianId: number; iss
 }
 
 export async function getHistorianMeFromCookies(): Promise<HistorianMe | null> {
-  const raw = cookies().get(COOKIE_NAME)?.value;
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_NAME)?.value;
   const parsed = parseSessionCookie(raw);
   if (!parsed) return null;
   const row = await getHistorianByIdFromDb(parsed.historianId);
