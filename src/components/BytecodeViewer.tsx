@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Copy, Check, ChevronDown, ChevronUp, Code2 } from "lucide-react";
 import { copyToClipboard, formatBytes } from "@/lib/utils";
@@ -12,6 +12,8 @@ interface BytecodeViewerProps {
   analysis: BytecodeAnalysis | null;
   decompiledCode?: string | null;
   decompilationSuccess?: boolean;
+  sourceCode?: string | null;
+  abi?: string | null;
 }
 
 export function BytecodeViewer({
@@ -19,12 +21,30 @@ export function BytecodeViewer({
   analysis,
   decompiledCode,
   decompilationSuccess = false,
+  sourceCode,
+  abi,
 }: BytecodeViewerProps) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"decompiled" | "bytecode" | "analysis" | "patterns">(
-    decompilationSuccess ? "decompiled" : "analysis"
+  const [activeTab, setActiveTab] = useState<
+    "source" | "abi" | "decompiled" | "bytecode" | "analysis" | "patterns"
+  >(
+    sourceCode
+      ? "source"
+      : decompilationSuccess
+      ? "decompiled"
+      : "analysis"
   );
+
+  const prettyAbi = useMemo(() => {
+    if (!abi) return null;
+    try {
+      const parsed = JSON.parse(abi);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return abi;
+    }
+  }, [abi]);
 
   const handleCopy = async () => {
     if (!bytecode) return;
@@ -38,37 +58,58 @@ export function BytecodeViewer({
   return (
     <div className="rounded-xl border border-obsidian-800 overflow-hidden">
       {/* Tabs */}
-      <div className="flex items-center border-b border-obsidian-800 bg-obsidian-900/50">
-        <TabButton
-          active={activeTab === "decompiled"}
-          onClick={() => setActiveTab("decompiled")}
-          icon={<Code2 className="w-3.5 h-3.5" />}
-          badge={decompilationSuccess ? undefined : "!"}
-        >
-          Decompiled
-        </TabButton>
-        <TabButton
-          active={activeTab === "analysis"}
-          onClick={() => setActiveTab("analysis")}
-        >
-          Analysis
-        </TabButton>
-        <TabButton
-          active={activeTab === "bytecode"}
-          onClick={() => setActiveTab("bytecode")}
-        >
-          Bytecode
-        </TabButton>
-        <TabButton
-          active={activeTab === "patterns"}
-          onClick={() => setActiveTab("patterns")}
-        >
-          Patterns
-        </TabButton>
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 border-b border-obsidian-800 bg-obsidian-900/50">
+        <div className="flex items-center overflow-x-auto no-scrollbar whitespace-nowrap">
+          {sourceCode && (
+            <TabButton active={activeTab === "source"} onClick={() => setActiveTab("source")}>
+              Source
+            </TabButton>
+          )}
+          {abi && (
+            <TabButton active={activeTab === "abi"} onClick={() => setActiveTab("abi")}>
+              ABI
+            </TabButton>
+          )}
+          <TabButton
+            active={activeTab === "decompiled"}
+            onClick={() => setActiveTab("decompiled")}
+            icon={<Code2 className="w-3.5 h-3.5" />}
+            badge={decompilationSuccess ? undefined : "!"}
+          >
+            Decompiled
+          </TabButton>
+          <TabButton active={activeTab === "analysis"} onClick={() => setActiveTab("analysis")}>
+            Analysis
+          </TabButton>
+          <TabButton active={activeTab === "bytecode"} onClick={() => setActiveTab("bytecode")}>
+            Bytecode
+          </TabButton>
+          <TabButton active={activeTab === "patterns"} onClick={() => setActiveTab("patterns")}>
+            Patterns
+          </TabButton>
+        </div>
       </div>
 
       {/* Content */}
       <div className="p-4">
+        {activeTab === "source" && (
+          <TextBlobView
+            title="Verified Source Code"
+            content={sourceCode || null}
+            expanded={expanded}
+            onToggleExpand={() => setExpanded(!expanded)}
+          />
+        )}
+
+        {activeTab === "abi" && (
+          <TextBlobView
+            title="Contract ABI"
+            content={prettyAbi}
+            expanded={expanded}
+            onToggleExpand={() => setExpanded(!expanded)}
+          />
+        )}
+
         {activeTab === "decompiled" && (
           <DecompiledCodeViewer
             decompiledCode={decompiledCode || null}
@@ -122,7 +163,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={`
-        flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors relative
+        flex-none whitespace-nowrap flex items-center gap-1.5 px-4 py-3 text-sm font-medium transition-colors relative
         ${active ? "text-obsidian-100" : "text-obsidian-500 hover:text-obsidian-300"}
       `}
     >
@@ -140,6 +181,96 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+function TextBlobView({
+  title,
+  content,
+  expanded,
+  onToggleExpand,
+}: {
+  title: string;
+  content: string | null;
+  expanded: boolean;
+  onToggleExpand: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const display = useMemo(() => {
+    if (!content) return null;
+    if (expanded) return content;
+    const limit = 6000;
+    return content.length > limit ? content.slice(0, limit) : content;
+  }, [content, expanded]);
+
+  const isTruncated = !!content && !expanded && content.length > 6000;
+
+  const handleCopy = async () => {
+    if (!content) return;
+    const ok = await copyToClipboard(content);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  if (!content) {
+    return (
+      <div className="text-center py-8 text-obsidian-500">
+        <p>No {title.toLowerCase()} available for this contract.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-obsidian-400">{title}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-sm text-obsidian-300 transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4 text-green-400" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4" />
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="code-block">
+        <pre className="text-xs text-obsidian-300 whitespace-pre p-4 overflow-x-auto">
+          {display}
+          {isTruncated ? "\n... (truncated)" : ""}
+        </pre>
+      </div>
+
+      {content.length > 6000 && (
+        <button
+          onClick={onToggleExpand}
+          className="flex items-center gap-1 text-sm text-ether-400 hover:text-ether-300 transition-colors"
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="w-4 h-4" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-4 h-4" />
+              Show all
+            </>
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 

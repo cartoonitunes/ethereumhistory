@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronRight, Archive, Search, GitCompare, Clock, Code } from "lucide-react";
-import Link from "next/link";
+import { Archive, Search, GitCompare, Clock, Code } from "lucide-react";
 import { Header } from "@/components/Header";
-import { UnifiedSearch } from "@/components/UnifiedSearch";
+import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
 import { ContractCard } from "@/components/ContractCard";
-import { ERAS } from "@/types";
 import type { FeaturedContract } from "@/types";
 
 const FEATURED_FALLBACK: FeaturedContract[] = [];
@@ -78,7 +76,15 @@ export default function HomePage() {
 
             {/* Search */}
             <div className="flex justify-center mb-6">
-              <UnifiedSearch defaultMode="address" />
+              <Suspense
+                fallback={
+                  <div className="w-full max-w-3xl">
+                    <div className="h-16 rounded-xl border border-obsidian-800 bg-obsidian-900/30" />
+                  </div>
+                }
+              >
+                <OmniSearch />
+              </Suspense>
             </div>
           </motion.div>
         </div>

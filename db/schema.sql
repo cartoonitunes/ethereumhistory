@@ -141,3 +141,33 @@ CREATE TABLE IF NOT EXISTS contract_metadata (
 CREATE INDEX IF NOT EXISTS contract_metadata_contract_idx ON contract_metadata (contract_address);
 CREATE INDEX IF NOT EXISTS contract_metadata_key_idx ON contract_metadata (key);
 
+-- =============================================================================
+-- people
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS people (
+  address TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  role TEXT,
+  short_bio TEXT,
+  bio TEXT,
+  highlights JSONB,
+  website_url TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS people_slug_idx ON people (slug);
+
+-- =============================================================================
+-- people_wallets
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS people_wallets (
+  address TEXT PRIMARY KEY,
+  person_address TEXT NOT NULL REFERENCES people(address) ON DELETE CASCADE,
+  label TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS people_wallets_person_idx ON people_wallets (person_address);
+

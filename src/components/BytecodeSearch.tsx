@@ -96,8 +96,8 @@ export function BytecodeSearch({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Search for function names, variables, patterns..."
-              className="w-full pl-10 pr-4 py-3 bg-obsidian-800 border border-obsidian-700 rounded-lg text-obsidian-100 placeholder:text-obsidian-500 focus:outline-none focus:border-ether-500/50"
+              placeholder="Search code (functions, vars, patterns)…"
+              className="w-full pl-10 pr-4 py-3 bg-obsidian-800 border border-obsidian-700 rounded-lg text-base text-obsidian-100 placeholder:text-obsidian-400 focus:outline-none focus:border-ether-500/50"
               autoFocus={autoFocus}
             />
           </div>

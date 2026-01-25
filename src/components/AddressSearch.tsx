@@ -14,7 +14,7 @@ interface AddressSearchProps {
 
 export function AddressSearch({
   size = "default",
-  placeholder = "Paste an Ethereum contract address",
+  placeholder = "Contract address (0x…)",
   autoFocus = false,
 }: AddressSearchProps) {
   const [address, setAddress] = useState("");
@@ -79,7 +79,7 @@ export function AddressSearch({
             autoFocus={autoFocus}
             className={`
               flex-1 bg-transparent border-none outline-none
-              text-obsidian-100 placeholder:text-obsidian-500
+              text-obsidian-100 placeholder:text-obsidian-400 placeholder:font-sans
               font-mono
               ${isLarge ? "text-lg" : "text-base"}
             `}

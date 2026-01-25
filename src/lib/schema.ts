@@ -189,6 +189,50 @@ export const contractMetadata = pgTable(
 );
 
 // =============================================================================
+// People (known deployers / historical figures)
+// =============================================================================
+
+export const people = pgTable(
+  "people",
+  {
+    // Primary key (wallet / deployer address)
+    address: text("address").primaryKey(),
+
+    // Display
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    role: text("role"),
+    shortBio: text("short_bio"),
+    bio: text("bio"),
+    highlights: jsonb("highlights"), // JSON array of strings
+
+    // References
+    websiteUrl: text("website_url"),
+
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    slugIdx: index("people_slug_idx").on(table.slug),
+  })
+);
+
+export const peopleWallets = pgTable(
+  "people_wallets",
+  {
+    address: text("address").primaryKey(),
+    personAddress: text("person_address")
+      .notNull()
+      .references(() => people.address, { onDelete: "cascade" }),
+    label: text("label"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    personIdx: index("people_wallets_person_idx").on(table.personAddress),
+  })
+);
+
+// =============================================================================
 // Type exports for use with Drizzle
 // =============================================================================
 
@@ -196,3 +240,7 @@ export type Contract = typeof contracts.$inferSelect;
 export type NewContract = typeof contracts.$inferInsert;
 export type SimilarityRecord = typeof similarityIndex.$inferSelect;
 export type NewSimilarityRecord = typeof similarityIndex.$inferInsert;
+export type Person = typeof people.$inferSelect;
+export type NewPerson = typeof people.$inferInsert;
+export type PersonWallet = typeof peopleWallets.$inferSelect;
+export type NewPersonWallet = typeof peopleWallets.$inferInsert;

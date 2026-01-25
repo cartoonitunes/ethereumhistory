@@ -27,7 +27,8 @@ export function UnifiedSearch({ defaultMode = "address" }: UnifiedSearchProps) {
     <div className="w-full max-w-3xl">
       {/* Mode selector */}
       <div className="flex justify-center mb-4">
-        <div className="inline-flex rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-1">
+        <div className="max-w-full overflow-x-auto no-scrollbar">
+          <div className="inline-flex rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-1 whitespace-nowrap">
           {options.map((opt) => (
             <button
               key={opt.id}
@@ -43,6 +44,7 @@ export function UnifiedSearch({ defaultMode = "address" }: UnifiedSearchProps) {
               {opt.label}
             </button>
           ))}
+          </div>
         </div>
       </div>
 

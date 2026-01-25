@@ -18,6 +18,8 @@ import type {
   SearchResult,
   FeaturedContract,
   BytecodeSearchResult,
+  UnifiedSearchResponse,
+  UnifiedSearchResult,
 } from "@/types";
 import { ERAS } from "@/types";
 import {
@@ -43,11 +45,15 @@ import {
   getContractByAddress as dbGetContract,
   updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
+  getPersonByAddressFromDb as dbGetPersonByAddress,
+  getPersonBySlugFromDb as dbGetPersonBySlug,
   getContractsByEra as dbGetContractsByEra,
   getContractsByDeployerFromDb as dbGetContractsByDeployer,
   getRecentContractsFromDb as dbGetRecentContracts,
   getContractsByAddressesFromDb as dbGetContractsByAddresses,
   searchDecompiledCode as dbSearchDecompiled,
+  searchUnifiedFromDb as dbSearchUnified,
+  searchPeopleFromDb as dbSearchPeople,
   getTotalContractCount as dbGetTotalCount,
   getDecompiledContractCount as dbGetDecompiledCount,
   getFeaturedContracts as dbGetFeatured,
@@ -563,6 +569,18 @@ export async function getContractPageData(address: string): Promise<ContractPage
     return null;
   }
 
+  const deployerPersonPromise =
+    contract.deployerAddress && isDatabaseEnabled()
+      ? (async () => {
+          try {
+            return await dbGetPersonByAddress(contract.deployerAddress!);
+          } catch (error) {
+            console.warn("[db] Failed to load deployer person:", error);
+            return null;
+          }
+        })()
+      : Promise.resolve(null);
+
   const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures] =
     await Promise.all([
       getBytecodeAnalysis(address),
@@ -577,7 +595,18 @@ export async function getContractPageData(address: string): Promise<ContractPage
     similarContracts,
     detectedPatterns,
     functionSignatures,
+    deployerPerson: await deployerPersonPromise,
   };
+}
+
+export async function getPersonBySlug(slug: string) {
+  if (!isDatabaseEnabled()) return null;
+  try {
+    return await dbGetPersonBySlug(slug);
+  } catch (error) {
+    console.warn("[db] Failed to load person by slug:", error);
+    return null;
+  }
 }
 
 // =============================================================================
@@ -773,6 +802,96 @@ export async function searchBytecodeContent(
   }
 
   return results;
+}
+
+// =============================================================================
+// Unified Search
+// =============================================================================
+
+export async function searchUnifiedContracts(
+  query: string,
+  page: number,
+  limit: number = 20
+): Promise<UnifiedSearchResponse> {
+  const q = query.trim();
+  const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+  const safeLimit = Math.min(Math.max(limit, 1), 50);
+  const offset = (safePage - 1) * safeLimit;
+
+  // Priority 1: PostgreSQL database
+  if (isDatabaseEnabled()) {
+    // People results are small; show them first, then contracts.
+    const people = await dbSearchPeople(q, 100);
+    const peopleCount = people.length;
+
+    const peopleSlice = offset < peopleCount ? people.slice(offset, offset + safeLimit) : [];
+    const remaining = safeLimit - peopleSlice.length;
+
+    const contractOffset = Math.max(0, offset - peopleCount);
+    const contractRows =
+      remaining > 0 ? await dbSearchUnified(q, remaining + 1, contractOffset) : [];
+
+    const contracts = remaining > 0 ? contractRows.slice(0, remaining) : [];
+
+    const hasMore =
+      offset + safeLimit < peopleCount || (remaining > 0 && contractRows.length > remaining);
+
+    return { query: q, page: safePage, results: [...peopleSlice, ...contracts], hasMore };
+  }
+
+  // Priority 2: JSON fallback (may be expensive; only when allowed)
+  if (allowJsonFallback()) {
+    const lower = q.toLowerCase();
+    const all = loadAllContracts();
+    const matches: UnifiedSearchResult[] = [];
+
+    for (const c of all) {
+      const fields: Array<{ type: UnifiedSearchResult["matchType"]; value: string | null }> = [
+        { type: "address", value: c.address },
+        { type: "token_name", value: c.tokenName },
+        { type: "token_symbol", value: c.tokenSymbol },
+        { type: "contract_name", value: c.etherscanContractName },
+        { type: "decompiled_code", value: c.decompiledCode },
+        { type: "source_code", value: c.sourceCode },
+        { type: "abi", value: c.abi },
+      ];
+
+      const match = fields.find((f) => f.value && f.value.toLowerCase().includes(lower));
+      if (!match) continue;
+
+      const title =
+        c.tokenName || c.etherscanContractName || (c.tokenSymbol ? `Token ${c.tokenSymbol}` : `Contract ${c.address.slice(0, 10)}...`);
+
+      const idx = match.value!.toLowerCase().indexOf(lower);
+      const snippet =
+        idx >= 0
+          ? match.value!.slice(Math.max(0, idx - 40), Math.min(match.value!.length, idx + lower.length + 100))
+          : null;
+
+      matches.push({
+        entityType: "contract",
+        address: c.address,
+        title,
+        subtitle: c.tokenSymbol ? c.tokenSymbol : null,
+        matchType: match.type,
+        matchSnippet: snippet ? snippet.replace(/\s+/g, " ").trim() : null,
+        deploymentTimestamp: c.deploymentTimestamp,
+        eraId: c.eraId,
+        heuristicContractType: c.heuristics.contractType,
+        verificationStatus: c.verificationStatus,
+        personSlug: null,
+      });
+    }
+
+    // Deterministic ordering
+    matches.sort((a, b) => (a.deploymentTimestamp || "").localeCompare(b.deploymentTimestamp || ""));
+    const pageSlice = matches.slice(offset, offset + safeLimit + 1);
+    const hasMore = pageSlice.length > safeLimit;
+    const results = pageSlice.slice(0, safeLimit);
+    return { query: q, page: safePage, results, hasMore };
+  }
+
+  return { query: q, page: safePage, results: [], hasMore: false };
 }
 
 // =============================================================================

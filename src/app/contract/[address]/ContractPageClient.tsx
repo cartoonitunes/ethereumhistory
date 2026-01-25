@@ -49,7 +49,7 @@ interface ContractPageClientProps {
 
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "bytecode" | "similarity" | "history">(
+  const [activeTab, setActiveTab] = useState<"overview" | "code" | "similarity" | "history">(
     "overview"
   );
 
@@ -259,37 +259,39 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           </div>
         </motion.div>
 
-        {/* Tabs */}
-        <div className="flex items-center gap-1 mb-6 border-b border-obsidian-800">
-          <TabButton
-            active={activeTab === "overview"}
-            onClick={() => setActiveTab("overview")}
-            icon={<Info className="w-4 h-4" />}
-          >
-            Overview
-          </TabButton>
-          <TabButton
-            active={activeTab === "bytecode"}
-            onClick={() => setActiveTab("bytecode")}
-            icon={<FileCode className="w-4 h-4" />}
-          >
-            Bytecode
-          </TabButton>
-          <TabButton
-            active={activeTab === "similarity"}
-            onClick={() => setActiveTab("similarity")}
-            icon={<GitCompare className="w-4 h-4" />}
-            badge={similarContracts.length > 0 ? similarContracts.length : undefined}
-          >
-            Similar
-          </TabButton>
-          <TabButton
-            active={activeTab === "history"}
-            onClick={() => setActiveTab("history")}
-            icon={<History className="w-4 h-4" />}
-          >
-            History
-          </TabButton>
+        {/* Tabs (scrollable on mobile) */}
+        <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-6 border-b border-obsidian-800">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap">
+            <TabButton
+              active={activeTab === "overview"}
+              onClick={() => setActiveTab("overview")}
+              icon={<Info className="w-4 h-4" />}
+            >
+              Overview
+            </TabButton>
+            <TabButton
+              active={activeTab === "code"}
+              onClick={() => setActiveTab("code")}
+              icon={<FileCode className="w-4 h-4" />}
+            >
+              Code
+            </TabButton>
+            <TabButton
+              active={activeTab === "similarity"}
+              onClick={() => setActiveTab("similarity")}
+              icon={<GitCompare className="w-4 h-4" />}
+              badge={similarContracts.length > 0 ? similarContracts.length : undefined}
+            >
+              Similar
+            </TabButton>
+            <TabButton
+              active={activeTab === "history"}
+              onClick={() => setActiveTab("history")}
+              icon={<History className="w-4 h-4" />}
+            >
+              History
+            </TabButton>
+          </div>
         </div>
 
         {/* Tab content */}
@@ -303,16 +305,19 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <OverviewTab
               contract={contract}
               bytecodeAnalysis={bytecodeAnalysis}
+              deployerPerson={data?.deployerPerson ?? null}
             />
           )}
-          {activeTab === "bytecode" && (
-            <BytecodeTab
+          {activeTab === "code" && (
+            <CodeTab
               bytecode={contract.runtimeBytecode}
               analysis={bytecodeAnalysis}
               patterns={detectedPatterns}
               signatures={functionSignatures}
               decompiledCode={contract.decompiledCode}
               decompilationSuccess={contract.decompilationSuccess}
+              sourceCode={contract.sourceCode}
+              abi={contract.abi}
             />
           )}
           {activeTab === "similarity" && (
@@ -344,7 +349,7 @@ function TabButton({
     <button
       onClick={onClick}
       className={`
-        flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative
+        flex-none flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative
         ${active ? "text-obsidian-100" : "text-obsidian-500 hover:text-obsidian-300"}
       `}
     >
@@ -368,9 +373,11 @@ function TabButton({
 function OverviewTab({
   contract,
   bytecodeAnalysis,
+  deployerPerson,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
+  deployerPerson: ContractPageData["deployerPerson"];
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -437,12 +444,21 @@ function OverviewTab({
               label="Deployer"
               value={
                 contract.deployerAddress ? (
-                  <Link
-                    href={`/contract/${contract.deployerAddress}`}
-                    className="font-mono text-sm hover:text-ether-400 transition-colors"
-                  >
-                    {formatAddress(contract.deployerAddress)}
-                  </Link>
+                  deployerPerson && deployerPerson.slug ? (
+                    <Link
+                      href={`/people/${deployerPerson.slug}`}
+                      className="text-sm hover:text-ether-400 transition-colors"
+                    >
+                      <span className="font-medium">{deployerPerson.name}</span>{" "}
+                      <span className="font-mono text-obsidian-400">
+                        ({formatAddress(contract.deployerAddress)})
+                      </span>
+                    </Link>
+                  ) : (
+                    <span className="font-mono text-sm text-obsidian-300">
+                      {formatAddress(contract.deployerAddress)}
+                    </span>
+                  )
                 ) : (
                   "Unknown"
                 )
@@ -681,13 +697,15 @@ function formatTokenSupplyDisplay(supply: string, decimals: number): string {
   }
 }
 
-function BytecodeTab({
+function CodeTab({
   bytecode,
   analysis,
   patterns,
   signatures,
   decompiledCode,
   decompilationSuccess,
+  sourceCode,
+  abi,
 }: {
   bytecode: string | null;
   analysis: ContractPageData["bytecodeAnalysis"];
@@ -695,6 +713,8 @@ function BytecodeTab({
   signatures: ContractPageData["functionSignatures"];
   decompiledCode?: string | null;
   decompilationSuccess?: boolean;
+  sourceCode?: string | null;
+  abi?: string | null;
 }) {
   return (
     <div className="space-y-6">
@@ -703,6 +723,8 @@ function BytecodeTab({
         analysis={analysis}
         decompiledCode={decompiledCode}
         decompilationSuccess={decompilationSuccess}
+        sourceCode={sourceCode}
+        abi={abi}
       />
 
       {/* Function signatures */}

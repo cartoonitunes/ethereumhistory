@@ -6,7 +6,7 @@
 
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, like, ilike, desc, asc, and, SQL, sql, inArray, isNotNull, ne } from "drizzle-orm";
+import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne } from "drizzle-orm";
 import * as schema from "./schema";
 import type {
   Contract as AppContract,
@@ -14,6 +14,9 @@ import type {
   HeuristicContractType,
   HistoricalLink,
   ContractMetadataItem,
+  UnifiedSearchResult,
+  UnifiedMatchType,
+  Person as AppPerson,
 } from "@/types";
 import { ERAS } from "@/types";
 
@@ -205,6 +208,140 @@ export async function updateContractEtherscanEnrichmentFromDb(
     .where(eq(schema.contracts.address, address.toLowerCase()));
 }
 
+// =============================================================================
+// People
+// =============================================================================
+
+function dbRowToPerson(row: schema.Person): AppPerson {
+  return {
+    address: row.address,
+    name: row.name,
+    slug: row.slug,
+    role: row.role,
+    shortBio: row.shortBio,
+    bio: row.bio,
+    highlights: (row.highlights as unknown as string[] | null) ?? null,
+    websiteUrl: row.websiteUrl,
+    wallets: [],
+  };
+}
+
+async function getWalletsForPersonFromDb(personAddress: string): Promise<Array<{ address: string; label: string | null }>> {
+  const database = getDb();
+  const rows = await database
+    .select({ address: schema.peopleWallets.address, label: schema.peopleWallets.label })
+    .from(schema.peopleWallets)
+    .where(eq(schema.peopleWallets.personAddress, personAddress.toLowerCase()))
+    .orderBy(asc(schema.peopleWallets.label), asc(schema.peopleWallets.address));
+  return rows.map((r) => ({ address: r.address, label: r.label }));
+}
+
+export async function getPersonByAddressFromDb(address: string): Promise<AppPerson | null> {
+  const database = getDb();
+  const normalized = address.toLowerCase();
+
+  // 1) Primary address match
+  const direct = await database
+    .select()
+    .from(schema.people)
+    .where(eq(schema.people.address, normalized))
+    .limit(1);
+  if (direct[0]) {
+    const person = dbRowToPerson(direct[0]);
+    person.wallets = await getWalletsForPersonFromDb(person.address);
+    return person;
+  }
+
+  // 2) Secondary wallet match
+  const joined = await database
+    .select({ person: schema.people })
+    .from(schema.peopleWallets)
+    .innerJoin(schema.people, eq(schema.peopleWallets.personAddress, schema.people.address))
+    .where(eq(schema.peopleWallets.address, normalized))
+    .limit(1);
+
+  if (!joined[0]?.person) return null;
+  const person = dbRowToPerson(joined[0].person);
+  person.wallets = await getWalletsForPersonFromDb(person.address);
+  return person;
+}
+
+export async function getPersonBySlugFromDb(slug: string): Promise<AppPerson | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.people)
+    .where(eq(schema.people.slug, slug))
+    .limit(1);
+  if (!rows[0]) return null;
+  const person = dbRowToPerson(rows[0]);
+  person.wallets = await getWalletsForPersonFromDb(person.address);
+  return person;
+}
+
+export async function searchPeopleFromDb(
+  query: string,
+  limit = 50
+): Promise<UnifiedSearchResult[]> {
+  const database = getDb();
+  const q = query.trim();
+  const pattern = `%${q}%`;
+
+  // Match by name/role/bio, or any wallet address partial match.
+  const rows = await database
+    .select({
+      address: schema.people.address,
+      name: schema.people.name,
+      slug: schema.people.slug,
+      role: schema.people.role,
+      shortBio: schema.people.shortBio,
+      websiteUrl: schema.people.websiteUrl,
+      walletAddress: schema.peopleWallets.address,
+    })
+    .from(schema.people)
+    .leftJoin(schema.peopleWallets, eq(schema.peopleWallets.personAddress, schema.people.address))
+    .where(
+      or(
+        ilike(schema.people.name, pattern),
+        ilike(schema.people.role, pattern),
+        ilike(schema.people.shortBio, pattern),
+        ilike(schema.people.bio, pattern),
+        ilike(schema.people.websiteUrl, pattern),
+        ilike(schema.peopleWallets.address, pattern),
+        ilike(schema.people.slug, pattern)
+      )
+    )
+    .limit(limit);
+
+  // De-dupe by person address (left join can create duplicates).
+  const map = new Map<string, UnifiedSearchResult>();
+  for (const r of rows) {
+    const key = r.address.toLowerCase();
+    if (map.has(key)) continue;
+
+    const matchType: UnifiedSearchResult["matchType"] =
+      r.walletAddress && r.walletAddress.toLowerCase().includes(q.toLowerCase())
+        ? "person_wallet"
+        : "person_name";
+
+    map.set(key, {
+      entityType: "person",
+      address: r.address,
+      title: r.name,
+      subtitle: r.role || r.shortBio || null,
+      matchType,
+      matchSnippet: r.websiteUrl || null,
+      deploymentTimestamp: null,
+      eraId: null,
+      heuristicContractType: null,
+      verificationStatus: null,
+      personSlug: r.slug,
+    });
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+}
+
 /**
  * Get contracts by era with pagination
  */
@@ -352,6 +489,124 @@ export async function searchDecompiledCode(
     .offset(offset);
 
   return results.map(dbRowToContract);
+}
+
+/**
+ * Unified text search across:
+ * - address (partial)
+ * - contract name (etherscan_contract_name)
+ * - token name/symbol
+ * - decompiled code
+ * - verified source code
+ * - abi
+ *
+ * Pagination: limit + offset. Callers can use limit+1 to determine "hasMore".
+ */
+export async function searchUnifiedFromDb(
+  query: string,
+  limit = 20,
+  offset = 0
+): Promise<UnifiedSearchResult[]> {
+  const database = getDb();
+  const q = query.trim();
+  const pattern = `%${q}%`;
+  const qLower = q.toLowerCase();
+
+  const matchTypeExpr = sql<UnifiedMatchType>`CASE
+    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN 'address'
+    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN 'token_name'
+    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN 'token_symbol'
+    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN 'contract_name'
+    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN 'decompiled_code'
+    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN 'source_code'
+    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN 'abi'
+    ELSE 'address'
+  END`;
+
+  const matchRankExpr = sql<number>`CASE
+    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN 1
+    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN 2
+    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN 3
+    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN 4
+    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN 5
+    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN 6
+    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN 7
+    ELSE 99
+  END`;
+
+  const snippetExpr = sql<string | null>`CASE
+    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN ${schema.contracts.tokenName}
+    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN ${schema.contracts.tokenSymbol}
+    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN ${schema.contracts.etherscanContractName}
+    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN substring(${schema.contracts.decompiledCode} from greatest(strpos(lower(${schema.contracts.decompiledCode}), ${qLower}) - 40, 1) for 140)
+    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN substring(${schema.contracts.sourceCode} from greatest(strpos(lower(${schema.contracts.sourceCode}), ${qLower}) - 40, 1) for 140)
+    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN substring(${schema.contracts.abi} from greatest(strpos(lower(${schema.contracts.abi}), ${qLower}) - 40, 1) for 140)
+    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN ${schema.contracts.address}
+    ELSE NULL
+  END`;
+
+  const rows = await database
+    .select({
+      address: schema.contracts.address,
+      deploymentTimestamp: schema.contracts.deploymentTimestamp,
+      eraId: schema.contracts.eraId,
+      contractType: schema.contracts.contractType,
+      tokenName: schema.contracts.tokenName,
+      tokenSymbol: schema.contracts.tokenSymbol,
+      etherscanContractName: schema.contracts.etherscanContractName,
+      sourceCode: schema.contracts.sourceCode,
+      decompilationSuccess: schema.contracts.decompilationSuccess,
+      matchType: matchTypeExpr,
+      matchSnippet: snippetExpr,
+      matchRank: matchRankExpr,
+    })
+    .from(schema.contracts)
+    .where(
+      or(
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.etherscanContractName, pattern),
+        ilike(schema.contracts.decompiledCode, pattern),
+        ilike(schema.contracts.sourceCode, pattern),
+        ilike(schema.contracts.abi, pattern)
+      )
+    )
+    .orderBy(asc(matchRankExpr), asc(schema.contracts.deploymentTimestamp), asc(schema.contracts.address))
+    .limit(limit)
+    .offset(offset);
+
+  return rows.map((r) => {
+    const title =
+      r.tokenName ||
+      r.etherscanContractName ||
+      (r.tokenSymbol ? `Token ${r.tokenSymbol}` : `Contract ${r.address.slice(0, 10)}...`);
+
+    const subtitleParts: string[] = [];
+    if (r.tokenSymbol) subtitleParts.push(r.tokenSymbol);
+    if (r.etherscanContractName && r.tokenName && r.etherscanContractName !== r.tokenName) {
+      subtitleParts.push(`Etherscan: ${r.etherscanContractName}`);
+    }
+    const subtitle = subtitleParts.length ? subtitleParts.join(" • ") : null;
+
+    return {
+      entityType: "contract",
+      address: r.address,
+      title,
+      subtitle,
+      matchType: r.matchType,
+      matchSnippet: r.matchSnippet ? String(r.matchSnippet).replace(/\s+/g, " ").trim() : null,
+      deploymentTimestamp: r.deploymentTimestamp?.toISOString() || null,
+      eraId: r.eraId,
+      heuristicContractType: (r.contractType as HeuristicContractType) || null,
+      verificationStatus: r.sourceCode
+        ? "verified"
+        : r.decompilationSuccess
+        ? "decompiled"
+        : "bytecode_only",
+      personSlug: null,
+    };
+  });
 }
 
 /**

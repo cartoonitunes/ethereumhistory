@@ -169,6 +169,22 @@ export interface Contract {
 }
 
 // =============================================================================
+// People
+// =============================================================================
+
+export interface Person {
+  address: string;
+  name: string;
+  slug: string;
+  role: string | null;
+  shortBio: string | null;
+  bio: string | null;
+  highlights: string[] | null;
+  websiteUrl: string | null;
+  wallets: Array<{ address: string; label: string | null }>;
+}
+
+// =============================================================================
 // Bytecode Analysis
 // =============================================================================
 
@@ -279,6 +295,7 @@ export interface ContractPageData {
   similarContracts: ContractSimilarity[];
   detectedPatterns: DetectedPattern[];
   functionSignatures: FunctionSignature[];
+  deployerPerson?: Person | null;
 }
 
 // =============================================================================
@@ -293,6 +310,38 @@ export interface BytecodeSearchResult {
   heuristicContractType: HeuristicContractType | null;
   eraId: string | null;
   decompiledSnippet?: string;
+}
+
+export type UnifiedMatchType =
+  | "address"
+  | "contract_name"
+  | "token_name"
+  | "token_symbol"
+  | "decompiled_code"
+  | "source_code"
+  | "abi"
+  | "person_name"
+  | "person_wallet";
+
+export interface UnifiedSearchResult {
+  entityType: "contract" | "person";
+  address: string;
+  title: string;
+  subtitle: string | null;
+  matchType: UnifiedMatchType;
+  matchSnippet: string | null;
+  deploymentTimestamp: string | null;
+  eraId: string | null;
+  heuristicContractType: HeuristicContractType | null;
+  verificationStatus: VerificationStatus | null;
+  personSlug?: string | null;
+}
+
+export interface UnifiedSearchResponse {
+  query: string;
+  page: number;
+  results: UnifiedSearchResult[];
+  hasMore: boolean;
 }
 
 // =============================================================================
