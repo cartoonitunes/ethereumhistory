@@ -45,6 +45,7 @@ import {
   getContractByAddress as dbGetContract,
   updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
+  updateContractRuntimeBytecodeFromDb as dbUpdateContractRuntimeBytecode,
   getContractMetadataJsonValueByKeyFromDb as dbGetContractMetadataJsonByKey,
   setContractMetadataJsonValueByKeyFromDb as dbSetContractMetadataJsonByKey,
   getPersonByAddressFromDb as dbGetPersonByAddress,
@@ -63,6 +64,7 @@ import {
 } from "./db-client";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
 import { fetchTxCountsByYearFromAlchemy, type TxCountsByYear } from "./tx-stats";
+import { fetchRuntimeBytecodeFromRpc } from "./bytecode";
 import {
   fetchEtherscanAbi,
   fetchEtherscanContractCreation,
@@ -293,6 +295,48 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   }
 
   return merged;
+}
+
+/**
+ * If runtime bytecode is missing, try to fill it via RPC at render time.
+ * This is needed for any contract records that were seeded without bytecode.
+ */
+async function getContractWithRuntimeBytecode(contract: Contract): Promise<Contract> {
+  if (contract.runtimeBytecode != null) return contract;
+
+  const rpcUrl = process.env.ETHEREUM_RPC_URL;
+  if (!rpcUrl) return contract;
+
+  try {
+    const code = await fetchRuntimeBytecodeFromRpc(rpcUrl, contract.address);
+    if (!code) return contract;
+
+    const codeSizeBytes = code.startsWith("0x")
+      ? Math.floor((code.length - 2) / 2)
+      : Math.floor(code.length / 2);
+
+    const merged: Contract = {
+      ...contract,
+      runtimeBytecode: code,
+      codeSizeBytes: contract.codeSizeBytes ?? codeSizeBytes,
+    };
+
+    if (isDatabaseEnabled()) {
+      try {
+        await dbUpdateContractRuntimeBytecode(contract.address, {
+          runtimeBytecode: code,
+          codeSizeBytes,
+        });
+      } catch (error) {
+        console.warn("[db] Failed to persist runtime bytecode:", error);
+      }
+    }
+
+    return merged;
+  } catch (error) {
+    console.warn("[rpc] eth_getCode failed:", error);
+    return contract;
+  }
 }
 
 const TX_COUNTS_BY_YEAR_METADATA_KEY = "tx_counts_by_year_external_to_v1";
@@ -618,11 +662,14 @@ export async function getFunctionSignatures(address: string): Promise<FunctionSi
 // =============================================================================
 
 export async function getContractPageData(address: string): Promise<ContractPageData | null> {
-  const contract = await getContractWithTokenMetadata(address);
+  let contract = await getContractWithTokenMetadata(address);
 
   if (!contract) {
     return null;
   }
+
+  // Ensure bytecode exists (some seed sources only have decompiled code).
+  contract = await getContractWithRuntimeBytecode(contract);
 
   const deployerPersonPromise =
     contract.deployerAddress && isDatabaseEnabled()

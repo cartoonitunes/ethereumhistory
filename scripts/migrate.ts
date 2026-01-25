@@ -13,6 +13,18 @@ import path from "path";
 import * as dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
 
+function parseArgs(argv: string[]) {
+  const args = argv.slice(2);
+  const out: { from?: string; to?: string; only?: string[] } = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i];
+    if (a === "--from") out.from = args[i + 1];
+    if (a === "--to") out.to = args[i + 1];
+    if (a === "--only") out.only = (args[i + 1] || "").split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return out;
+}
+
 const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
 if (!dbUrl) {
   console.error("ERROR: POSTGRES_URL (or DATABASE_URL) not set in environment");
@@ -31,9 +43,23 @@ const sql = postgres(dbUrl, { max: 1, prepare: !isPoolerUrl(dbUrl) });
 
 async function main() {
   const migrationsDir = path.join(process.cwd(), "db", "migrations");
-  const files = readdirSync(migrationsDir)
+  let files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort((a, b) => a.localeCompare(b));
+
+  const { from, to, only } = parseArgs(process.argv);
+
+  if (only && only.length > 0) {
+    files = files.filter((f) => only.includes(f));
+  }
+
+  if (from) {
+    files = files.filter((f) => f.localeCompare(from) >= 0);
+  }
+
+  if (to) {
+    files = files.filter((f) => f.localeCompare(to) <= 0);
+  }
 
   if (files.length === 0) {
     console.log("No SQL migration files found.");

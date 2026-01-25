@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
   title: "Ethereum History - Historical Smart Contract Archive",
@@ -54,6 +55,7 @@ export default function RootLayout({
           {/* Main content */}
           <main className="relative z-10">{children}</main>
         </div>
+        <Analytics />
       </body>
     </html>
   );

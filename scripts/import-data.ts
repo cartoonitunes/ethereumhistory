@@ -202,13 +202,19 @@ function loadContractsFromFile(filename: string): RawContract[] {
 async function importContracts() {
   console.log("\n=== Importing Contracts ===\n");
 
-  const dataFiles = [
+  const defaultFiles = [
     "contracts_2015.json",
     "contracts_2016_2017_part1.json",
     "contracts_2016_2017_part2.json",
     "contracts_2016_2017_part3.json",
     "contracts_2016_2017_part4.json",
+    "contracts_2017_from_logger.json",
   ];
+
+  // Allow importing a subset by passing filenames as args:
+  //   npm run db:import -- contracts_2017_from_logger.json
+  const argFiles = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+  const dataFiles = argFiles.length > 0 ? argFiles : defaultFiles;
 
   let totalImported = 0;
   let totalSkipped = 0;
