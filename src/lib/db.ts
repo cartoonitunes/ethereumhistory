@@ -21,7 +21,7 @@ import type {
   UnifiedSearchResponse,
   UnifiedSearchResult,
 } from "@/types";
-import { ERAS } from "@/types";
+import { ERAS, getEraFromBlock } from "@/types";
 import {
   MOCK_CONTRACTS,
   MOCK_BYTECODE_ANALYSIS,
@@ -46,6 +46,7 @@ import {
   updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
   updateContractRuntimeBytecodeFromDb as dbUpdateContractRuntimeBytecode,
+  insertContractIfMissing as dbInsertContractIfMissing,
   getContractMetadataJsonValueByKeyFromDb as dbGetContractMetadataJsonByKey,
   setContractMetadataJsonValueByKeyFromDb as dbSetContractMetadataJsonByKey,
   getPersonByAddressFromDb as dbGetPersonByAddress,
@@ -64,7 +65,10 @@ import {
 } from "./db-client";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
 import { fetchTxCountsByYearFromAlchemy, type TxCountsByYear } from "./tx-stats";
-import { fetchRuntimeBytecodeFromRpc } from "./bytecode";
+import {
+  fetchRuntimeBytecodeFromRpc,
+  findDeploymentBlockFromRpc,
+} from "./bytecode";
 import {
   fetchEtherscanAbi,
   fetchEtherscanContractCreation,
@@ -297,6 +301,53 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   return merged;
 }
 
+async function enrichTokenMetadataInPlace(
+  contract: Contract,
+  opts?: { persistToDb?: boolean }
+): Promise<Contract> {
+  const rpcUrl = process.env.ETHEREUM_RPC_URL;
+  if (!rpcUrl) return contract;
+
+  const needsTokenMeta =
+    (!contract.tokenName && !contract.tokenSymbol && contract.tokenDecimals == null && !contract.tokenLogo) ||
+    !contract.tokenLogo ||
+    !contract.tokenName ||
+    !contract.tokenSymbol ||
+    contract.tokenDecimals == null;
+
+  if (!needsTokenMeta) return contract;
+
+  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address);
+  if (!fetched) return contract;
+
+  const merged: Contract = {
+    ...contract,
+    tokenName: contract.tokenName ?? fetched.name,
+    tokenSymbol: contract.tokenSymbol ?? fetched.symbol,
+    tokenDecimals: contract.tokenDecimals ?? fetched.decimals,
+    tokenLogo: contract.tokenLogo ?? fetched.logo,
+  };
+
+  const persistToDb = opts?.persistToDb === true;
+  if (persistToDb && isDatabaseEnabled()) {
+    const patch: Parameters<typeof dbUpdateContractTokenMetadata>[1] = {};
+    if (contract.tokenName == null && fetched.name != null) patch.tokenName = fetched.name;
+    if (contract.tokenSymbol == null && fetched.symbol != null) patch.tokenSymbol = fetched.symbol;
+    if (contract.tokenDecimals == null && fetched.decimals != null) patch.tokenDecimals = fetched.decimals;
+    if (contract.tokenLogo == null && fetched.logo != null) patch.tokenLogo = fetched.logo;
+
+    if (Object.keys(patch).length > 0) {
+      try {
+        await dbUpdateContractTokenMetadata(contract.address, patch);
+      } catch (error) {
+        console.warn("[db] Failed to persist token metadata:", error);
+      }
+    }
+  }
+
+  return merged;
+}
+
 /**
  * If runtime bytecode is missing, try to fill it via RPC at render time.
  * This is needed for any contract records that were seeded without bytecode.
@@ -337,6 +388,132 @@ async function getContractWithRuntimeBytecode(contract: Contract): Promise<Contr
     console.warn("[rpc] eth_getCode failed:", error);
     return contract;
   }
+}
+
+type IngestedContractForPage = {
+  contract: Contract;
+  archiveNotice: string | null;
+  persisted: boolean;
+};
+
+async function ingestContractForPageIfMissing(address: string): Promise<IngestedContractForPage | null> {
+  const rpcUrl = process.env.ETHEREUM_RPC_URL;
+  if (!rpcUrl) return null;
+
+  // Must have code at latest or it's an EOA / selfdestructed contract.
+  const runtimeBytecode = await fetchRuntimeBytecodeFromRpc(rpcUrl, address);
+  if (!runtimeBytecode || runtimeBytecode === "0x") return null;
+
+  const codeSizeBytes = runtimeBytecode.startsWith("0x")
+    ? Math.floor((runtimeBytecode.length - 2) / 2)
+    : Math.floor(runtimeBytecode.length / 2);
+
+  const deployment = await findDeploymentBlockFromRpc(rpcUrl, address);
+  const deploymentBlock = deployment?.deploymentBlock ?? null;
+  const deploymentTimestamp = deployment?.deploymentTimestamp ?? null;
+
+  const year =
+    deploymentTimestamp != null ? new Date(deploymentTimestamp).getUTCFullYear() : null;
+
+  const outOfRange = year != null && year >= 2018;
+  const archiveNotice = outOfRange
+    ? "This contract appears to have been deployed in 2018 or later. Ethereum History is currently logging 2015–2017; newer years will be added in the future."
+    : null;
+
+  const era = deploymentBlock != null ? getEraFromBlock(deploymentBlock) : null;
+
+  const contract: Contract = {
+    address: address.toLowerCase(),
+    runtimeBytecode,
+    creationBytecode: null,
+    deployerAddress: null,
+    deploymentTxHash: null,
+    deploymentBlock,
+    deploymentTimestamp,
+    decompiledCode: null,
+    decompilationSuccess: false,
+    currentBalanceWei: null,
+    transactionCount: null,
+    lastStateUpdate: null,
+    gasUsed: null,
+    gasPrice: null,
+    codeSizeBytes,
+    eraId: era?.id || null,
+    era,
+    heuristics: {
+      contractType: null,
+      confidence: 0.5,
+      isProxy: false,
+      hasSelfDestruct: false,
+      isErc20Like: false,
+      notes: null,
+    },
+    ensName: null,
+    etherscanVerified: false,
+    etherscanContractName: null,
+    sourceCode: null,
+    abi: null,
+    compilerVersion: null,
+    tokenName: null,
+    tokenSymbol: null,
+    tokenDecimals: null,
+    tokenLogo: null,
+    tokenTotalSupply: null,
+    shortDescription: null,
+    description: null,
+    historicalSummary: null,
+    historicalSignificance: null,
+    historicalContext: null,
+    verificationStatus: "bytecode_only",
+  };
+
+  // Persist whenever DB is enabled (regardless of year).
+  const canPersist = isDatabaseEnabled();
+
+  if (canPersist) {
+    try {
+      await dbInsertContractIfMissing({
+        address: contract.address,
+        runtimeBytecode: contract.runtimeBytecode,
+        deployerAddress: contract.deployerAddress,
+        deploymentTxHash: contract.deploymentTxHash,
+        deploymentBlock: contract.deploymentBlock,
+        deploymentTimestamp: contract.deploymentTimestamp ? new Date(contract.deploymentTimestamp) : null,
+        decompiledCode: contract.decompiledCode,
+        decompilationSuccess: contract.decompilationSuccess,
+        gasUsed: contract.gasUsed,
+        gasPrice: contract.gasPrice,
+        codeSizeBytes: contract.codeSizeBytes,
+        eraId: contract.eraId,
+        contractType: null,
+        confidence: 0.5,
+        isProxy: false,
+        hasSelfDestruct: false,
+        isErc20Like: false,
+        etherscanContractName: null,
+        sourceCode: null,
+        abi: null,
+        tokenName: null,
+        tokenSymbol: null,
+        tokenDecimals: null,
+        tokenLogo: null,
+        trigramHash: null,
+        controlFlowSignature: null,
+        shapeSignature: null,
+        shortDescription: null,
+        description: null,
+        historicalSummary: null,
+        historicalSignificance: null,
+        historicalContext: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (error) {
+      console.warn("[db] Failed to insert new contract row:", error);
+    }
+  }
+
+  return { contract, archiveNotice, persisted: canPersist };
 }
 
 const TX_COUNTS_BY_YEAR_METADATA_KEY = "tx_counts_by_year_external_to_v1";
@@ -663,9 +840,14 @@ export async function getFunctionSignatures(address: string): Promise<FunctionSi
 
 export async function getContractPageData(address: string): Promise<ContractPageData | null> {
   let contract = await getContractWithTokenMetadata(address);
+  let archiveNotice: string | null = null;
 
   if (!contract) {
-    return null;
+    // Not in DB — try to fetch enough data to render the page.
+    const ingested = await ingestContractForPageIfMissing(address);
+    if (!ingested) return null;
+    contract = await enrichTokenMetadataInPlace(ingested.contract, { persistToDb: ingested.persisted });
+    archiveNotice = ingested.archiveNotice;
   }
 
   // Ensure bytecode exists (some seed sources only have decompiled code).
@@ -700,6 +882,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
     functionSignatures,
     deployerPerson: await deployerPersonPromise,
     txCountsByYear,
+    archiveNotice,
   };
 }
 
