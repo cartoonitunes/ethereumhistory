@@ -25,7 +25,7 @@ function arg(name: string): string | null {
 
 const email = (arg("--email") || "").trim().toLowerCase();
 const name = (arg("--name") || "").trim();
-const token = arg("--token") || "";
+const token = (arg("--token") || "").trim();
 
 const dbUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL;
 if (!dbUrl) {

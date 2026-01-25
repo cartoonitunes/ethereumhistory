@@ -447,7 +447,8 @@ export async function getHistorianByEmailFromDb(email: string): Promise<schema.H
   const rows = await database
     .select()
     .from(schema.historians)
-    .where(eq(schema.historians.email, email.toLowerCase()))
+    // Be forgiving: historically some rows may have mixed-case or whitespace.
+    .where(sql`lower(trim(${schema.historians.email})) = ${email.trim().toLowerCase()}`)
     .limit(1);
   return rows[0] || null;
 }
@@ -469,7 +470,7 @@ export async function createHistorianFromDb(params: {
 }): Promise<void> {
   const database = getDb();
   await database.insert(schema.historians).values({
-    email: params.email.toLowerCase(),
+    email: params.email.trim().toLowerCase(),
     name: params.name,
     tokenHash: params.tokenHash,
     active: true,

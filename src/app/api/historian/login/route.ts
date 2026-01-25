@@ -15,7 +15,7 @@ export async function POST(
 ): Promise<NextResponse<ApiResponse<HistorianMe>>> {
   const body = await request.json().catch(() => null);
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-  const token = typeof body?.token === "string" ? body.token : "";
+  const token = typeof body?.token === "string" ? body.token.trim() : "";
 
   if (!email || !token) {
     return NextResponse.json(
