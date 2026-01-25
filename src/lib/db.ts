@@ -416,7 +416,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     deploymentTimestamp != null ? new Date(deploymentTimestamp).getUTCFullYear() : null;
 
   const outOfRange = year != null && year >= 2018;
-  const archiveNotice = outOfRange
+  let archiveNotice = outOfRange
     ? "This contract appears to have been deployed in 2018 or later. Ethereum History is currently logging 2015–2017; newer years will be added in the future."
     : null;
 
@@ -487,6 +487,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
 
   // Persist whenever DB is enabled (regardless of year).
   const canPersist = isDatabaseEnabled();
+  let persisted = false;
 
   if (canPersist) {
     try {
@@ -526,8 +527,13 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      persisted = true;
     } catch (error) {
       console.warn("[db] Failed to insert new contract row:", error);
+      // Help users understand why a refresh "re-pulls" data.
+      archiveNotice =
+        (archiveNotice ? `${archiveNotice} ` : "") +
+        "We couldn’t save this contract to the archive right now (database write failed), so it may need to be looked up again on future visits.";
     }
   }
 
@@ -594,7 +600,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
       }
     }
 
-    if (canPersist && Object.keys(patch).length > 0) {
+    if (persisted && Object.keys(patch).length > 0) {
       try {
         await dbUpdateContractEtherscanEnrichment(contract.address, patch);
       } catch (error) {
@@ -603,7 +609,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     }
   }
 
-  return { contract, archiveNotice, persisted: canPersist };
+  return { contract, archiveNotice, persisted };
 }
 
 const TX_COUNTS_BY_YEAR_METADATA_KEY = "tx_counts_by_year_external_to_v1";
