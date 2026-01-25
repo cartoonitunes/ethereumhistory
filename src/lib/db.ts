@@ -422,6 +422,24 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
 
   const era = deploymentBlock != null ? getEraFromBlock(deploymentBlock) : null;
 
+  // Opportunistically fetch token metadata before persistence so the inserted
+  // row is immediately searchable (e.g. searching "punk" after first visit).
+  let tokenName: string | null = null;
+  let tokenSymbol: string | null = null;
+  let tokenDecimals: number | null = null;
+  let tokenLogo: string | null = null;
+  try {
+    const token = await fetchTokenMetadataFromRpc(rpcUrl, address);
+    if (token) {
+      tokenName = token.name ?? null;
+      tokenSymbol = token.symbol ?? null;
+      tokenDecimals = token.decimals ?? null;
+      tokenLogo = token.logo ?? null;
+    }
+  } catch (error) {
+    console.warn("[rpc] token metadata lookup failed:", error);
+  }
+
   const contract: Contract = {
     address: address.toLowerCase(),
     runtimeBytecode,
@@ -454,10 +472,10 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     sourceCode: null,
     abi: null,
     compilerVersion: null,
-    tokenName: null,
-    tokenSymbol: null,
-    tokenDecimals: null,
-    tokenLogo: null,
+    tokenName,
+    tokenSymbol,
+    tokenDecimals,
+    tokenLogo,
     tokenTotalSupply: null,
     shortDescription: null,
     description: null,
@@ -493,10 +511,10 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
         etherscanContractName: null,
         sourceCode: null,
         abi: null,
-        tokenName: null,
-        tokenSymbol: null,
-        tokenDecimals: null,
-        tokenLogo: null,
+        tokenName: contract.tokenName,
+        tokenSymbol: contract.tokenSymbol,
+        tokenDecimals: contract.tokenDecimals,
+        tokenLogo: contract.tokenLogo,
         trigramHash: null,
         controlFlowSignature: null,
         shapeSignature: null,
@@ -510,6 +528,78 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
       });
     } catch (error) {
       console.warn("[db] Failed to insert new contract row:", error);
+    }
+  }
+
+  // Optional: verified source / ABI / contract name via Etherscan (best-effort).
+  // This also helps search discoverability for non-token contracts.
+  if (process.env.ETHERSCAN_API_KEY) {
+    const patch: Parameters<typeof dbUpdateContractEtherscanEnrichment>[1] = {};
+    try {
+      const source = await fetchEtherscanSourceCode(contract.address);
+      if (source?.isVerified) {
+        if (source.contractName) {
+          contract.etherscanContractName = source.contractName;
+          patch.etherscanContractName = source.contractName;
+        }
+        if (source.sourceCode) {
+          contract.sourceCode = source.sourceCode;
+          patch.sourceCode = source.sourceCode;
+        }
+        if (source.abi) {
+          contract.abi = source.abi;
+          patch.abi = source.abi;
+        }
+      }
+    } catch (error) {
+      console.warn("[etherscan] source lookup failed:", error);
+    }
+
+    if (!contract.abi) {
+      try {
+        const abi = await fetchEtherscanAbi(contract.address);
+        if (abi) {
+          contract.abi = abi;
+          patch.abi = abi;
+        }
+      } catch (error) {
+        console.warn("[etherscan] abi lookup failed:", error);
+      }
+    }
+
+    // Deployer/creation tx (only if missing)
+    if (!contract.deployerAddress || !contract.deploymentTxHash) {
+      try {
+        const creation = await fetchEtherscanContractCreation(contract.address);
+        if (creation) {
+          if (!contract.deployerAddress && creation.contractCreator) {
+            contract.deployerAddress = creation.contractCreator;
+            patch.deployerAddress = creation.contractCreator;
+          }
+          if (!contract.deploymentTxHash && creation.txHash) {
+            contract.deploymentTxHash = creation.txHash;
+            patch.deploymentTxHash = creation.txHash;
+          }
+          if (!contract.deploymentBlock && creation.blockNumber != null) {
+            contract.deploymentBlock = creation.blockNumber;
+            patch.deploymentBlock = creation.blockNumber;
+          }
+          if (!contract.deploymentTimestamp && creation.timestamp) {
+            contract.deploymentTimestamp = creation.timestamp;
+            patch.deploymentTimestamp = new Date(creation.timestamp);
+          }
+        }
+      } catch (error) {
+        console.warn("[etherscan] contract creation lookup failed:", error);
+      }
+    }
+
+    if (canPersist && Object.keys(patch).length > 0) {
+      try {
+        await dbUpdateContractEtherscanEnrichment(contract.address, patch);
+      } catch (error) {
+        console.warn("[db] Failed to persist Etherscan enrichment:", error);
+      }
     }
   }
 
@@ -846,6 +936,8 @@ export async function getContractPageData(address: string): Promise<ContractPage
     // Not in DB — try to fetch enough data to render the page.
     const ingested = await ingestContractForPageIfMissing(address);
     if (!ingested) return null;
+    // Token metadata is fetched inside ingest to make the row immediately searchable;
+    // this is a no-op if already present.
     contract = await enrichTokenMetadataInPlace(ingested.contract, { persistToDb: ingested.persisted });
     archiveNotice = ingested.archiveNotice;
   }
