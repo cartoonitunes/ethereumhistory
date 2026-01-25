@@ -172,6 +172,34 @@ export async function updateContractTokenMetadataFromDb(
 }
 
 /**
+ * Update runtime bytecode fields for a contract (idempotent).
+ * Useful for filling in missing DB fields using RPC `eth_getCode`.
+ */
+export async function updateContractRuntimeBytecodeFromDb(
+  address: string,
+  patch: {
+    runtimeBytecode?: string | null;
+    codeSizeBytes?: number | null;
+  }
+): Promise<void> {
+  const database = getDb();
+
+  const updates: Partial<schema.NewContract> = {
+    updatedAt: new Date(),
+  };
+
+  if (patch.runtimeBytecode !== undefined) updates.runtimeBytecode = patch.runtimeBytecode;
+  if (patch.codeSizeBytes !== undefined) updates.codeSizeBytes = patch.codeSizeBytes;
+
+  if (Object.keys(updates).length <= 1) return;
+
+  await database
+    .update(schema.contracts)
+    .set(updates)
+    .where(eq(schema.contracts.address, address.toLowerCase()));
+}
+
+/**
  * Update optional Etherscan-enriched fields for a contract (idempotent).
  */
 export async function updateContractEtherscanEnrichmentFromDb(
@@ -603,7 +631,7 @@ export async function searchUnifiedFromDb(
       tokenName: schema.contracts.tokenName,
       tokenSymbol: schema.contracts.tokenSymbol,
       etherscanContractName: schema.contracts.etherscanContractName,
-      sourceCode: schema.contracts.sourceCode,
+      hasSourceCode: sql<boolean>`(${schema.contracts.sourceCode} is not null and length(${schema.contracts.sourceCode}) > 0)`,
       decompilationSuccess: schema.contracts.decompilationSuccess,
       matchType: matchTypeExpr,
       matchSnippet: snippetExpr,
@@ -648,7 +676,7 @@ export async function searchUnifiedFromDb(
       deploymentTimestamp: r.deploymentTimestamp?.toISOString() || null,
       eraId: r.eraId,
       heuristicContractType: (r.contractType as HeuristicContractType) || null,
-      verificationStatus: r.sourceCode
+      verificationStatus: r.hasSourceCode
         ? "verified"
         : r.decompilationSuccess
         ? "decompiled"

@@ -19,6 +19,7 @@ const DATA_FILES = [
   "contracts_2016_2017_part2.json",
   "contracts_2016_2017_part3.json",
   "contracts_2016_2017_part4.json",
+  "contracts_2017_from_logger.json",
 ] as const;
 
 const DEBUG = process.env.DATA_LOADER_DEBUG === "1";
