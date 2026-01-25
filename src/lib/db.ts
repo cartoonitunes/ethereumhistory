@@ -45,6 +45,8 @@ import {
   getContractByAddress as dbGetContract,
   updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
+  getContractMetadataJsonValueByKeyFromDb as dbGetContractMetadataJsonByKey,
+  setContractMetadataJsonValueByKeyFromDb as dbSetContractMetadataJsonByKey,
   getPersonByAddressFromDb as dbGetPersonByAddress,
   getPersonBySlugFromDb as dbGetPersonBySlug,
   getContractsByEra as dbGetContractsByEra,
@@ -60,6 +62,7 @@ import {
   getSimilarContractsFromDb,
 } from "./db-client";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
+import { fetchTxCountsByYearFromAlchemy, type TxCountsByYear } from "./tx-stats";
 import {
   fetchEtherscanAbi,
   fetchEtherscanContractCreation,
@@ -290,6 +293,58 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   }
 
   return merged;
+}
+
+const TX_COUNTS_BY_YEAR_METADATA_KEY = "tx_counts_by_year_external_to_v1";
+
+async function getOrFetchTxCountsByYear(address: string): Promise<TxCountsByYear | null> {
+  if (!isDatabaseEnabled()) return null;
+
+  try {
+    const existing = await dbGetContractMetadataJsonByKey(address, TX_COUNTS_BY_YEAR_METADATA_KEY);
+    if (existing) {
+      // Accept either {counts, truncated} or a raw counts record from earlier experiments.
+      if (
+        typeof existing === "object" &&
+        existing !== null &&
+        "counts" in (existing as any) &&
+        typeof (existing as any).counts === "object"
+      ) {
+        return existing as TxCountsByYear;
+      }
+      if (typeof existing === "object" && existing !== null) {
+        return { counts: existing as Record<string, number>, truncated: false };
+      }
+    }
+  } catch (error) {
+    console.warn("[db] Failed to read tx counts metadata:", error);
+  }
+
+  const rpcUrl = process.env.ETHEREUM_RPC_URL;
+  if (!rpcUrl) return null;
+
+  try {
+    const txCounts = await fetchTxCountsByYearFromAlchemy(rpcUrl, address, {
+      // Safety valve: early contracts are fine; very active addresses could be huge.
+      maxTransfers: 50_000,
+    });
+
+    try {
+      await dbSetContractMetadataJsonByKey(
+        address,
+        TX_COUNTS_BY_YEAR_METADATA_KEY,
+        txCounts,
+        "alchemy_getAssetTransfers"
+      );
+    } catch (error) {
+      console.warn("[db] Failed to persist tx counts metadata:", error);
+    }
+
+    return txCounts;
+  } catch (error) {
+    console.warn("[alchemy] tx counts lookup failed:", error);
+    return null;
+  }
 }
 
 export async function getContractsByDeployer(deployerAddress: string): Promise<Contract[]> {
@@ -581,12 +636,13 @@ export async function getContractPageData(address: string): Promise<ContractPage
         })()
       : Promise.resolve(null);
 
-  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures] =
+  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear] =
     await Promise.all([
       getBytecodeAnalysis(address),
       getSimilarContracts(address),
       getDetectedPatterns(address),
       getFunctionSignatures(address),
+      getOrFetchTxCountsByYear(contract.address),
     ]);
 
   return {
@@ -596,6 +652,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
     detectedPatterns,
     functionSignatures,
     deployerPerson: await deployerPersonPromise,
+    txCountsByYear,
   };
 }
 

@@ -28,7 +28,6 @@ import {
   formatDate,
   formatDateTime,
   formatRelativeTime,
-  formatEth,
   formatBlockNumber,
   formatBytes,
   copyToClipboard,
@@ -136,8 +135,15 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     );
   }
 
-  const { contract, bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures } =
-    data!;
+  const {
+    contract,
+    bytecodeAnalysis,
+    similarContracts,
+    detectedPatterns,
+    functionSignatures,
+    deployerPerson,
+    txCountsByYear,
+  } = data!;
 
   const displayName = contract.tokenName || contract.etherscanContractName || null;
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
@@ -305,7 +311,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <OverviewTab
               contract={contract}
               bytecodeAnalysis={bytecodeAnalysis}
-              deployerPerson={data?.deployerPerson ?? null}
+              deployerPerson={deployerPerson ?? null}
+              txCountsByYear={txCountsByYear ?? null}
             />
           )}
           {activeTab === "code" && (
@@ -374,10 +381,12 @@ function OverviewTab({
   contract,
   bytecodeAnalysis,
   deployerPerson,
+  txCountsByYear,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
   deployerPerson: ContractPageData["deployerPerson"];
+  txCountsByYear: ContractPageData["txCountsByYear"];
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -489,15 +498,42 @@ function OverviewTab({
               label="Code Size"
               value={contract.codeSizeBytes ? formatBytes(contract.codeSizeBytes) : "Unknown"}
             />
-            <FactItem
-              label="ETH Balance"
-              value={formatEth(contract.currentBalanceWei)}
-            />
-            <FactItem
-              label="Transaction Count"
-              value={contract.transactionCount?.toLocaleString() || "Unknown"}
-            />
+            {contract.transactionCount != null && (
+              <FactItem
+                label="Transaction Count"
+                value={contract.transactionCount.toLocaleString()}
+              />
+            )}
           </div>
+
+          {txCountsByYear && Object.keys(txCountsByYear.counts || {}).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-obsidian-800">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-obsidian-500">Transactions by Year</span>
+                {txCountsByYear.truncated && (
+                  <span className="text-xs text-yellow-400">Partial (capped)</span>
+                )}
+              </div>
+              <div className="mt-2 overflow-x-auto no-scrollbar">
+                <div className="flex gap-2 min-w-max">
+                  {Object.keys(txCountsByYear.counts)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((year) => (
+                      <div
+                        key={year}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40"
+                      >
+                        <span className="text-xs font-mono text-obsidian-400">{year}</span>
+                        <span className="text-xs font-semibold text-obsidian-200">
+                          {txCountsByYear.counts[year]?.toLocaleString?.() ??
+                            String(txCountsByYear.counts[year] ?? 0)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {contract.deploymentTxHash && (
             <div className="mt-4 pt-4 border-t border-obsidian-800">

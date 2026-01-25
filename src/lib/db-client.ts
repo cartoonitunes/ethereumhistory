@@ -432,6 +432,55 @@ export async function getContractMetadataFromDb(
   }));
 }
 
+export async function getContractMetadataJsonValueByKeyFromDb(
+  address: string,
+  key: string
+): Promise<unknown | null> {
+  const database = getDb();
+  const rows = await database
+    .select({ jsonValue: schema.contractMetadata.jsonValue })
+    .from(schema.contractMetadata)
+    .where(
+      and(
+        eq(schema.contractMetadata.contractAddress, address.toLowerCase()),
+        eq(schema.contractMetadata.key, key)
+      )
+    )
+    .orderBy(desc(schema.contractMetadata.createdAt))
+    .limit(1);
+
+  return (rows[0]?.jsonValue as unknown) ?? null;
+}
+
+export async function setContractMetadataJsonValueByKeyFromDb(
+  address: string,
+  key: string,
+  jsonValue: unknown,
+  sourceUrl: string | null = null
+): Promise<void> {
+  const database = getDb();
+  const normalized = address.toLowerCase();
+
+  // Ensure we only keep one row per (contract, key)
+  await database
+    .delete(schema.contractMetadata)
+    .where(
+      and(
+        eq(schema.contractMetadata.contractAddress, normalized),
+        eq(schema.contractMetadata.key, key)
+      )
+    );
+
+  await database.insert(schema.contractMetadata).values({
+    contractAddress: normalized,
+    key,
+    value: null,
+    jsonValue: jsonValue as any,
+    sourceUrl,
+    createdAt: new Date(),
+  });
+}
+
 /**
  * Get most recently deployed contracts
  */
