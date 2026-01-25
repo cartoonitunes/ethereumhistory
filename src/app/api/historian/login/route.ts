@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, HistorianMe } from "@/types";
 import { getHistorianByEmailFromDb, historianRowToMe } from "@/lib/db-client";
-import { hashHistorianToken, setHistorianSessionCookie } from "@/lib/historian-auth";
+import {
+  buildHistorianSessionCookieValue,
+  getHistorianSessionCookieName,
+  getHistorianSessionCookieOptions,
+  hashHistorianToken,
+} from "@/lib/historian-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +47,18 @@ export async function POST(
     );
   }
 
-  setHistorianSessionCookie(row.id);
-  return NextResponse.json({
+  const res = NextResponse.json({
     data: historianRowToMe(row),
     error: null,
     meta: { timestamp: new Date().toISOString(), cached: false },
   });
+
+  res.cookies.set(
+    getHistorianSessionCookieName(),
+    buildHistorianSessionCookieValue(row.id),
+    getHistorianSessionCookieOptions()
+  );
+
+  return res;
 }
 
