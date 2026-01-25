@@ -495,6 +495,11 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
 export async function updateContractHistoryFieldsFromDb(
   address: string,
   patch: {
+    etherscanContractName?: string | null;
+    tokenName?: string | null;
+    contractType?: string | null;
+    shortDescription?: string | null;
+    description?: string | null;
     historicalSummary?: string | null;
     historicalSignificance?: string | null;
     historicalContext?: string | null;
@@ -502,6 +507,12 @@ export async function updateContractHistoryFieldsFromDb(
 ): Promise<void> {
   const database = getDb();
   const updates: Partial<schema.NewContract> = { updatedAt: new Date() };
+  if (patch.etherscanContractName !== undefined)
+    updates.etherscanContractName = patch.etherscanContractName;
+  if (patch.tokenName !== undefined) updates.tokenName = patch.tokenName;
+  if (patch.contractType !== undefined) updates.contractType = patch.contractType;
+  if (patch.shortDescription !== undefined) updates.shortDescription = patch.shortDescription;
+  if (patch.description !== undefined) updates.description = patch.description;
   if (patch.historicalSummary !== undefined) updates.historicalSummary = patch.historicalSummary;
   if (patch.historicalSignificance !== undefined) updates.historicalSignificance = patch.historicalSignificance;
   if (patch.historicalContext !== undefined) updates.historicalContext = patch.historicalContext;

@@ -52,6 +52,29 @@ export async function POST(
 
   try {
     await updateContractHistoryFieldsFromDb(normalized, {
+      etherscanContractName:
+        contractPatch.etherscanContractName !== undefined
+          ? (String(contractPatch.etherscanContractName || "").trim() || null)
+          : undefined,
+      tokenName:
+        contractPatch.tokenName !== undefined
+          ? (String(contractPatch.tokenName || "").trim() || null)
+          : undefined,
+      contractType:
+        contractPatch.contractType !== undefined
+          ? (() => {
+              const raw = String(contractPatch.contractType || "").trim();
+              return raw ? raw.toLowerCase() : null;
+            })()
+          : undefined,
+      shortDescription:
+        contractPatch.shortDescription !== undefined
+          ? (String(contractPatch.shortDescription || "").trim() || null)
+          : undefined,
+      description:
+        contractPatch.description !== undefined
+          ? (String(contractPatch.description || "").trim() || null)
+          : undefined,
       historicalSummary:
         contractPatch.historicalSummary !== undefined
           ? (String(contractPatch.historicalSummary || "").trim() || null)

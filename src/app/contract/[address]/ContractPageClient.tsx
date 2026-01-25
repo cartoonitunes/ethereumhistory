@@ -846,11 +846,23 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Local editable state (initialized from contract + fetched links)
+  const [savedEtherscanContractName, setSavedEtherscanContractName] = useState(
+    contract.etherscanContractName || ""
+  );
+  const [savedTokenName, setSavedTokenName] = useState(contract.tokenName || "");
+  const [savedContractType, setSavedContractType] = useState(contract.heuristics.contractType || "");
+  const [savedShortDescription, setSavedShortDescription] = useState(contract.shortDescription || "");
+  const [savedDescription, setSavedDescription] = useState(contract.description || "");
   const [savedSummary, setSavedSummary] = useState(contract.historicalSummary || "");
   const [savedSignificance, setSavedSignificance] = useState(contract.historicalSignificance || "");
   const [savedContext, setSavedContext] = useState(contract.historicalContext || "");
   const [savedTokenLogo, setSavedTokenLogo] = useState(contract.tokenLogo || "");
 
+  const [draftEtherscanContractName, setDraftEtherscanContractName] = useState(savedEtherscanContractName);
+  const [draftTokenName, setDraftTokenName] = useState(savedTokenName);
+  const [draftContractType, setDraftContractType] = useState(savedContractType);
+  const [draftShortDescription, setDraftShortDescription] = useState(savedShortDescription);
+  const [draftDescription, setDraftDescription] = useState(savedDescription);
   const [draftSummary, setDraftSummary] = useState(savedSummary);
   const [draftSignificance, setDraftSignificance] = useState(savedSignificance);
   const [draftContext, setDraftContext] = useState(savedContext);
@@ -859,11 +871,21 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
 
   useEffect(() => {
     // Reset drafts when navigating between contracts
+    setSavedEtherscanContractName(contract.etherscanContractName || "");
+    setSavedTokenName(contract.tokenName || "");
+    setSavedContractType(contract.heuristics.contractType || "");
+    setSavedShortDescription(contract.shortDescription || "");
+    setSavedDescription(contract.description || "");
     setSavedSummary(contract.historicalSummary || "");
     setSavedSignificance(contract.historicalSignificance || "");
     setSavedContext(contract.historicalContext || "");
     setSavedTokenLogo(contract.tokenLogo || "");
 
+    setDraftEtherscanContractName(contract.etherscanContractName || "");
+    setDraftTokenName(contract.tokenName || "");
+    setDraftContractType(contract.heuristics.contractType || "");
+    setDraftShortDescription(contract.shortDescription || "");
+    setDraftDescription(contract.description || "");
     setDraftSummary(contract.historicalSummary || "");
     setDraftSignificance(contract.historicalSignificance || "");
     setDraftContext(contract.historicalContext || "");
@@ -948,6 +970,11 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contract: {
+            etherscanContractName: draftEtherscanContractName,
+            tokenName: draftTokenName,
+            contractType: draftContractType,
+            shortDescription: draftShortDescription,
+            description: draftDescription,
             historicalSummary: draftSummary,
             historicalSignificance: draftSignificance,
             historicalContext: draftContext,
@@ -970,6 +997,11 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       }
       const updated = json.data as ContractHistoryData;
       setHistoryData(updated);
+      setSavedEtherscanContractName(draftEtherscanContractName.trim());
+      setSavedTokenName(draftTokenName.trim());
+      setSavedContractType(draftContractType.trim());
+      setSavedShortDescription(draftShortDescription.trim());
+      setSavedDescription(draftDescription.trim());
       setSavedSummary(draftSummary.trim());
       setSavedSignificance(draftSignificance.trim());
       setSavedContext(draftContext.trim());
@@ -1067,6 +1099,53 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
         {editMode ? (
           <div className="space-y-4">
             <div>
+              <div className="text-xs text-obsidian-500 mb-1">Etherscan contract name</div>
+              <input
+                value={draftEtherscanContractName}
+                onChange={(e) => setDraftEtherscanContractName(e.target.value)}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="Optional display name override"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs text-obsidian-500 mb-1">Token name</div>
+                <input
+                  value={draftTokenName}
+                  onChange={(e) => setDraftTokenName(e.target.value)}
+                  className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-obsidian-500 mb-1">Contract type</div>
+                <input
+                  value={draftContractType}
+                  onChange={(e) => setDraftContractType(e.target.value)}
+                  className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                  placeholder="e.g. erc20, exchange, dao, proxy…"
+                />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Short description</div>
+              <input
+                value={draftShortDescription}
+                onChange={(e) => setDraftShortDescription(e.target.value)}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="One-line summary (used on homepage cards)"
+              />
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Description</div>
+              <textarea
+                value={draftDescription}
+                onChange={(e) => setDraftDescription(e.target.value)}
+                className="w-full min-h-[120px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="Longer description (overview / details)"
+              />
+            </div>
+            <div>
               <div className="text-xs text-obsidian-500 mb-1">Contract image URL</div>
               <input
                 value={draftTokenLogo}
@@ -1106,8 +1185,20 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
               />
             </div>
           </div>
-        ) : savedSummary ? (
+        ) : savedShortDescription || savedDescription || savedSummary ? (
           <div className="prose prose-invert max-w-none">
+            {savedShortDescription && (
+              <p className="text-obsidian-300 leading-relaxed mb-4">
+                {savedShortDescription}
+              </p>
+            )}
+
+            {savedDescription && (
+              <p className="text-obsidian-300 leading-relaxed mb-4">
+                {savedDescription}
+              </p>
+            )}
+
             <p className="text-obsidian-300 leading-relaxed mb-4">
               {savedSummary}
             </p>
