@@ -3,7 +3,9 @@ import type { ApiResponse, ContractHistoryData } from "@/types";
 import { isValidAddress } from "@/lib/utils";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 import {
+  addWalletToPersonFromDb,
   deleteHistoricalLinksFromDb,
+  getContractFromDb,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
   logContractEditFromDb,
@@ -56,6 +58,10 @@ export async function POST(
   const fieldsChanged: string[] = [];
 
   try {
+    // Get current contract's deployer address BEFORE updating (to add to person's wallets if needed)
+    const currentContract = await getContractFromDb(normalized);
+    const currentDeployerAddress = currentContract?.deployerAddress?.toLowerCase() || null;
+    
     await updateContractHistoryFieldsFromDb(normalized, {
       etherscanContractName:
         contractPatch.etherscanContractName !== undefined
@@ -96,11 +102,18 @@ export async function POST(
 
     // Handle deployer address changes
     if (contractPatch.deployerAddress !== undefined) {
-      const deployerAddress = contractPatch.deployerAddress
+      const selectedPersonAddress = contractPatch.deployerAddress
         ? String(contractPatch.deployerAddress).trim().toLowerCase() || null
         : null;
+      
+      // If a person is selected and the contract has a deployerAddress that's different from the person's address,
+      // add the contract's deployerAddress to that person's wallets (if not already there)
+      if (selectedPersonAddress && currentDeployerAddress && currentDeployerAddress !== selectedPersonAddress) {
+        await addWalletToPersonFromDb(selectedPersonAddress, currentDeployerAddress, "Deployer address");
+      }
+      
       await updateContractEtherscanEnrichmentFromDb(normalized, {
-        deployerAddress,
+        deployerAddress: selectedPersonAddress,
       });
       fieldsChanged.push("deployerAddress");
     }
