@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   metadataBase: getMetadataBaseUrl(),
   title: "Ethereum History - Historical Smart Contract Archive",
   description:
-    "A historical archive and analysis tool for Ethereum smart contracts from 2015-2017. Explore the origins of decentralized applications.",
+    "A historical archive and analysis tool for Ethereum smart contracts from the early years. Explore the origins of decentralized applications.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Ethereum History",
-    description: "Historical archive of Ethereum smart contracts from 2015-2017",
+    description: "Historical archive of Ethereum smart contracts and their stories.",
     images: [
       "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg?v=2",
     ],
