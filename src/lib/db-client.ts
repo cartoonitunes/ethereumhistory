@@ -368,7 +368,7 @@ export async function getAllPeopleFromDb(): Promise<Array<{ address: string; nam
  * Generate a slug from a name: lowercase, special chars removed, spaces to underscores.
  */
 export function generateSlugFromName(name: string): string {
-  return name
+  let slug = name
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, "") // Remove special characters except spaces and hyphens
@@ -376,6 +376,13 @@ export function generateSlugFromName(name: string): string {
     .replace(/-+/g, "_") // Replace hyphens with underscores
     .replace(/_+/g, "_") // Collapse multiple underscores
     .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+  
+  // Ensure slug is not empty (fallback to a default if all characters were removed)
+  if (!slug || slug.length === 0) {
+    slug = "person_" + Date.now().toString(36);
+  }
+  
+  return slug;
 }
 
 /**

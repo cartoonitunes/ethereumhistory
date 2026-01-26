@@ -1000,8 +1000,12 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   );
 
   async function createNewPerson() {
-    if (!newPersonName.trim() || !contract.deployerAddress) return;
+    if (!newPersonName.trim() || !contract.deployerAddress) {
+      setSaveError("Name and deployer address are required.");
+      return;
+    }
     setCreatingPerson(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/people", {
         method: "POST",
@@ -1013,7 +1017,16 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       });
       const json = await res.json();
       if (!res.ok || json?.error) {
-        setSaveError(String(json?.error || "Failed to create person."));
+        const errorMsg = json?.error || `Failed to create person (${res.status})`;
+        console.error("Error creating person:", errorMsg, json);
+        setSaveError(errorMsg);
+        setCreatingPerson(false);
+        return;
+      }
+      if (!json?.data?.person) {
+        console.error("Invalid response from API:", json);
+        setSaveError("Invalid response from server.");
+        setCreatingPerson(false);
         return;
       }
       // Add to people list and select it
@@ -1022,8 +1035,9 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       setDraftDeployerAddress(newPerson.address);
       setShowAddPerson(false);
       setNewPersonName("");
-    } catch {
-      setSaveError("Failed to create person.");
+    } catch (error) {
+      console.error("Exception creating person:", error);
+      setSaveError(`Failed to create person: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setCreatingPerson(false);
     }

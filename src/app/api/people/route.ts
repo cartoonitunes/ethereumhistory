@@ -74,8 +74,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     });
   } catch (error) {
     console.error("Error creating/updating person:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { data: null, error: "Failed to create/update person." },
+      { 
+        data: null, 
+        error: `Failed to create/update person: ${errorMessage}` 
+      },
       { status: 500 }
     );
   }
