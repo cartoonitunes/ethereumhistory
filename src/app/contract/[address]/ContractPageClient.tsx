@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import {
   Copy,
@@ -190,12 +189,14 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               <div className="flex items-center gap-3 mb-2">
                 {contract.tokenLogo && (
                   <div className="w-9 h-9 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
-                    <Image
+                    <img
                       src={contract.tokenLogo}
                       alt={displayName ? `${displayName} logo` : "Token logo"}
                       width={36}
                       height={36}
                       className="w-9 h-9 object-cover"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                 )}
@@ -418,12 +419,14 @@ function OverviewTab({
                   value={
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
-                        <Image
+                        <img
                           src={contract.tokenLogo}
                           alt={tokenName ? `${tokenName} logo` : "Token logo"}
                           width={32}
                           height={32}
                           className="w-8 h-8 object-cover"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
                         />
                       </div>
                       <span className="text-xs text-obsidian-500">via RPC</span>
