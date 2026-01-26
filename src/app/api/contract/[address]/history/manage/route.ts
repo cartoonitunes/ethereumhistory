@@ -7,6 +7,7 @@ import {
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
   logContractEditFromDb,
+  updateContractEtherscanEnrichmentFromDb,
   updateContractHistoryFieldsFromDb,
   updateContractTokenLogoFromDb,
   upsertHistoricalLinkFromDb,
@@ -92,6 +93,17 @@ export async function POST(
           ? (String(contractPatch.historicalContext || "").trim() || null)
           : undefined,
     });
+
+    // Handle deployer address changes
+    if (contractPatch.deployerAddress !== undefined) {
+      const deployerAddress = contractPatch.deployerAddress
+        ? String(contractPatch.deployerAddress).trim().toLowerCase() || null
+        : null;
+      await updateContractEtherscanEnrichmentFromDb(normalized, {
+        deployerAddress,
+      });
+      fieldsChanged.push("deployerAddress");
+    }
 
     // Track field changes
     if (contractPatch.etherscanContractName !== undefined) fieldsChanged.push("etherscanContractName");

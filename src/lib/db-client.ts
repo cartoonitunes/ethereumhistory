@@ -308,6 +308,107 @@ export async function getPersonBySlugFromDb(slug: string): Promise<AppPerson | n
   return person;
 }
 
+/**
+ * Get all people for dropdown selection.
+ * Returns list sorted by name.
+ */
+export async function getAllPeopleFromDb(): Promise<Array<{ address: string; name: string; slug: string }>> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      address: schema.people.address,
+      name: schema.people.name,
+      slug: schema.people.slug,
+    })
+    .from(schema.people)
+    .orderBy(asc(schema.people.name));
+  return rows;
+}
+
+/**
+ * Generate a slug from a name: lowercase, special chars removed, spaces to underscores.
+ */
+export function generateSlugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "") // Remove special characters except spaces and hyphens
+    .replace(/\s+/g, "_") // Replace spaces with underscores
+    .replace(/-+/g, "_") // Replace hyphens with underscores
+    .replace(/_+/g, "_") // Collapse multiple underscores
+    .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+}
+
+/**
+ * Create or update a person.
+ * If address exists, updates; otherwise creates new.
+ */
+export async function upsertPersonFromDb(params: {
+  address: string;
+  name: string;
+  slug?: string | null; // Auto-generated if not provided
+  role?: string | null;
+  shortBio?: string | null;
+  bio?: string | null;
+  highlights?: string[] | null;
+  websiteUrl?: string | null;
+}): Promise<AppPerson> {
+  const database = getDb();
+  const normalized = params.address.toLowerCase();
+  const slug = params.slug?.trim() || generateSlugFromName(params.name);
+  
+  // Check if person exists
+  const existing = await database
+    .select()
+    .from(schema.people)
+    .where(eq(schema.people.address, normalized))
+    .limit(1);
+  
+  if (existing[0]) {
+    // Update existing
+    await database
+      .update(schema.people)
+      .set({
+        name: params.name.trim(),
+        slug: slug,
+        role: params.role?.trim() || null,
+        shortBio: params.shortBio?.trim() || null,
+        bio: params.bio?.trim() || null,
+        highlights: params.highlights || null,
+        websiteUrl: params.websiteUrl?.trim() || null,
+        updatedAt: new Date(),
+      } as any)
+      .where(eq(schema.people.address, normalized));
+  } else {
+    // Create new
+    await database.insert(schema.people).values({
+      address: normalized,
+      name: params.name.trim(),
+      slug: slug,
+      role: params.role?.trim() || null,
+      shortBio: params.shortBio?.trim() || null,
+      bio: params.bio?.trim() || null,
+      highlights: params.highlights || null,
+      websiteUrl: params.websiteUrl?.trim() || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any);
+  }
+  
+  // Return the updated/created person
+  const result = await database
+    .select()
+    .from(schema.people)
+    .where(eq(schema.people.address, normalized))
+    .limit(1);
+  
+  if (!result[0]) throw new Error("Failed to create/update person");
+  
+  const person = dbRowToPerson(result[0]);
+  person.wallets = await getWalletsForPersonFromDb(person.address);
+  return person;
+}
+
 export async function searchPeopleFromDb(
   query: string,
   limit = 50

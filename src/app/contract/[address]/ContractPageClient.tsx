@@ -860,6 +860,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [savedSignificance, setSavedSignificance] = useState(contract.historicalSignificance || "");
   const [savedContext, setSavedContext] = useState(contract.historicalContext || "");
   const [savedTokenLogo, setSavedTokenLogo] = useState(contract.tokenLogo || "");
+  const [savedDeployerAddress, setSavedDeployerAddress] = useState(contract.deployerAddress || "");
 
   const [draftEtherscanContractName, setDraftEtherscanContractName] = useState(savedEtherscanContractName);
   const [draftTokenName, setDraftTokenName] = useState(savedTokenName);
@@ -870,7 +871,16 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [draftSignificance, setDraftSignificance] = useState(savedSignificance);
   const [draftContext, setDraftContext] = useState(savedContext);
   const [draftTokenLogo, setDraftTokenLogo] = useState(savedTokenLogo);
+  const [draftDeployerAddress, setDraftDeployerAddress] = useState(savedDeployerAddress);
   const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
+  
+  // People list for dropdown
+  const [people, setPeople] = useState<Array<{ address: string; name: string; slug: string }>>([]);
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [newPersonName, setNewPersonName] = useState("");
+  const [newPersonAddress, setNewPersonAddress] = useState("");
+  const [creatingPerson, setCreatingPerson] = useState(false);
 
   useEffect(() => {
     // Reset drafts when navigating between contracts
@@ -893,9 +903,13 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     setDraftSignificance(contract.historicalSignificance || "");
     setDraftContext(contract.historicalContext || "");
     setDraftTokenLogo(contract.tokenLogo || "");
+    setDraftDeployerAddress(contract.deployerAddress || "");
     setDraftLinks([]);
     setEditMode(false);
     setSaveError(null);
+    setShowAddPerson(false);
+    setNewPersonName("");
+    setNewPersonAddress("");
   }, [contract.address]);
 
   useEffect(() => {
@@ -956,6 +970,29 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPeople() {
+      setLoadingPeople(true);
+      try {
+        const res = await fetch("/api/people");
+        const json = await res.json();
+        if (cancelled) return;
+        if (json?.data?.people) {
+          setPeople(json.data.people);
+        }
+      } catch {
+        // Ignore errors
+      } finally {
+        if (!cancelled) setLoadingPeople(false);
+      }
+    }
+    loadPeople();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const canEdit = !!me?.active;
 
   const visibleLinks = useMemo(() => draftLinks.filter((l) => !l._deleted), [draftLinks]);
@@ -963,6 +1000,37 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     () => draftLinks.filter((l) => l._deleted && l.id != null).map((l) => l.id as number),
     [draftLinks]
   );
+
+  async function createNewPerson() {
+    if (!newPersonName.trim() || !newPersonAddress.trim()) return;
+    setCreatingPerson(true);
+    try {
+      const res = await fetch("/api/people", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: newPersonAddress.trim(),
+          name: newPersonName.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        setSaveError(String(json?.error || "Failed to create person."));
+        return;
+      }
+      // Add to people list and select it
+      const newPerson = json.data.person;
+      setPeople([...people, { address: newPerson.address, name: newPerson.name, slug: newPerson.slug }]);
+      setDraftDeployerAddress(newPerson.address);
+      setShowAddPerson(false);
+      setNewPersonName("");
+      setNewPersonAddress("");
+    } catch {
+      setSaveError("Failed to create person.");
+    } finally {
+      setCreatingPerson(false);
+    }
+  }
 
   async function saveHistory() {
     setSaving(true);
@@ -982,6 +1050,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             historicalSignificance: draftSignificance,
             historicalContext: draftContext,
             tokenLogo: draftTokenLogo,
+            deployerAddress: draftDeployerAddress || null,
           },
           links: visibleLinks.map((l) => ({
             id: l.id,
@@ -1009,6 +1078,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       setSavedSignificance(draftSignificance.trim());
       setSavedContext(draftContext.trim());
       setSavedTokenLogo(draftTokenLogo.trim());
+      setSavedDeployerAddress(draftDeployerAddress.trim());
       setDraftLinks(
         (updated.links || []).map((l) => ({
           clientId: String(l.id),
@@ -1129,6 +1199,72 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
                   placeholder="e.g. erc20, exchange, dao, proxy…"
                 />
               </div>
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Deployer</div>
+              {showAddPerson ? (
+                <div className="space-y-2 p-3 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
+                  <input
+                    value={newPersonName}
+                    onChange={(e) => setNewPersonName(e.target.value)}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                    placeholder="Person name"
+                  />
+                  <input
+                    value={newPersonAddress}
+                    onChange={(e) => setNewPersonAddress(e.target.value)}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
+                    placeholder="Ethereum address (0x...)"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={createNewPerson}
+                      disabled={creatingPerson || !newPersonName.trim() || !newPersonAddress.trim()}
+                      className="px-3 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-sm text-white disabled:opacity-50"
+                    >
+                      {creatingPerson ? "Creating..." : "Create & Select"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddPerson(false);
+                        setNewPersonName("");
+                        setNewPersonAddress("");
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <select
+                    value={draftDeployerAddress}
+                    onChange={(e) => setDraftDeployerAddress(e.target.value)}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                  >
+                    <option value="">None / Unknown</option>
+                    {loadingPeople ? (
+                      <option disabled>Loading...</option>
+                    ) : (
+                      people.map((p) => (
+                        <option key={p.address} value={p.address}>
+                          {p.name} ({formatAddress(p.address)})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPerson(true)}
+                    className="text-xs text-ether-400 hover:text-ether-300"
+                  >
+                    + Add New Person
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Short description</div>
