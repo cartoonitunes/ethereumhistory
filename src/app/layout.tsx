@@ -39,7 +39,8 @@ export const metadata: Metadata = {
     siteName: "Ethereum History",
     images: [
       {
-        url: "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg",
+        // Cache-bust for social scrapers (Twitter/Discord cache aggressively)
+        url: "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg?v=2",
         width: 1200,
         height: 630,
         type: "image/jpeg",
@@ -52,7 +53,7 @@ export const metadata: Metadata = {
     title: "Ethereum History",
     description: "Historical archive of Ethereum smart contracts from 2015-2017",
     images: [
-      "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg",
+      "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg?v=2",
     ],
   },
   robots: {

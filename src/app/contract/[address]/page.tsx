@@ -28,11 +28,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const metadataBase = getMetadataBaseUrl();
+  const fallbackSocialImage =
+    "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg?v=2";
   const contract = await getContractWithTokenMetadata(address.toLowerCase());
   const tokenName = contract?.tokenName || null;
   const tokenSymbol = contract?.tokenSymbol || null;
   const tokenLogo = contract?.tokenLogo || null;
-  const imageUrl = tokenLogo ? new URL(tokenLogo, metadataBase).toString() : null;
+
+  // Twitter/X is picky about image formats; SVGs and non-http(s) URLs often won't render in cards.
+  const imageUrl = (() => {
+    if (!tokenLogo) return null;
+    const raw = String(tokenLogo).trim();
+    if (!raw) return null;
+    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return null;
+
+    const resolved = new URL(raw, metadataBase).toString();
+    const lower = resolved.toLowerCase();
+    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return null;
+    return resolved;
+  })();
 
   const titlePrefix = tokenName
     ? `${tokenName}${tokenSymbol ? ` (${tokenSymbol})` : ""}`
@@ -44,6 +58,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = tokenName
     ? `Historical analysis of ${tokenName} on Ethereum (${address}). View bytecode, similar contracts, and historical context.`
     : `Historical analysis of Ethereum contract ${address}. View bytecode, similar contracts, and historical context.`;
+
+  const socialImage = imageUrl || fallbackSocialImage;
 
   return {
     metadataBase,
@@ -57,24 +73,30 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "website",
       siteName: "Ethereum History",
       url: new URL(`/contract/${address}`, metadataBase).toString(),
-      images: imageUrl
-        ? [
-            {
-              url: imageUrl,
+      images: [
+        imageUrl
+          ? {
+              url: socialImage,
               alt: tokenName ? `${tokenName} logo` : "Token logo",
               width: 512,
               height: 512,
+            }
+          : {
+              url: socialImage,
+              alt: "Ethereum History",
+              width: 1200,
+              height: 630,
+              type: "image/jpeg",
             },
-          ]
-        : undefined,
+      ],
     },
     twitter: {
-      card: imageUrl ? "summary_large_image" : "summary",
+      card: "summary_large_image",
       title,
       description: tokenName
         ? `Historical analysis of ${tokenName} on Ethereum.`
         : `Historical analysis of Ethereum contract ${address}.`,
-      images: imageUrl ? [imageUrl] : undefined,
+      images: [socialImage],
     },
   };
 }
