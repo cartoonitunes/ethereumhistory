@@ -146,6 +146,22 @@ CREATE INDEX IF NOT EXISTS historical_links_url_idx ON historical_links (url);
 CREATE INDEX IF NOT EXISTS historical_links_created_by_idx ON historical_links (created_by);
 
 -- =============================================================================
+-- contract_edits
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS contract_edits (
+  id SERIAL PRIMARY KEY,
+  contract_address TEXT NOT NULL REFERENCES contracts(address) ON DELETE CASCADE,
+  historian_id INTEGER NOT NULL REFERENCES historians(id) ON DELETE CASCADE,
+  edited_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  fields_changed TEXT[] -- Array of field names that were changed in this edit
+);
+
+CREATE INDEX IF NOT EXISTS contract_edits_historian_idx ON contract_edits (historian_id, edited_at DESC);
+CREATE INDEX IF NOT EXISTS contract_edits_contract_idx ON contract_edits (contract_address, historian_id);
+CREATE INDEX IF NOT EXISTS contract_edits_edited_at_idx ON contract_edits (edited_at DESC);
+CREATE INDEX IF NOT EXISTS contract_edits_first_edit_idx ON contract_edits (contract_address, historian_id, edited_at);
+
+-- =============================================================================
 -- contract_metadata
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS contract_metadata (

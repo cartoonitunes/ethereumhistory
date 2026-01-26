@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Archive, Search, Clock, Code } from "lucide-react";
+import { Archive, Search, Clock, Code, Users } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
@@ -11,8 +11,16 @@ import type { FeaturedContract } from "@/types";
 
 const FEATURED_FALLBACK: FeaturedContract[] = [];
 
+interface TopEditor {
+  historianId: number;
+  name: string;
+  editCount: number;
+  newPagesCount: number;
+}
+
 export default function HomePage() {
   const [featuredContracts, setFeaturedContracts] = useState<FeaturedContract[]>(FEATURED_FALLBACK);
+  const [topEditors, setTopEditors] = useState<TopEditor[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +31,25 @@ export default function HomePage() {
         const next = (json?.data?.featuredContracts || []) as FeaturedContract[];
         if (!cancelled && Array.isArray(next) && next.length > 0) {
           setFeaturedContracts(next);
+        }
+      } catch {
+        // fall back to empty state
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/editors/top?limit=10");
+        const json = await res.json();
+        const editors = (json?.data?.editors || []) as TopEditor[];
+        if (!cancelled && Array.isArray(editors)) {
+          setTopEditors(editors);
         }
       } catch {
         // fall back to empty state
@@ -144,6 +171,51 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Top Editors */}
+      {topEditors.length > 0 && (
+        <section className="py-20 border-t border-obsidian-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-center mb-12"
+            >
+              <h2 className="text-3xl font-bold mb-4">Top Contributors</h2>
+              <p className="text-obsidian-400 max-w-2xl mx-auto">
+                Recognizing the historians who have contributed the most edits to preserve Ethereum's history.
+              </p>
+            </motion.div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {topEditors.map((editor, index) => (
+                <motion.div
+                  key={editor.historianId}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.05 }}
+                  className="p-5 rounded-xl bg-obsidian-900/30 border border-obsidian-800 text-center"
+                >
+                  <div className="w-12 h-12 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 mx-auto mb-3">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-obsidian-100 mb-1">{editor.name}</h3>
+                  <p className="text-sm text-obsidian-400">
+                    {editor.editCount} {editor.editCount === 1 ? "edit" : "edits"}
+                  </p>
+                  {editor.newPagesCount > 0 && (
+                    <p className="text-xs text-ether-400 mt-1">
+                      {editor.newPagesCount} new {editor.newPagesCount === 1 ? "page" : "pages"}
+                    </p>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Era Timeline */}
       <EraTimeline />

@@ -191,6 +191,31 @@ export const historians = pgTable(
 );
 
 // =============================================================================
+// Contract Edits (tracks historian edits to contracts)
+// =============================================================================
+
+export const contractEdits = pgTable(
+  "contract_edits",
+  {
+    id: serial("id").primaryKey(),
+    contractAddress: text("contract_address")
+      .notNull()
+      .references(() => contracts.address, { onDelete: "cascade" }),
+    historianId: integer("historian_id")
+      .notNull()
+      .references(() => historians.id, { onDelete: "cascade" }),
+    editedAt: timestamp("edited_at").defaultNow().notNull(),
+    fieldsChanged: text("fields_changed").array(), // Array of field names changed
+  },
+  (table) => ({
+    historianIdx: index("contract_edits_historian_idx").on(table.historianId, table.editedAt),
+    contractIdx: index("contract_edits_contract_idx").on(table.contractAddress, table.historianId),
+    editedAtIdx: index("contract_edits_edited_at_idx").on(table.editedAt),
+    firstEditIdx: index("contract_edits_first_edit_idx").on(table.contractAddress, table.historianId, table.editedAt),
+  })
+);
+
+// =============================================================================
 // Contract Metadata (extensible key/value metadata)
 // =============================================================================
 
@@ -271,3 +296,5 @@ export type PersonWallet = typeof peopleWallets.$inferSelect;
 export type NewPersonWallet = typeof peopleWallets.$inferInsert;
 export type Historian = typeof historians.$inferSelect;
 export type NewHistorian = typeof historians.$inferInsert;
+export type ContractEdit = typeof contractEdits.$inferSelect;
+export type NewContractEdit = typeof contractEdits.$inferInsert;

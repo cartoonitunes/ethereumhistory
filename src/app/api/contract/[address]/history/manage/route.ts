@@ -6,6 +6,7 @@ import {
   deleteHistoricalLinksFromDb,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
+  logContractEditFromDb,
   updateContractHistoryFieldsFromDb,
   updateContractTokenLogoFromDb,
   upsertHistoricalLinkFromDb,
@@ -50,6 +51,9 @@ export async function POST(
     ? body.deleteIds.filter((n: any) => Number.isFinite(n)).map((n: any) => Number(n))
     : [];
 
+  // Track which fields were changed for edit logging
+  const fieldsChanged: string[] = [];
+
   try {
     await updateContractHistoryFieldsFromDb(normalized, {
       etherscanContractName:
@@ -89,10 +93,36 @@ export async function POST(
           : undefined,
     });
 
+    // Track field changes
+    if (contractPatch.etherscanContractName !== undefined) fieldsChanged.push("etherscanContractName");
+    if (contractPatch.tokenName !== undefined) fieldsChanged.push("tokenName");
+    if (contractPatch.contractType !== undefined) fieldsChanged.push("contractType");
+    if (contractPatch.shortDescription !== undefined) fieldsChanged.push("shortDescription");
+    if (contractPatch.description !== undefined) fieldsChanged.push("description");
+    if (contractPatch.historicalSummary !== undefined) fieldsChanged.push("historicalSummary");
+    if (contractPatch.historicalSignificance !== undefined) fieldsChanged.push("historicalSignificance");
+    if (contractPatch.historicalContext !== undefined) fieldsChanged.push("historicalContext");
+
     if (contractPatch.tokenLogo !== undefined) {
       const next =
         String(contractPatch.tokenLogo || "").trim() || null;
       await updateContractTokenLogoFromDb(normalized, next);
+      fieldsChanged.push("tokenLogo");
+    }
+
+    // Track link additions/updates as edits
+    const hasLinkChanges = links.length > 0 || deleteIds.length > 0;
+    if (hasLinkChanges) {
+      fieldsChanged.push("links");
+    }
+
+    // Log the edit if any fields were changed
+    if (fieldsChanged.length > 0) {
+      await logContractEditFromDb({
+        contractAddress: normalized,
+        historianId: me.id,
+        fieldsChanged,
+      });
     }
 
     for (const l of links) {

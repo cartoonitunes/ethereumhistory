@@ -520,6 +520,95 @@ export async function updateContractHistoryFieldsFromDb(
   await database.update(schema.contracts).set(updates).where(eq(schema.contracts.address, address.toLowerCase()));
 }
 
+/**
+ * Log a contract edit by a historian.
+ * Tracks which fields were changed in a single edit session.
+ */
+export async function logContractEditFromDb(params: {
+  contractAddress: string;
+  historianId: number;
+  fieldsChanged: string[];
+}): Promise<void> {
+  const database = getDb();
+  const normalized = params.contractAddress.toLowerCase();
+  
+  // Only log if there are actual field changes
+  if (!params.fieldsChanged.length) return;
+  
+  await database.insert(schema.contractEdits).values({
+    contractAddress: normalized,
+    historianId: params.historianId,
+    editedAt: new Date(),
+    fieldsChanged: params.fieldsChanged,
+  } as any);
+}
+
+/**
+ * Get top editors by edit count.
+ * Returns historian name, total edit count, and count of new pages (first edits).
+ */
+export async function getTopEditorsFromDb(limit = 10): Promise<Array<{ historianId: number; name: string; editCount: number; newPagesCount: number }>> {
+  const database = getDb();
+  
+  // Use Drizzle query builder for consistency, with sql template for the complex correlated subquery
+  // The subquery identifies first edits by checking if edited_at is the minimum for that contract+historian pair
+  const results = await database
+    .select({
+      historianId: schema.contractEdits.historianId,
+      name: schema.historians.name,
+      editCount: sql<number>`COUNT(*)::int`,
+      newPagesCount: sql<number>`
+        COUNT(DISTINCT CASE 
+          WHEN ${schema.contractEdits.editedAt} = (
+            SELECT MIN(ce2.edited_at)
+            FROM contract_edits ce2
+            WHERE ce2.contract_address = ${schema.contractEdits.contractAddress}
+              AND ce2.historian_id = ${schema.contractEdits.historianId}
+          )
+          THEN ${schema.contractEdits.contractAddress}
+        END)::int
+      `,
+    })
+    .from(schema.contractEdits)
+    .innerJoin(schema.historians, eq(schema.contractEdits.historianId, schema.historians.id))
+    .where(eq(schema.historians.active, true))
+    .groupBy(schema.contractEdits.historianId, schema.historians.name)
+    .orderBy(desc(sql`COUNT(*)`))
+    .limit(limit);
+  
+  return results.map(r => ({
+    historianId: r.historianId,
+    name: r.name,
+    editCount: r.editCount,
+    newPagesCount: r.newPagesCount,
+  }));
+}
+
+/**
+ * Check if this is a historian's first edit of a contract.
+ * Useful for highlighting "first contributions" or onboarding.
+ */
+export async function isFirstEditFromDb(
+  contractAddress: string,
+  historianId: number
+): Promise<boolean> {
+  const database = getDb();
+  const normalized = contractAddress.toLowerCase();
+  
+  const result = await database
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(schema.contractEdits)
+    .where(
+      and(
+        eq(schema.contractEdits.contractAddress, normalized),
+        eq(schema.contractEdits.historianId, historianId)
+      )
+    )
+    .limit(1);
+  
+  return (result[0]?.count ?? 0) === 0;
+}
+
 export async function upsertHistoricalLinkFromDb(params: {
   id?: number | null;
   contractAddress: string;
