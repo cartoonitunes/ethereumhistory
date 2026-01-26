@@ -265,6 +265,45 @@ async function getWalletsForPersonFromDb(personAddress: string): Promise<Array<{
   return rows.map((r) => ({ address: r.address, label: r.label }));
 }
 
+/**
+ * Add a wallet address to a person's wallets if it doesn't already exist.
+ * If the address is the person's primary address, it's already in people table, so skip.
+ */
+export async function addWalletToPersonFromDb(
+  personAddress: string,
+  walletAddress: string,
+  label?: string | null
+): Promise<void> {
+  const database = getDb();
+  const normalizedPerson = personAddress.toLowerCase();
+  const normalizedWallet = walletAddress.toLowerCase();
+  
+  // Skip if this is the person's primary address (it's already in people table)
+  if (normalizedPerson === normalizedWallet) return;
+  
+  // Check if wallet already exists for this person
+  const existing = await database
+    .select()
+    .from(schema.peopleWallets)
+    .where(
+      and(
+        eq(schema.peopleWallets.address, normalizedWallet),
+        eq(schema.peopleWallets.personAddress, normalizedPerson)
+      )
+    )
+    .limit(1);
+  
+  if (existing[0]) return; // Already exists
+  
+  // Insert the wallet
+  await database.insert(schema.peopleWallets).values({
+    address: normalizedWallet,
+    personAddress: normalizedPerson,
+    label: label?.trim() || null,
+    createdAt: new Date(),
+  } as any);
+}
+
 export async function getPersonByAddressFromDb(address: string): Promise<AppPerson | null> {
   const database = getDb();
   const normalized = address.toLowerCase();
