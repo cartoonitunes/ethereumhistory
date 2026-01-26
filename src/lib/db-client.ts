@@ -654,16 +654,46 @@ export async function updateContractHistoryFieldsFromDb(
 ): Promise<void> {
   const database = getDb();
   const updates: Partial<schema.NewContract> = { updatedAt: new Date() };
-  if (patch.etherscanContractName !== undefined)
+  
+  // Track if any fields are being updated (not just updatedAt)
+  let hasFieldUpdates = false;
+  
+  if (patch.etherscanContractName !== undefined) {
     updates.etherscanContractName = patch.etherscanContractName;
-  if (patch.tokenName !== undefined) updates.tokenName = patch.tokenName;
-  if (patch.contractType !== undefined) updates.contractType = patch.contractType;
-  if (patch.shortDescription !== undefined) updates.shortDescription = patch.shortDescription;
-  if (patch.description !== undefined) updates.description = patch.description;
-  if (patch.historicalSummary !== undefined) updates.historicalSummary = patch.historicalSummary;
-  if (patch.historicalSignificance !== undefined) updates.historicalSignificance = patch.historicalSignificance;
-  if (patch.historicalContext !== undefined) updates.historicalContext = patch.historicalContext;
-  if (Object.keys(updates).length <= 1) return;
+    hasFieldUpdates = true;
+  }
+  if (patch.tokenName !== undefined) {
+    updates.tokenName = patch.tokenName;
+    hasFieldUpdates = true;
+  }
+  if (patch.contractType !== undefined) {
+    updates.contractType = patch.contractType;
+    hasFieldUpdates = true;
+  }
+  if (patch.shortDescription !== undefined) {
+    updates.shortDescription = patch.shortDescription;
+    hasFieldUpdates = true;
+  }
+  if (patch.description !== undefined) {
+    updates.description = patch.description;
+    hasFieldUpdates = true;
+  }
+  if (patch.historicalSummary !== undefined) {
+    updates.historicalSummary = patch.historicalSummary;
+    hasFieldUpdates = true;
+  }
+  if (patch.historicalSignificance !== undefined) {
+    updates.historicalSignificance = patch.historicalSignificance;
+    hasFieldUpdates = true;
+  }
+  if (patch.historicalContext !== undefined) {
+    updates.historicalContext = patch.historicalContext;
+    hasFieldUpdates = true;
+  }
+  
+  // Only update if there are actual field changes (beyond just updatedAt)
+  if (!hasFieldUpdates) return;
+  
   await database.update(schema.contracts).set(updates).where(eq(schema.contracts.address, address.toLowerCase()));
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -49,6 +50,7 @@ interface ContractPageClientProps {
 }
 
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "code" | "history">(
     "overview"
@@ -1075,7 +1077,9 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       });
       const json = await res.json();
       if (!res.ok || json?.error) {
-        setSaveError(String(json?.error || "Failed to save."));
+        const errorMsg = json?.error || `Failed to save (${res.status})`;
+        console.error("Save error:", errorMsg, json);
+        setSaveError(errorMsg);
         return;
       }
       const updated = json.data as ContractHistoryData;
@@ -1103,8 +1107,14 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
         }))
       );
       setEditMode(false);
-    } catch {
-      setSaveError("Failed to save.");
+      
+      // Refresh the page data to get updated contract fields from server
+      // This ensures tokenName and other contract fields are updated in the UI
+      // Use window.location.reload() since router is not available in this scope
+      window.location.reload();
+    } catch (error) {
+      console.error("Exception saving history:", error);
+      setSaveError(`Failed to save: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setSaving(false);
     }
