@@ -879,7 +879,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [showAddPerson, setShowAddPerson] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
-  const [newPersonAddress, setNewPersonAddress] = useState("");
   const [creatingPerson, setCreatingPerson] = useState(false);
 
   useEffect(() => {
@@ -909,7 +908,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     setSaveError(null);
     setShowAddPerson(false);
     setNewPersonName("");
-    setNewPersonAddress("");
   }, [contract.address]);
 
   useEffect(() => {
@@ -1002,14 +1000,14 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   );
 
   async function createNewPerson() {
-    if (!newPersonName.trim() || !newPersonAddress.trim()) return;
+    if (!newPersonName.trim() || !contract.deployerAddress) return;
     setCreatingPerson(true);
     try {
       const res = await fetch("/api/people", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          address: newPersonAddress.trim(),
+          address: contract.deployerAddress.toLowerCase(),
           name: newPersonName.trim(),
         }),
       });
@@ -1024,7 +1022,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       setDraftDeployerAddress(newPerson.address);
       setShowAddPerson(false);
       setNewPersonName("");
-      setNewPersonAddress("");
     } catch {
       setSaveError("Failed to create person.");
     } finally {
@@ -1204,23 +1201,20 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
               <div className="text-xs text-obsidian-500 mb-1">Deployer</div>
               {showAddPerson ? (
                 <div className="space-y-2 p-3 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
+                  <div className="text-xs text-obsidian-400 mb-1">
+                    Creating person for: <span className="font-mono">{formatAddress(contract.deployerAddress || "")}</span>
+                  </div>
                   <input
                     value={newPersonName}
                     onChange={(e) => setNewPersonName(e.target.value)}
                     className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
                     placeholder="Person name"
                   />
-                  <input
-                    value={newPersonAddress}
-                    onChange={(e) => setNewPersonAddress(e.target.value)}
-                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
-                    placeholder="Ethereum address (0x...)"
-                  />
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={createNewPerson}
-                      disabled={creatingPerson || !newPersonName.trim() || !newPersonAddress.trim()}
+                      disabled={creatingPerson || !newPersonName.trim() || !contract.deployerAddress}
                       className="px-3 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-sm text-white disabled:opacity-50"
                     >
                       {creatingPerson ? "Creating..." : "Create & Select"}
@@ -1230,7 +1224,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
                       onClick={() => {
                         setShowAddPerson(false);
                         setNewPersonName("");
-                        setNewPersonAddress("");
                       }}
                       className="px-3 py-1.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-sm text-obsidian-300"
                     >
@@ -1256,13 +1249,15 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
                       ))
                     )}
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddPerson(true)}
-                    className="text-xs text-ether-400 hover:text-ether-300"
-                  >
-                    + Add New Person
-                  </button>
+                  {contract.deployerAddress && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPerson(true)}
+                      className="text-xs text-ether-400 hover:text-ether-300"
+                    >
+                      + Add New Person for this Deployer
+                    </button>
+                  )}
                 </div>
               )}
             </div>
