@@ -5,7 +5,7 @@ import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 import {
   addWalletToPersonFromDb,
   deleteHistoricalLinksFromDb,
-  getContractFromDb,
+  getContractByAddress,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
   logContractEditFromDb,
@@ -59,7 +59,7 @@ export async function POST(
 
   try {
     // Get current contract's deployer address BEFORE updating (to add to person's wallets if needed)
-    const currentContract = await getContractFromDb(normalized);
+    const currentContract = await getContractByAddress(normalized);
     const currentDeployerAddress = currentContract?.deployerAddress?.toLowerCase() || null;
     
     await updateContractHistoryFieldsFromDb(normalized, {
