@@ -29,22 +29,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const metadataBase = getMetadataBaseUrl();
   const fallbackSocialImage =
-    "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eh_social_image.jpg?v=2";
+    "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eth_history_summary.jpg";
   const contract = await getContractWithTokenMetadata(address.toLowerCase());
   const tokenName = contract?.tokenName || null;
   const tokenSymbol = contract?.tokenSymbol || null;
   const tokenLogo = contract?.tokenLogo || null;
 
-  // Twitter/X is picky about image formats; SVGs and non-http(s) URLs often won't render in cards.
-  const imageUrl = (() => {
-    if (!tokenLogo) return null;
+  // For Twitter summary card, prioritize contract image if available, otherwise use fallback
+  const twitterImageUrl = (() => {
+    if (!tokenLogo) return fallbackSocialImage;
     const raw = String(tokenLogo).trim();
-    if (!raw) return null;
-    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return null;
+    if (!raw) return fallbackSocialImage;
+    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return fallbackSocialImage;
 
     const resolved = new URL(raw, metadataBase).toString();
     const lower = resolved.toLowerCase();
-    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return null;
+    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return fallbackSocialImage;
     return resolved;
   })();
 
@@ -56,10 +56,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = `${titlePrefix} - Ethereum History`;
   const description = tokenName
-    ? `Historical analysis of ${tokenName} on Ethereum (${address}). View bytecode, similar contracts, and historical context.`
-    : `Historical analysis of Ethereum contract ${address}. View bytecode, similar contracts, and historical context.`;
+    ? `Historical analysis of ${tokenName} on Ethereum (${address}).`
+    : `Historical analysis of Ethereum contract ${address}.`;
 
-  const socialImage = imageUrl || fallbackSocialImage;
+  // For OpenGraph, we can still use token logo if available (for other platforms)
+  // Twitter/X is picky about image formats; SVGs and non-http(s) URLs often won't render in cards.
+  const ogImageUrl = (() => {
+    if (!tokenLogo) return null;
+    const raw = String(tokenLogo).trim();
+    if (!raw) return null;
+    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return null;
+
+    const resolved = new URL(raw, metadataBase).toString();
+    const lower = resolved.toLowerCase();
+    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return null;
+    return resolved;
+  })();
+
+  const ogSocialImage = ogImageUrl || fallbackSocialImage;
 
   return {
     metadataBase,
@@ -74,15 +88,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       siteName: "Ethereum History",
       url: new URL(`/contract/${address}`, metadataBase).toString(),
       images: [
-        imageUrl
+        ogImageUrl
           ? {
-              url: socialImage,
+              url: ogSocialImage,
               alt: tokenName ? `${tokenName} logo` : "Token logo",
-              width: 512,
-              height: 512,
+              width: 1200,
+              height: 630,
+              type: "image/jpeg",
             }
           : {
-              url: socialImage,
+              url: ogSocialImage,
               alt: "Ethereum History",
               width: 1200,
               height: 630,
@@ -91,12 +106,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title,
       description: tokenName
         ? `Historical analysis of ${tokenName} on Ethereum.`
         : `Historical analysis of Ethereum contract ${address}.`,
-      images: [socialImage],
+      // For summary card, use contract image if available, otherwise fallback
+      images: [twitterImageUrl],
     },
   };
 }
