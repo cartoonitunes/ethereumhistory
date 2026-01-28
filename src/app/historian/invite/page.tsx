@@ -27,8 +27,6 @@ export default function InviteHistorianPage() {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   // Form state
-  const [invitedEmail, setInvitedEmail] = useState("");
-  const [invitedName, setInvitedName] = useState("");
   const [notes, setNotes] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +86,6 @@ export default function InviteHistorianPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!invitedEmail.trim()) return;
     
     setCreating(true);
     setError(null);
@@ -99,8 +96,6 @@ export default function InviteHistorianPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          invitedEmail: invitedEmail.trim(),
-          invitedName: invitedName.trim() || null,
           notes: notes.trim() || null,
         }),
       });
@@ -112,8 +107,6 @@ export default function InviteHistorianPage() {
       }
       
       setNewInviteUrl(json.data.inviteUrl);
-      setInvitedEmail("");
-      setInvitedName("");
       setNotes("");
       await loadInvitations();
     } catch {
@@ -170,35 +163,10 @@ export default function InviteHistorianPage() {
 
         <h1 className="text-3xl font-bold mb-2">Invite a Historian</h1>
         <p className="text-obsidian-400 mb-8">
-          Create an invitation link to invite someone to become a historian. They will start as untrusted and can earn trusted status after 30 edits.
+          Create a shareable invitation link. The invitee will provide their own email and name when accepting. They will start as untrusted and can earn trusted status after 30 edits.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4 mb-12">
-          <div>
-            <label className="block text-sm text-obsidian-400 mb-1">Email *</label>
-            <input
-              type="email"
-              value={invitedEmail}
-              onChange={(e) => setInvitedEmail(e.target.value)}
-              required
-              className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
-              placeholder="historian@example.com"
-              disabled={creating}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-obsidian-400 mb-1">Name (optional)</label>
-            <input
-              type="text"
-              value={invitedName}
-              onChange={(e) => setInvitedName(e.target.value)}
-              className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
-              placeholder="Their name"
-              disabled={creating}
-            />
-          </div>
-
           <div>
             <label className="block text-sm text-obsidian-400 mb-1">Notes (optional)</label>
             <textarea
@@ -206,7 +174,7 @@ export default function InviteHistorianPage() {
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
-              placeholder="Optional message or notes"
+              placeholder="Optional message or notes for the invitee"
               disabled={creating}
             />
           </div>
@@ -240,7 +208,7 @@ export default function InviteHistorianPage() {
 
           <button
             type="submit"
-            disabled={creating || !invitedEmail.trim()}
+            disabled={creating}
             className="w-full rounded-lg bg-ether-600 hover:bg-ether-500 transition-colors px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating ? (
@@ -275,7 +243,9 @@ export default function InviteHistorianPage() {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-sm">{inv.invitedEmail}</span>
+                          <span className="font-medium text-sm">
+                            {inv.invitedEmail || "Generic invitation"}
+                          </span>
                           <span
                             className={`px-2 py-0.5 rounded text-xs ${
                               status === "accepted"
@@ -290,6 +260,9 @@ export default function InviteHistorianPage() {
                         </div>
                         {inv.invitedName && (
                           <p className="text-xs text-obsidian-500">{inv.invitedName}</p>
+                        )}
+                        {inv.notes && (
+                          <p className="text-xs text-obsidian-500 italic">{inv.notes}</p>
                         )}
                         <p className="text-xs text-obsidian-500 mt-1">
                           Created {new Date(inv.createdAt).toLocaleDateString()}

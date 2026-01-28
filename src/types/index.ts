@@ -426,7 +426,7 @@ export interface HistorianInvitation {
   inviterId: number;
   inviteeId: number | null;
   inviteToken: string;
-  invitedEmail: string;
+  invitedEmail: string | null; // Optional - can be filled by invitee
   invitedName: string | null;
   createdAt: string;
   acceptedAt: string | null;

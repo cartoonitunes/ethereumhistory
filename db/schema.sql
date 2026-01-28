@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS historian_invitations (
   inviter_id INTEGER NOT NULL REFERENCES historians(id) ON DELETE CASCADE,
   invitee_id INTEGER REFERENCES historians(id) ON DELETE SET NULL,
   invite_token TEXT NOT NULL UNIQUE,
-  invited_email TEXT NOT NULL,
+  invited_email TEXT,
   invited_name TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   accepted_at TIMESTAMP,

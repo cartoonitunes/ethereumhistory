@@ -36,8 +36,9 @@ function InviteAcceptInner({ params }: InviteAcceptPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [invitation, setInvitation] = useState<{
     id: number;
-    invitedEmail: string;
+    invitedEmail: string | null;
     invitedName: string | null;
+    notes: string | null;
   } | null>(null);
 
   // Form state
@@ -72,7 +73,7 @@ function InviteAcceptInner({ params }: InviteAcceptPageProps) {
         
         const inv = json.data.invitation;
         setInvitation(inv);
-        setEmail(inv.invitedEmail);
+        setEmail(inv.invitedEmail || "");
         setName(inv.invitedName || "");
       } catch {
         setError("Failed to validate invitation.");
@@ -164,9 +165,15 @@ function InviteAcceptInner({ params }: InviteAcceptPageProps) {
         </Link>
 
         <h1 className="text-2xl font-bold mb-2">Accept Invitation</h1>
-        <p className="text-sm text-obsidian-500 mb-8">
-          You've been invited to become a historian. Create your account below.
+        <p className="text-sm text-obsidian-500 mb-4">
+          You've been invited to become a historian. Please provide your information below to create your account.
         </p>
+        
+        {invitation?.notes && (
+          <div className="mb-6 p-4 rounded-lg bg-ether-500/10 border border-ether-500/30">
+            <p className="text-sm text-ether-300">{invitation.notes}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
