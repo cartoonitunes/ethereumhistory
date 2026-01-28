@@ -52,9 +52,29 @@ interface ContractPageClientProps {
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [me, setMe] = useState<HistorianMe | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "code" | "history">(
     "overview"
   );
+
+  // Load historian status for header
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMe() {
+      try {
+        const res = await fetch("/api/historian/me");
+        const json = await res.json();
+        if (cancelled) return;
+        setMe((json?.data as HistorianMe) || null);
+      } catch {
+        if (!cancelled) setMe(null);
+      }
+    }
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleCopy = async () => {
     const success = await copyToClipboard(address);
@@ -155,7 +175,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
 
   return (
     <div className="min-h-screen">
-      <Header />
+      <Header showHistorianLogin={!me} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Back link */}
