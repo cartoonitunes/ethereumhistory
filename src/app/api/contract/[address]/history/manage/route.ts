@@ -8,7 +8,9 @@ import {
   getContractByAddress,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
+  isFirstContractDocumentation,
   logContractEditFromDb,
+  sendContractDocumentationEvent,
   updateContractEtherscanEnrichmentFromDb,
   updateContractHistoryFieldsFromDb,
   updateContractTokenLogoFromDb,
@@ -143,11 +145,30 @@ export async function POST(
 
     // Log the edit if any fields were changed
     if (fieldsChanged.length > 0) {
+      // Check if this is the first documentation BEFORE logging the edit
+      const isFirstDoc = await isFirstContractDocumentation(normalized);
+      
       await logContractEditFromDb({
         contractAddress: normalized,
         historianId: me.id,
         fieldsChanged,
       });
+
+      // If this is the first documentation, send event to social media bot (async, don't block)
+      if (isFirstDoc) {
+        // Fetch the updated contract to get all fields
+        const updatedContract = await getContractByAddress(normalized);
+        if (updatedContract) {
+          // Check if contract has a name (required for posting)
+          const hasName = updatedContract.etherscanContractName || updatedContract.tokenName;
+          if (hasName) {
+            // Run asynchronously - don't block the API response
+            sendContractDocumentationEvent(updatedContract).catch((error) => {
+              console.error("[social-media-bot] Error sending contract documentation event:", error);
+            });
+          }
+        }
+      }
     }
 
     for (const l of links) {

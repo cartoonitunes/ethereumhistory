@@ -1000,6 +1000,72 @@ export async function isFirstEditFromDb(
   return (result[0]?.count ?? 0) === 0;
 }
 
+/**
+ * Check if a contract has been documented for the first time.
+ * Returns true if there are no previous contract_edits for this contract address.
+ */
+export async function isFirstContractDocumentation(
+  contractAddress: string
+): Promise<boolean> {
+  const database = getDb();
+  const normalized = contractAddress.toLowerCase();
+  
+  const result = await database
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(schema.contractEdits)
+    .where(eq(schema.contractEdits.contractAddress, normalized))
+    .limit(1);
+  
+  return (result[0]?.count ?? 0) === 0;
+}
+
+/**
+ * Send contract documentation event to social media bot service.
+ * This is called when a contract is documented for the first time.
+ */
+export async function sendContractDocumentationEvent(
+  contract: AppContract
+): Promise<void> {
+  const socialMediaBotUrl = process.env.SOCIAL_MEDIA_BOT_URL;
+  if (!socialMediaBotUrl) {
+    console.warn("[social-media-bot] SOCIAL_MEDIA_BOT_URL not configured, skipping event");
+    return;
+  }
+
+  // Only send if contract has a name (etherscanContractName or tokenName)
+  const contractName = contract.etherscanContractName || contract.tokenName;
+  if (!contractName) {
+    return;
+  }
+
+  const contractUrl = `https://ethereumhistory.com/contract/${contract.address}`;
+
+  try {
+    const response = await fetch(`${socialMediaBotUrl}/contractdocumentation`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contract_address: contract.address,
+        contract_name: contractName,
+        deployment_timestamp: contract.deploymentTimestamp || null,
+        short_description: contract.shortDescription || null,
+        contract_url: contractUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(
+        `[social-media-bot] Failed to send contract documentation event: ${response.status} ${response.statusText}`
+      );
+    }
+  } catch (error) {
+    // Log but don't throw - this is a background notification
+    console.error("[social-media-bot] Error sending contract documentation event:", error);
+  }
+}
+
 export async function upsertHistoricalLinkFromDb(params: {
   id?: number | null;
   contractAddress: string;
