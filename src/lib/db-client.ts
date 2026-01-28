@@ -42,7 +42,7 @@ function isPoolerUrl(dbUrl: string): boolean {
   }
 }
 
-function getDb() {
+export function getDb() {
   if (!db) {
     const dbUrl = getDatabaseUrl();
     if (!dbUrl) {

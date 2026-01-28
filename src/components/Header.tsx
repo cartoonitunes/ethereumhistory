@@ -1,17 +1,53 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn } from "lucide-react";
+import { LogIn, UserPlus, User } from "lucide-react";
+import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
   showHistorianLogin?: boolean;
+  historianMe?: HistorianMe | null;
 }
 
-export function Header({ showHistorianLogin = false }: HeaderProps) {
+export function Header({ showHistorianLogin = false, historianMe: propHistorianMe }: HeaderProps) {
   const pathname = usePathname();
   const loginUrl = `/historian/login?next=${encodeURIComponent(pathname || "/")}`;
+  
+  // If not provided as prop, fetch it
+  const [me, setMe] = useState<HistorianMe | null>(propHistorianMe ?? null);
+  const [loadingMe, setLoadingMe] = useState(propHistorianMe === undefined);
+  
+  useEffect(() => {
+    if (propHistorianMe !== undefined) {
+      setMe(propHistorianMe);
+      setLoadingMe(false);
+      return;
+    }
+    
+    let cancelled = false;
+    async function loadMe() {
+      try {
+        const res = await fetch("/api/historian/me");
+        const json = await res.json();
+        if (cancelled) return;
+        setMe((json?.data as HistorianMe) || null);
+      } catch {
+        if (!cancelled) setMe(null);
+      } finally {
+        if (!cancelled) setLoadingMe(false);
+      }
+    }
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, [propHistorianMe]);
+  
+  // Only show login button if we're sure user is not logged in (not loading and me is null)
+  const shouldShowLogin = showHistorianLogin && !loadingMe && !me;
 
   return (
     <motion.header
@@ -68,23 +104,44 @@ export function Header({ showHistorianLogin = false }: HeaderProps) {
             </a>
           </nav>
 
-          {/* Search hint or Historian Login button */}
-          {showHistorianLogin ? (
-            <Link
-              href={loginUrl}
-              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
-            >
-              <LogIn className="w-4 h-4" />
-              Historian Login
-            </Link>
-          ) : (
-            <div className="hidden sm:flex items-center gap-2 text-obsidian-500 text-sm">
-              <kbd className="px-2 py-1 rounded bg-obsidian-800 text-obsidian-400 text-xs font-mono">
-                0x...
-              </kbd>
-              <span>to search</span>
-            </div>
-          )}
+          {/* Right side: Profile (if logged in), Invite link (trusted), Login button, or Search hint */}
+          <div className="hidden sm:flex items-center gap-3">
+            {me ? (
+              <>
+                {me.trusted && (
+                  <Link
+                    href="/historian/invite"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Invite
+                  </Link>
+                )}
+                <Link
+                  href="/historian/profile"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors"
+                >
+                  <User className="w-4 h-4" />
+                  {me.name}
+                </Link>
+              </>
+            ) : shouldShowLogin ? (
+              <Link
+                href={loginUrl}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                Historian Login
+              </Link>
+            ) : (
+              <div className="flex items-center gap-2 text-obsidian-500 text-sm">
+                <kbd className="px-2 py-1 rounded bg-obsidian-800 text-obsidian-400 text-xs font-mono">
+                  0x...
+                </kbd>
+                <span>to search</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </motion.header>
