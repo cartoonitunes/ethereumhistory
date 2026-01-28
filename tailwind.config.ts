@@ -9,6 +9,156 @@ const config: Config = {
   darkMode: "class",
   theme: {
     extend: {
+      typography: {
+        DEFAULT: {
+          css: {
+            color: "#b8b8c1", // obsidian-300
+            maxWidth: "none",
+            a: {
+              color: "#8093f8", // ether-400
+              "&:hover": {
+                color: "#a4b8fc", // ether-300
+              },
+            },
+            code: {
+              color: "#d9d9de", // obsidian-200
+              backgroundColor: "#18181b", // obsidian-950/50
+              padding: "0.125rem 0.25rem",
+              borderRadius: "0.25rem",
+              fontWeight: "400",
+            },
+            "code::before": {
+              content: '""',
+            },
+            "code::after": {
+              content: '""',
+            },
+            pre: {
+              backgroundColor: "#0d0d0e",
+              color: "#d9d9de",
+              border: "1px solid #27272a",
+            },
+            "pre code": {
+              backgroundColor: "transparent",
+              padding: "0",
+            },
+            h1: {
+              color: "#b8b8c1", // obsidian-300
+              fontSize: "1.125rem", // text-lg
+              fontWeight: "500",
+              marginTop: "1.5rem",
+              marginBottom: "0.5rem",
+            },
+            h2: {
+              color: "#b8b8c1", // obsidian-300
+              fontSize: "1rem", // text-base
+              fontWeight: "500",
+              marginTop: "1.5rem",
+              marginBottom: "0.5rem",
+            },
+            h3: {
+              color: "#b8b8c1", // obsidian-300
+              fontSize: "0.875rem", // text-sm
+              fontWeight: "500",
+              marginTop: "1.5rem",
+              marginBottom: "0.5rem",
+            },
+            h4: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              marginTop: "1.25rem",
+              marginBottom: "0.5rem",
+            },
+            h5: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              marginTop: "1rem",
+              marginBottom: "0.5rem",
+            },
+            h6: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              marginTop: "1rem",
+              marginBottom: "0.5rem",
+            },
+            p: {
+              color: "#b8b8c1", // obsidian-300
+              lineHeight: "1.75", // leading-relaxed
+              marginBottom: "1rem", // mb-4
+            },
+            ul: {
+              marginTop: "0.5rem",
+              marginBottom: "1rem",
+            },
+            ol: {
+              marginTop: "0.5rem",
+              marginBottom: "1rem",
+            },
+            li: {
+              marginTop: "0.25rem",
+              marginBottom: "0.25rem",
+            },
+            strong: {
+              color: "#b8b8c1",
+              fontWeight: "600",
+            },
+            em: {
+              color: "#b8b8c1",
+            },
+            blockquote: {
+              color: "#91919f", // obsidian-400
+              borderLeftColor: "#41414a", // obsidian-800
+            },
+          },
+        },
+        invert: {
+          css: {
+            color: "#b8b8c1", // obsidian-300
+            a: {
+              color: "#8093f8", // ether-400
+              "&:hover": {
+                color: "#a4b8fc", // ether-300
+              },
+            },
+            code: {
+              color: "#d9d9de", // obsidian-200
+              backgroundColor: "#18181b", // obsidian-950/50
+            },
+            h1: {
+              color: "#b8b8c1",
+              fontSize: "1.125rem",
+            },
+            h2: {
+              color: "#b8b8c1",
+              fontSize: "1rem",
+            },
+            h3: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+            },
+            h4: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+            },
+            h5: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+            },
+            h6: {
+              color: "#b8b8c1",
+              fontSize: "0.875rem",
+            },
+            p: {
+              color: "#b8b8c1",
+              lineHeight: "1.75",
+              marginBottom: "1rem",
+            },
+          },
+        },
+      },
       colors: {
         // Archive-inspired dark palette
         obsidian: {
@@ -72,6 +222,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [require("@tailwindcss/typography")],
 };
 export default config;
