@@ -119,12 +119,15 @@ CREATE TABLE IF NOT EXISTS historians (
   name TEXT NOT NULL,
   token_hash TEXT,
   active BOOLEAN NOT NULL DEFAULT TRUE,
+  trusted BOOLEAN NOT NULL DEFAULT FALSE,
+  trusted_override BOOLEAN DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS historians_email_unique ON historians (email);
 CREATE INDEX IF NOT EXISTS historians_active_idx ON historians (active);
+CREATE INDEX IF NOT EXISTS historians_trusted_idx ON historians (trusted);
 
 -- =============================================================================
 -- historical_links
@@ -206,4 +209,26 @@ CREATE TABLE IF NOT EXISTS people_wallets (
 );
 
 CREATE INDEX IF NOT EXISTS people_wallets_person_idx ON people_wallets (person_address);
+
+-- =============================================================================
+-- historian_invitations
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS historian_invitations (
+  id SERIAL PRIMARY KEY,
+  inviter_id INTEGER NOT NULL REFERENCES historians(id) ON DELETE CASCADE,
+  invitee_id INTEGER REFERENCES historians(id) ON DELETE SET NULL,
+  invite_token TEXT NOT NULL UNIQUE,
+  invited_email TEXT NOT NULL,
+  invited_name TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted_at TIMESTAMP,
+  expires_at TIMESTAMP,
+  notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS historian_invitations_token_idx ON historian_invitations (invite_token);
+CREATE INDEX IF NOT EXISTS historian_invitations_inviter_idx ON historian_invitations (inviter_id);
+CREATE INDEX IF NOT EXISTS historian_invitations_invitee_idx ON historian_invitations (invitee_id);
+CREATE INDEX IF NOT EXISTS historian_invitations_expires_idx ON historian_invitations (expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS historian_invitations_token_unique ON historian_invitations (invite_token);
 

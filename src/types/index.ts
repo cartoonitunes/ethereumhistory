@@ -418,4 +418,18 @@ export interface HistorianMe {
   email: string;
   name: string;
   active: boolean;
+  trusted: boolean;
+}
+
+export interface HistorianInvitation {
+  id: number;
+  inviterId: number;
+  inviteeId: number | null;
+  inviteToken: string;
+  invitedEmail: string;
+  invitedName: string | null;
+  createdAt: string;
+  acceptedAt: string | null;
+  expiresAt: string | null;
+  notes: string | null;
 }

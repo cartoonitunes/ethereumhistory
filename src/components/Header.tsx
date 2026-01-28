@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
+import { LogIn } from "lucide-react";
 
-export function Header() {
+interface HeaderProps {
+  showHistorianLogin?: boolean;
+}
+
+export function Header({ showHistorianLogin = false }: HeaderProps) {
+  const pathname = usePathname();
+  const loginUrl = `/historian/login?next=${encodeURIComponent(pathname || "/")}`;
+
   return (
     <motion.header
       initial={{ opacity: 0, y: -10 }}
@@ -59,13 +68,23 @@ export function Header() {
             </a>
           </nav>
 
-          {/* Search hint */}
-          <div className="hidden sm:flex items-center gap-2 text-obsidian-500 text-sm">
-            <kbd className="px-2 py-1 rounded bg-obsidian-800 text-obsidian-400 text-xs font-mono">
-              0x...
-            </kbd>
-            <span>to search</span>
-          </div>
+          {/* Search hint or Historian Login button */}
+          {showHistorianLogin ? (
+            <Link
+              href={loginUrl}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
+            >
+              <LogIn className="w-4 h-4" />
+              Historian Login
+            </Link>
+          ) : (
+            <div className="hidden sm:flex items-center gap-2 text-obsidian-500 text-sm">
+              <kbd className="px-2 py-1 rounded bg-obsidian-800 text-obsidian-400 text-xs font-mono">
+                0x...
+              </kbd>
+              <span>to search</span>
+            </div>
+          )}
         </div>
       </div>
     </motion.header>

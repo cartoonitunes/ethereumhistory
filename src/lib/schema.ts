@@ -181,12 +181,15 @@ export const historians = pgTable(
     name: text("name").notNull(),
     tokenHash: text("token_hash"),
     active: boolean("active").notNull().default(true),
+    trusted: boolean("trusted").notNull().default(false),
+    trustedOverride: boolean("trusted_override"), // NULL = auto, TRUE/FALSE = manual
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => ({
     emailUnique: uniqueIndex("historians_email_unique").on(table.email),
     activeIdx: index("historians_active_idx").on(table.active),
+    trustedIdx: index("historians_trusted_idx").on(table.trusted),
   })
 );
 
@@ -298,3 +301,35 @@ export type Historian = typeof historians.$inferSelect;
 export type NewHistorian = typeof historians.$inferInsert;
 export type ContractEdit = typeof contractEdits.$inferSelect;
 export type NewContractEdit = typeof contractEdits.$inferInsert;
+
+// =============================================================================
+// Historian Invitations
+// =============================================================================
+
+export const historianInvitations = pgTable(
+  "historian_invitations",
+  {
+    id: serial("id").primaryKey(),
+    inviterId: integer("inviter_id")
+      .notNull()
+      .references(() => historians.id, { onDelete: "cascade" }),
+    inviteeId: integer("invitee_id").references(() => historians.id, { onDelete: "set null" }),
+    inviteToken: text("invite_token").notNull(),
+    invitedEmail: text("invited_email").notNull(),
+    invitedName: text("invited_name"),
+    createdAt: timestamp("created_at").defaultNow(),
+    acceptedAt: timestamp("accepted_at"),
+    expiresAt: timestamp("expires_at"),
+    notes: text("notes"),
+  },
+  (table) => ({
+    tokenIdx: index("historian_invitations_token_idx").on(table.inviteToken),
+    inviterIdx: index("historian_invitations_inviter_idx").on(table.inviterId),
+    inviteeIdx: index("historian_invitations_invitee_idx").on(table.inviteeId),
+    expiresIdx: index("historian_invitations_expires_idx").on(table.expiresAt),
+    tokenUnique: uniqueIndex("historian_invitations_token_unique").on(table.inviteToken),
+  })
+);
+
+export type HistorianInvitation = typeof historianInvitations.$inferSelect;
+export type NewHistorianInvitation = typeof historianInvitations.$inferInsert;
