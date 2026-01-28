@@ -26,6 +26,8 @@ import { AddressSearch } from "@/components/AddressSearch";
 import { EraCompact } from "@/components/EraTimeline";
 import { SimilarityTable, SimilarityDetail } from "@/components/SimilarityTable";
 import { BytecodeViewer } from "@/components/BytecodeViewer";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import {
   formatAddress,
   formatDate,
@@ -625,7 +627,7 @@ function OverviewTab({
         {contract.historicalSummary && (
           <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
             <h2 className="text-lg font-semibold mb-4">Historical Summary</h2>
-            <p className="text-obsidian-300 leading-relaxed">{contract.historicalSummary}</p>
+            <MarkdownRenderer content={contract.historicalSummary} />
           </section>
         )}
       </div>
@@ -1316,11 +1318,11 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             </div>
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Description</div>
-              <textarea
+              <MarkdownEditor
                 value={draftDescription}
-                onChange={(e) => setDraftDescription(e.target.value)}
-                className="w-full min-h-[120px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                onChange={setDraftDescription}
                 placeholder="Longer description (overview / details)"
+                minHeight="120px"
               />
             </div>
             <div>
@@ -1337,29 +1339,29 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             </div>
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Summary</div>
-              <textarea
+              <MarkdownEditor
                 value={draftSummary}
-                onChange={(e) => setDraftSummary(e.target.value)}
-                className="w-full min-h-[120px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                onChange={setDraftSummary}
                 placeholder="What is this contract, historically?"
+                minHeight="120px"
               />
             </div>
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Historical Significance</div>
-              <textarea
+              <MarkdownEditor
                 value={draftSignificance}
-                onChange={(e) => setDraftSignificance(e.target.value)}
-                className="w-full min-h-[100px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                onChange={setDraftSignificance}
                 placeholder="Why does it matter?"
+                minHeight="100px"
               />
             </div>
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Context</div>
-              <textarea
+              <MarkdownEditor
                 value={draftContext}
-                onChange={(e) => setDraftContext(e.target.value)}
-                className="w-full min-h-[100px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                onChange={setDraftContext}
                 placeholder="What was happening around this time?"
+                minHeight="100px"
               />
             </div>
           </div>
@@ -1372,23 +1374,23 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             )}
 
             {savedDescription && (
-              <p className="text-obsidian-300 leading-relaxed mb-4">
-                {savedDescription}
-              </p>
+              <div className="mb-4">
+                <MarkdownRenderer content={savedDescription} />
+              </div>
             )}
 
-            <p className="text-obsidian-300 leading-relaxed mb-4">
-              {savedSummary}
-            </p>
+            {savedSummary && (
+              <div className="mb-4">
+                <MarkdownRenderer content={savedSummary} />
+              </div>
+            )}
 
             {savedSignificance && (
               <>
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
                   Historical Significance
                 </h3>
-                <p className="text-obsidian-300 leading-relaxed">
-                  {savedSignificance}
-                </p>
+                <MarkdownRenderer content={savedSignificance} />
               </>
             )}
 
@@ -1397,9 +1399,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
                   Context
                 </h3>
-                <p className="text-obsidian-300 leading-relaxed">
-                  {savedContext}
-                </p>
+                <MarkdownRenderer content={savedContext} />
               </>
             )}
           </div>
