@@ -46,7 +46,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       notes: notes || null,
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    // Use production domain for invitation links
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || "https://ethereumhistory.com";
     const inviteUrl = `${baseUrl}/historian/invite/${inviteToken}`;
 
     return NextResponse.json({

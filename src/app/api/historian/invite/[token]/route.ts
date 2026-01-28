@@ -14,7 +14,7 @@ interface RouteContext {
 export async function GET(
   request: NextRequest,
   { params }: RouteContext
-): Promise<NextResponse<ApiResponse<{ invitation: { id: number; invitedEmail: string | null; invitedName: string | null; expiresAt: string | null; notes: string | null } }>>> {
+): Promise<NextResponse<ApiResponse<{ invitation: { id: number; invitedEmail: string | null; invitedName: string | null; expiresAt: string | null; notes: string | null; inviterName: string } }>>> {
   const { token } = await params;
 
   if (!token || typeof token !== "string") {
@@ -58,6 +58,7 @@ export async function GET(
           invitedName: invitation.invitedName || null,
           expiresAt: invitation.expiresAt?.toISOString() || null,
           notes: invitation.notes || null,
+          inviterName: invitation.inviterName || "A historian",
         },
       },
       error: null,

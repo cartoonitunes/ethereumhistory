@@ -168,7 +168,7 @@ export default function InviteHistorianPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4 mb-12">
           <div>
-            <label className="block text-sm text-obsidian-400 mb-1">Notes (optional)</label>
+            <label className="block text-sm text-obsidian-400 mb-1">Welcome Note for Invitee (optional)</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
