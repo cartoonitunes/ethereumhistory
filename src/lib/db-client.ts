@@ -6,8 +6,9 @@
 
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne } from "drizzle-orm";
+import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne, isNull, lt } from "drizzle-orm";
 import * as schema from "./schema";
+import crypto from "crypto";
 import type {
   Contract as AppContract,
   ContractSimilarity,
@@ -632,7 +633,183 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
     email: row.email,
     name: row.name,
     active: row.active ?? true,
+    trusted: row.trusted ?? false,
   };
+}
+
+// =============================================================================
+// Historian Invitations
+// =============================================================================
+
+/**
+ * Create a new historian invitation
+ */
+export async function createHistorianInvitationFromDb(params: {
+  inviterId: number;
+  invitedEmail: string;
+  invitedName?: string | null;
+  notes?: string | null;
+  expiresInDays?: number;
+}): Promise<{ id: number; inviteToken: string }> {
+  const database = getDb();
+  const inviteToken = crypto.randomBytes(32).toString("hex");
+  const expiresInDays = params.expiresInDays ?? parseInt(process.env.HISTORIAN_INVITE_EXPIRY_DAYS || "30", 10);
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+  const [result] = await database
+    .insert(schema.historianInvitations)
+    .values({
+      inviterId: params.inviterId,
+      inviteToken,
+      invitedEmail: params.invitedEmail.trim().toLowerCase(),
+      invitedName: params.invitedName?.trim() || null,
+      notes: params.notes?.trim() || null,
+      expiresAt,
+      createdAt: new Date(),
+    })
+    .returning({ id: schema.historianInvitations.id, inviteToken: schema.historianInvitations.inviteToken });
+
+  return { id: result.id, inviteToken: result.inviteToken };
+}
+
+/**
+ * Get invitation by token (for validation and acceptance)
+ */
+export async function getHistorianInvitationByTokenFromDb(
+  token: string
+): Promise<schema.HistorianInvitation | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historianInvitations)
+    .where(eq(schema.historianInvitations.inviteToken, token))
+    .limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Accept an invitation and create a historian account
+ */
+export async function acceptHistorianInvitationFromDb(params: {
+  invitationId: number;
+  email: string;
+  name: string;
+  tokenHash: string;
+}): Promise<{ historianId: number }> {
+  const database = getDb();
+  
+  // Create the historian account
+  const [historian] = await database
+    .insert(schema.historians)
+    .values({
+      email: params.email.trim().toLowerCase(),
+      name: params.name.trim(),
+      tokenHash: params.tokenHash,
+      active: true,
+      trusted: false, // Invitees start untrusted
+      trustedOverride: null, // Auto-managed
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning({ id: schema.historians.id });
+
+  // Update the invitation to mark it as accepted
+  await database
+    .update(schema.historianInvitations)
+    .set({
+      inviteeId: historian.id,
+      acceptedAt: new Date(),
+    })
+    .where(eq(schema.historianInvitations.id, params.invitationId));
+
+  return { historianId: historian.id };
+}
+
+/**
+ * Get all invitations created by a historian
+ */
+export async function getHistorianInvitationsByInviterFromDb(
+  inviterId: number
+): Promise<schema.HistorianInvitation[]> {
+  const database = getDb();
+  return await database
+    .select()
+    .from(schema.historianInvitations)
+    .where(eq(schema.historianInvitations.inviterId, inviterId))
+    .orderBy(desc(schema.historianInvitations.createdAt));
+}
+
+// =============================================================================
+// Auto-Trust System
+// =============================================================================
+
+/**
+ * Get total edit count for a historian
+ */
+export async function getEditCountForHistorianFromDb(historianId: number): Promise<number> {
+  const database = getDb();
+  const result = await database
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(schema.contractEdits)
+    .where(eq(schema.contractEdits.historianId, historianId));
+  return result[0]?.count || 0;
+}
+
+/**
+ * Check and promote historian to trusted status if they have 30+ edits
+ * Returns true if promoted, false otherwise
+ */
+export async function checkAndPromoteTrustedStatusFromDb(historianId: number): Promise<boolean> {
+  const database = getDb();
+  
+  // Get current historian status
+  const historian = await getHistorianByIdFromDb(historianId);
+  if (!historian) return false;
+  
+  // If already trusted, no need to check
+  if (historian.trusted) return false;
+  
+  // If manually overridden to untrusted, don't auto-promote
+  if (historian.trustedOverride === false) return false;
+  
+  // Count edits
+  const editCount = await getEditCountForHistorianFromDb(historianId);
+  
+  // If >= 30 edits and not manually blocked, promote
+  // At this point, trustedOverride is either null (auto) or true (manual trusted)
+  if (editCount >= 30) {
+    await database
+      .update(schema.historians)
+      .set({
+        trusted: true,
+        trustedOverride: null, // Keep as auto-managed
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.historians.id, historianId));
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Update historian trusted status (for manual override)
+ */
+export async function updateHistorianTrustedStatusFromDb(params: {
+  historianId: number;
+  trusted: boolean;
+  trustedOverride: boolean | null; // null = auto, true/false = manual
+}): Promise<void> {
+  const database = getDb();
+  await database
+    .update(schema.historians)
+    .set({
+      trusted: params.trusted,
+      trustedOverride: params.trustedOverride,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.historians.id, params.historianId));
 }
 
 // =============================================================================
@@ -718,6 +895,13 @@ export async function logContractEditFromDb(params: {
     editedAt: new Date(),
     fieldsChanged: params.fieldsChanged,
   } as any);
+  
+  // Check and promote to trusted status if they've reached 30 edits
+  // This runs asynchronously and won't block the edit logging
+  checkAndPromoteTrustedStatusFromDb(params.historianId).catch((error) => {
+    console.error("Error checking auto-trust promotion:", error);
+    // Don't throw - this is a background check
+  });
 }
 
 /**
