@@ -60,7 +60,7 @@ export async function GET(
         },
       },
       error: null,
-      meta: { timestamp: new Date().toISOString() },
+      meta: { timestamp: new Date().toISOString(), cached: false },
     });
   } catch (error) {
     console.error("Error validating invitation:", error);
@@ -113,9 +113,9 @@ export async function POST(
     const body = await request.json().catch(() => null);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const name = typeof body?.name === "string" ? body.name.trim() : "";
-    const token = typeof body?.token === "string" ? body.token.trim() : "";
+    const passwordToken = typeof body?.token === "string" ? body.token.trim() : "";
 
-    if (!email || !name || !token) {
+    if (!email || !name || !passwordToken) {
       return NextResponse.json(
         { data: null, error: "Email, name, and token are required." },
         { status: 400 }
@@ -154,7 +154,7 @@ export async function POST(
     return NextResponse.json({
       data: { historianId },
       error: null,
-      meta: { timestamp: new Date().toISOString() },
+      meta: { timestamp: new Date().toISOString(), cached: false },
     });
   } catch (error) {
     console.error("Error accepting invitation:", error);
