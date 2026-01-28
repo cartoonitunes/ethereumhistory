@@ -24,29 +24,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
   try {
     const body = await request.json().catch(() => null);
-    const invitedEmail = typeof body?.invitedEmail === "string" ? body.invitedEmail.trim() : "";
+    const invitedEmail = typeof body?.invitedEmail === "string" ? body.invitedEmail.trim() : null;
     const invitedName = typeof body?.invitedName === "string" ? body.invitedName.trim() : null;
     const notes = typeof body?.notes === "string" ? body.notes.trim() : null;
 
-    if (!invitedEmail) {
-      return NextResponse.json(
-        { data: null, error: "Email is required." },
-        { status: 400 }
-      );
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(invitedEmail)) {
-      return NextResponse.json(
-        { data: null, error: "Invalid email format." },
-        { status: 400 }
-      );
+    // If email is provided, validate it
+    if (invitedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(invitedEmail)) {
+        return NextResponse.json(
+          { data: null, error: "Invalid email format." },
+          { status: 400 }
+        );
+      }
     }
 
     const { inviteToken } = await createHistorianInvitationFromDb({
       inviterId: me.id,
-      invitedEmail,
+      invitedEmail: invitedEmail || null,
       invitedName: invitedName || null,
       notes: notes || null,
     });
@@ -68,7 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
   }
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Array<{ id: number; inviteToken: string; invitedEmail: string; invitedName: string | null; createdAt: string; acceptedAt: string | null; expiresAt: string | null; notes: string | null }>>>> {
+export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<Array<{ id: number; inviteToken: string; invitedEmail: string | null; invitedName: string | null; createdAt: string; acceptedAt: string | null; expiresAt: string | null; notes: string | null }>>>> {
   const me = await getHistorianMeFromCookies();
   if (!me || !me.active) {
     return NextResponse.json(

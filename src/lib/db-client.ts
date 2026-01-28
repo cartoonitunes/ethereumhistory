@@ -646,7 +646,7 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
  */
 export async function createHistorianInvitationFromDb(params: {
   inviterId: number;
-  invitedEmail: string;
+  invitedEmail?: string | null;
   invitedName?: string | null;
   notes?: string | null;
   expiresInDays?: number;
@@ -662,7 +662,7 @@ export async function createHistorianInvitationFromDb(params: {
     .values({
       inviterId: params.inviterId,
       inviteToken,
-      invitedEmail: params.invitedEmail.trim().toLowerCase(),
+      invitedEmail: params.invitedEmail ? params.invitedEmail.trim().toLowerCase() : null,
       invitedName: params.invitedName?.trim() || null,
       notes: params.notes?.trim() || null,
       expiresAt,

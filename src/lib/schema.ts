@@ -315,7 +315,7 @@ export const historianInvitations = pgTable(
       .references(() => historians.id, { onDelete: "cascade" }),
     inviteeId: integer("invitee_id").references(() => historians.id, { onDelete: "set null" }),
     inviteToken: text("invite_token").notNull(),
-    invitedEmail: text("invited_email").notNull(),
+    invitedEmail: text("invited_email"), // Optional - can be filled by invitee
     invitedName: text("invited_name"),
     createdAt: timestamp("created_at").defaultNow(),
     acceptedAt: timestamp("accepted_at"),
