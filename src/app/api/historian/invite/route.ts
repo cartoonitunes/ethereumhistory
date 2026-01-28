@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     return NextResponse.json({
       data: { inviteToken, inviteUrl },
       error: null,
-      meta: { timestamp: new Date().toISOString() },
+      meta: { timestamp: new Date().toISOString(), cached: false },
     });
   } catch (error) {
     console.error("Error creating invitation:", error);
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     return NextResponse.json({
       data: formatted,
       error: null,
-      meta: { timestamp: new Date().toISOString() },
+      meta: { timestamp: new Date().toISOString(), cached: false },
     });
   } catch (error) {
     console.error("Error fetching invitations:", error);
