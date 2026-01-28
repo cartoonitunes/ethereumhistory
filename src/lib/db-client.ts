@@ -675,17 +675,47 @@ export async function createHistorianInvitationFromDb(params: {
 
 /**
  * Get invitation by token (for validation and acceptance)
+ * Returns invitation with inviter's name
  */
 export async function getHistorianInvitationByTokenFromDb(
   token: string
-): Promise<schema.HistorianInvitation | null> {
+): Promise<(schema.HistorianInvitation & { inviterName?: string }) | null> {
   const database = getDb();
   const rows = await database
-    .select()
+    .select({
+      id: schema.historianInvitations.id,
+      inviterId: schema.historianInvitations.inviterId,
+      inviteeId: schema.historianInvitations.inviteeId,
+      inviteToken: schema.historianInvitations.inviteToken,
+      invitedEmail: schema.historianInvitations.invitedEmail,
+      invitedName: schema.historianInvitations.invitedName,
+      createdAt: schema.historianInvitations.createdAt,
+      acceptedAt: schema.historianInvitations.acceptedAt,
+      expiresAt: schema.historianInvitations.expiresAt,
+      notes: schema.historianInvitations.notes,
+      inviterName: schema.historians.name,
+    })
     .from(schema.historianInvitations)
+    .innerJoin(schema.historians, eq(schema.historianInvitations.inviterId, schema.historians.id))
     .where(eq(schema.historianInvitations.inviteToken, token))
     .limit(1);
-  return rows[0] || null;
+  
+  if (!rows[0]) return null;
+  
+  const row = rows[0];
+  return {
+    id: row.id,
+    inviterId: row.inviterId,
+    inviteeId: row.inviteeId,
+    inviteToken: row.inviteToken,
+    invitedEmail: row.invitedEmail,
+    invitedName: row.invitedName,
+    createdAt: row.createdAt,
+    acceptedAt: row.acceptedAt,
+    expiresAt: row.expiresAt,
+    notes: row.notes,
+    inviterName: row.inviterName,
+  };
 }
 
 /**

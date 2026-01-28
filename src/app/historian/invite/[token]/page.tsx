@@ -39,6 +39,7 @@ function InviteAcceptInner({ params }: InviteAcceptPageProps) {
     invitedEmail: string | null;
     invitedName: string | null;
     notes: string | null;
+    inviterName: string;
   } | null>(null);
 
   // Form state
@@ -166,7 +167,7 @@ function InviteAcceptInner({ params }: InviteAcceptPageProps) {
 
         <h1 className="text-2xl font-bold mb-2">Accept Invitation</h1>
         <p className="text-sm text-obsidian-500 mb-4">
-          You've been invited to become a historian. Please provide your information below to create your account.
+          You've been invited by <span className="font-medium text-obsidian-200">{invitation?.inviterName || "a historian"}</span> to become a historian. Please provide your information below to create your account.
         </p>
         
         {invitation?.notes && (
