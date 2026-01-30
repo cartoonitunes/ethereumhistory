@@ -1,9 +1,16 @@
 "use client";
 
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import type { Components } from "react-markdown";
+
+function isParagraphOnlySingleCode(children: React.ReactNode): boolean {
+  if (React.Children.count(children) !== 1) return false;
+  const child = React.Children.toArray(children)[0];
+  return React.isValidElement(child) && child.type === "code";
+}
 
 interface MarkdownRendererProps {
   content: string;
@@ -12,9 +19,14 @@ interface MarkdownRendererProps {
 
 export function MarkdownRenderer({ content, className = "" }: MarkdownRendererProps) {
   const components: Components = {
-    p: ({ children }) => (
-      <p className="text-obsidian-300 leading-relaxed mb-4">{children}</p>
-    ),
+    p: ({ children }) => {
+      if (isParagraphOnlySingleCode(children)) {
+        return <span className="text-obsidian-300 leading-relaxed">{children}</span>;
+      }
+      return (
+        <p className="text-obsidian-300 leading-relaxed mb-4">{children}</p>
+      );
+    },
     a: ({ href, children }) => (
       <a
         href={href}
