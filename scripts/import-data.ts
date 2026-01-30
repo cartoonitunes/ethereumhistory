@@ -187,8 +187,14 @@ function loadContractsFromFile(filename: string): RawContract[] {
   try {
     const data = readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(data);
-    console.log(`  Loaded ${parsed.length} contracts`);
-    return parsed;
+    // Support both top-level array [...] and wrapped {"contracts": [...]}
+    const list = Array.isArray(parsed) ? parsed : (parsed?.contracts ?? []);
+    if (!Array.isArray(list)) {
+      console.warn(`  Unexpected format in ${filename}, expected array or {contracts: [...]}`);
+      return [];
+    }
+    console.log(`  Loaded ${list.length} contracts`);
+    return list;
   } catch (error) {
     console.error(`Error loading ${filename}:`, error);
     return [];

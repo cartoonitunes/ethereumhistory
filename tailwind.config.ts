@@ -21,10 +21,10 @@ const config: Config = {
               },
             },
             code: {
-              color: "#d9d9de", // obsidian-200
-              backgroundColor: "#18181b", // obsidian-950/50
-              padding: "0.125rem 0.25rem",
-              borderRadius: "0.25rem",
+              color: "inherit", // match surrounding text
+              backgroundColor: "rgba(65, 65, 74, 0.8)", // obsidian-800, subtle
+              padding: "0.0625rem 0.125rem",
+              borderRadius: "3px",
               fontWeight: "400",
             },
             "code::before": {
@@ -124,8 +124,10 @@ const config: Config = {
               },
             },
             code: {
-              color: "#d9d9de", // obsidian-200
-              backgroundColor: "#18181b", // obsidian-950/50
+              color: "inherit",
+              backgroundColor: "rgba(65, 65, 74, 0.8)",
+              padding: "0.0625rem 0.125rem",
+              borderRadius: "3px",
             },
             h1: {
               color: "#b8b8c1",

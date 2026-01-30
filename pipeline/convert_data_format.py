@@ -35,14 +35,16 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 
-def is_valid_bytecode(bytecode: str) -> bool:
+def is_valid_bytecode(bytecode: str, include_short_for_history: bool = False) -> bool:
     """
     Check if bytecode is valid for analysis.
     
     Filters out:
     - Empty or null bytecode
-    - Very short placeholder values like "0xdeadbeef" (exact matches only)
-    - Very short bytecode (< 10 bytes) which are likely invalid
+    - Very short placeholder values like "0xdeadbeef" (exact matches only),
+      unless include_short_for_history is True (keeps them for dataset completeness)
+    - Very short bytecode (< 10 bytes) which are likely invalid,
+      unless include_short_for_history is True
     """
     if not bytecode or bytecode == "0x" or bytecode == "":
         return False
@@ -52,8 +54,15 @@ def is_valid_bytecode(bytecode: str) -> bool:
     
     # Must have at least 10 bytes (20 hex chars) to be meaningful
     if len(hex_str) < 20:
+        # Allow short/placeholder bytecode when building historical dataset
+        # so we don't drop real 2015 deployments like 0x4dAE54... (0xdeadbeef).
+        if include_short_for_history:
+            try:
+                bytes.fromhex(hex_str)
+                return True
+            except ValueError:
+                return False
         # For very short bytecode, check if it's a known placeholder
-        # (These are likely invalid, but we only check exact matches for short bytecode)
         hex_lower = hex_str.lower()
         short_placeholders = [
             "deadbeef",
@@ -61,12 +70,8 @@ def is_valid_bytecode(bytecode: str) -> bool:
             "deadbeef0",
             "00000000",  # Only filter if entire bytecode is just zeros
         ]
-        
-        # Only filter if it's an exact match to a placeholder
         if hex_lower in short_placeholders:
             return False
-        
-        # Very short bytecode (< 10 bytes) is likely invalid anyway
         return False
     
     # Check if it's valid hex
@@ -75,8 +80,6 @@ def is_valid_bytecode(bytecode: str) -> bool:
     except ValueError:
         return False
     
-    # For longer bytecode, "00000000" or other patterns could be legitimate
-    # (e.g., padding, initialization values, etc.)
     return True
 
 
@@ -151,7 +154,11 @@ def extract_function_names(decompiled_code: str) -> List[str]:
     return [f for f in functions if f.lower() not in excluded]
 
 
-def convert_contract(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def convert_contract(
+    contract: Dict[str, Any],
+    *,
+    include_short_bytecode: bool = False,
+) -> Optional[Dict[str, Any]]:
     """
     Convert a single contract from input format to pipeline format.
 
@@ -163,6 +170,8 @@ def convert_contract(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     Args:
         contract: Contract dict from input file
+        include_short_bytecode: If True, allow short/placeholder bytecode
+            (e.g. 0xdeadbeef) so historical contracts are not dropped.
 
     Returns:
         Converted contract dict, or None if invalid
@@ -186,7 +195,7 @@ def convert_contract(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return None
 
     # Validate bytecode
-    if not is_valid_bytecode(bytecode):
+    if not is_valid_bytecode(bytecode, include_short_for_history=include_short_bytecode):
         return None
 
     # Build output contract
@@ -276,7 +285,27 @@ def convert_contract(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return output
 
 
-def convert_file(input_path: str, output_path: str, verbose: bool = True) -> Dict[str, int]:
+def _load_existing_contracts(path: str) -> tuple[List[Dict[str, Any]], set[str]]:
+    """Load existing contract list and set of addresses (lowercase)."""
+    with open(path, 'r') as f:
+        data = json.load(f)
+    if isinstance(data, dict) and "contracts" in data:
+        existing = data["contracts"]
+    elif isinstance(data, list):
+        existing = data
+    else:
+        raise ValueError(f"Unexpected format in {path}: expected list or dict with 'contracts' key")
+    addrs = {c.get("address", "").lower() for c in existing if c.get("address")}
+    return existing, addrs
+
+
+def convert_file(
+    input_path: str,
+    output_path: str,
+    verbose: bool = True,
+    include_short_bytecode: bool = False,
+    merge_with: Optional[str] = None,
+) -> Dict[str, int]:
     """
     Convert a contract data file to pipeline format.
     
@@ -284,10 +313,28 @@ def convert_file(input_path: str, output_path: str, verbose: bool = True) -> Dic
         input_path: Path to input JSON file
         output_path: Path to output JSON file
         verbose: Whether to print progress
+        include_short_bytecode: If True, include contracts with short/placeholder
+            bytecode (e.g. 0xdeadbeef) for historical completeness.
+        merge_with: If set, path to existing output-format JSON. Only contracts
+            not already in this file are added; existing entries are never overwritten.
         
     Returns:
-        Dict with statistics: {"total": N, "valid": M, "invalid": K}
+        Dict with statistics: {"total", "valid", "invalid", "existing", "added"}
     """
+    existing_list: List[Dict[str, Any]] = []
+    existing_addrs: set = set()
+    if merge_with:
+        path = Path(merge_with)
+        if path.exists():
+            if verbose:
+                print(f"Merge mode: loading existing contracts from {merge_with}...")
+            existing_list, existing_addrs = _load_existing_contracts(merge_with)
+            if verbose:
+                print(f"  Found {len(existing_list)} existing contracts")
+        else:
+            if verbose:
+                print(f"Merge file not found ({merge_with}); will create new output.")
+    
     if verbose:
         print(f"Reading {input_path}...")
     
@@ -312,36 +359,54 @@ def convert_file(input_path: str, output_path: str, verbose: bool = True) -> Dic
     
     converted = []
     invalid_count = 0
+    added_count = 0
     
     for i, contract in enumerate(contracts):
-        converted_contract = convert_contract(contract)
+        converted_contract = convert_contract(
+            contract, include_short_bytecode=include_short_bytecode
+        )
         if converted_contract:
-            converted.append(converted_contract)
+            addr = converted_contract.get("address", "").lower()
+            if merge_with and addr in existing_addrs:
+                pass  # skip: already in existing
+            else:
+                converted.append(converted_contract)
+                if merge_with:
+                    existing_addrs.add(addr)
+                    added_count += 1
         else:
             invalid_count += 1
         
         if verbose and (i + 1) % 10000 == 0:
             print(f"  Processed {i + 1}/{len(contracts)} contracts...")
     
-    # Write output
+    # Output = existing + only new from this run
+    out_list = existing_list + converted if merge_with else converted
+    
     if verbose:
-        print(f"Writing {len(converted)} valid contracts to {output_path}...")
+        print(f"Writing {len(out_list)} contracts to {output_path}...")
     
     with open(output_path, 'w') as f:
-        json.dump(converted, f, indent=2)
+        json.dump(out_list, f, indent=2)
     
     stats = {
         "total": len(contracts),
-        "valid": len(converted),
-        "invalid": invalid_count
+        "valid": len(converted) + (len(existing_list) if merge_with else 0),
+        "invalid": invalid_count,
+        "existing": len(existing_list),
+        "added": added_count if merge_with else len(converted),
     }
     
     if verbose:
         print(f"\nConversion complete:")
-        print(f"  Total contracts: {stats['total']}")
-        print(f"  Valid contracts: {stats['valid']}")
+        print(f"  Total in input: {stats['total']}")
         print(f"  Invalid/filtered: {stats['invalid']}")
-        print(f"  Output file: {output_path}")
+        if merge_with:
+            print(f"  Existing (unchanged): {stats['existing']}")
+            print(f"  Newly added: {stats['added']}")
+        else:
+            print(f"  Valid written: {len(converted)}")
+        print(f"  Output file: {output_path} ({len(out_list)} contracts)")
     
     return stats
 
@@ -352,15 +417,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Convert 2015 contracts
+    # 2015: only add missing (merge with existing); include short bytecode
     python convert_data_format.py \\
         --input ../eth_2015/data_files/ethereum_2015_contracts.json \\
-        --output ./converted_2015_contracts.json
-    
-    # Convert 2016-2018 contracts
+        --output ./converted_2015_contracts.json \\
+        --include-short-bytecode --merge-with ./converted_2015_contracts.json
+
+    # 2016-2018: only add missing; include short bytecode for consistency
     python convert_data_format.py \\
         --input ../eth_2015/data_files/2016to2018_contracts_with_bytecode.json \\
-        --output ./converted_2016to2018_contracts.json
+        --output ./converted_2016to2018_contracts.json \\
+        --include-short-bytecode --merge-with ./converted_2016to2018_contracts.json
+
+    # First run (no existing file): omit --merge-with
+    python convert_data_format.py -i ... -o ... --include-short-bytecode
         """
     )
     
@@ -374,6 +444,18 @@ Examples:
         '--output', '-o',
         required=True,
         help='Path to output JSON file'
+    )
+    
+    parser.add_argument(
+        '--include-short-bytecode',
+        action='store_true',
+        help='Include contracts with short/placeholder bytecode (e.g. 0xdeadbeef) for historical dataset'
+    )
+    
+    parser.add_argument(
+        '--merge-with',
+        metavar='FILE',
+        help='Existing output-format JSON path; only add contracts not already in this file (never overwrite)'
     )
     
     parser.add_argument(
@@ -397,7 +479,9 @@ Examples:
         stats = convert_file(
             args.input,
             args.output,
-            verbose=not args.quiet
+            verbose=not args.quiet,
+            include_short_bytecode=args.include_short_bytecode,
+            merge_with=args.merge_with,
         )
         
         if stats['valid'] == 0:
