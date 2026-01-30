@@ -540,6 +540,18 @@ export async function getContractsByEra(
 }
 
 /**
+ * Get addresses of contracts marked as featured (for homepage).
+ */
+export async function getFeaturedAddressesFromDb(): Promise<string[]> {
+  const database = getDb();
+  const rows = await database
+    .select({ address: schema.contracts.address })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.featured, true));
+  return rows.map((r) => r.address);
+}
+
+/**
  * Fetch a specific set of contracts by address.
  * Returned array preserves the order of the input addresses.
  */

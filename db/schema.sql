@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   historical_summary TEXT,
   historical_significance TEXT,
   historical_context TEXT,
+  featured BOOLEAN NOT NULL DEFAULT FALSE,
 
   -- Fingerprints
   trigram_hash TEXT,
@@ -71,6 +72,7 @@ CREATE INDEX IF NOT EXISTS contracts_deployment_idx ON contracts (deployment_tim
 CREATE INDEX IF NOT EXISTS contracts_type_idx ON contracts (contract_type);
 CREATE INDEX IF NOT EXISTS contracts_decompiled_idx ON contracts (decompilation_success);
 CREATE INDEX IF NOT EXISTS contracts_featured_idx ON contracts (short_description);
+CREATE INDEX IF NOT EXISTS contracts_featured_flag_idx ON contracts (featured) WHERE featured = TRUE;
 
 -- =============================================================================
 -- similarity_index
