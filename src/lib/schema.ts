@@ -72,6 +72,7 @@ export const contracts = pgTable(
     historicalSummary: text("historical_summary"),
     historicalSignificance: text("historical_significance"),
     historicalContext: text("historical_context"),
+    featured: boolean("featured").default(false),
 
     // Bytecode fingerprints for fast similarity matching
     trigramHash: text("trigram_hash"),
@@ -89,6 +90,7 @@ export const contracts = pgTable(
     typeIdx: index("contracts_type_idx").on(table.contractType),
     decompiledIdx: index("contracts_decompiled_idx").on(table.decompilationSuccess),
     featuredIdx: index("contracts_featured_idx").on(table.shortDescription),
+    featuredFlagIdx: index("contracts_featured_flag_idx").on(table.featured),
     // Partial index for decompiled code search (if DB supports)
     // trigramIdx would need pg_trgm extension for similarity search
   })

@@ -55,6 +55,7 @@ import {
   getContractsByDeployerFromDb as dbGetContractsByDeployer,
   getRecentContractsFromDb as dbGetRecentContracts,
   getContractsByAddressesFromDb as dbGetContractsByAddresses,
+  getFeaturedAddressesFromDb as dbGetFeaturedAddresses,
   searchDecompiledCode as dbSearchDecompiled,
   searchUnifiedFromDb as dbSearchUnified,
   searchPeopleFromDb as dbSearchPeople,
@@ -1049,8 +1050,12 @@ export async function getFeaturedContracts(): Promise<FeaturedContract[]> {
   // Priority 1: PostgreSQL database
   if (isDatabaseEnabled()) {
     try {
-      // Select 6 featured contracts in random order on each render/request.
-      const randomizedAddresses = shuffle(FEATURED_ADDRESSES);
+      // Use featured flag from DB; fall back to hardcoded list if none set.
+      let addresses = await dbGetFeaturedAddresses();
+      if (addresses.length === 0) {
+        addresses = [...FEATURED_ADDRESSES];
+      }
+      const randomizedAddresses = shuffle(addresses);
       const featured = (await dbGetContractsByAddresses(randomizedAddresses)).slice(0, 6);
       return featured.map((c) => ({
         address: c.address,
