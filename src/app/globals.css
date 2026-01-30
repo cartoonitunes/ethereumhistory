@@ -67,6 +67,19 @@ code, pre {
   font-family: 'JetBrains Mono', monospace;
 }
 
+/* Inline code in markdown: hug text, no overlap. Override prose/block behavior. */
+.markdown-inline-code p code,
+.markdown-inline-code li code,
+.markdown-inline-code-tag {
+  display: inline !important;
+  padding: 0 2px !important;   /* minimal horizontal only */
+  margin: 0 !important;
+  line-height: 1.2 !important; /* tight so background doesn’t use paragraph line-height */
+  vertical-align: baseline;
+  box-decoration-break: clone;
+  border-radius: 3px;
+}
+
 /* Selection */
 ::selection {
   background: rgba(98, 110, 241, 0.3);

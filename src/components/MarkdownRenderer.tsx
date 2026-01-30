@@ -12,6 +12,22 @@ function isParagraphOnlySingleCode(children: React.ReactNode): boolean {
   return React.isValidElement(child) && child.type === "code";
 }
 
+/**
+ * Collapse newlines around single-backtick inline code so they stay in the
+ * same line as surrounding text (remark-breaks would otherwise turn those
+ * newlines into <br> and put the code on its own line).
+ * Handles \n, \r\n, and preserves punctuation (comma, period) after the backticks.
+ */
+function collapseNewlinesAroundInlineCode(markdown: string): string {
+  return markdown.replace(
+    /[\r\n]+\s*(`[^`]+`)([\s,.]*)[\r\n]+/g,
+    (_match, code, punctuation) => {
+      const punct = punctuation.trim();
+      return punct ? ` ${code}${punct} ` : ` ${code} `;
+    }
+  );
+}
+
 interface MarkdownRendererProps {
   content: string;
   className?: string;
@@ -47,7 +63,8 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
       if (inline) {
         return (
           <code
-            className="font-mono text-sm bg-obsidian-900/50 text-obsidian-200 px-1.5 py-0.5 rounded"
+            className="markdown-inline-code-tag font-mono text-sm text-inherit bg-obsidian-800/80 rounded-[3px]"
+            style={{ display: "inline", padding: "0 2px", margin: 0, lineHeight: 1.2 }}
             {...props}
           >
             {children}
@@ -125,13 +142,15 @@ export function MarkdownRenderer({ content, className = "" }: MarkdownRendererPr
     return null;
   }
 
+  const processedContent = collapseNewlinesAroundInlineCode(content);
+
   return (
-    <div className={`prose prose-invert max-w-none ${className}`}>
+    <div className={`prose prose-invert max-w-none markdown-inline-code ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         components={components}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );
