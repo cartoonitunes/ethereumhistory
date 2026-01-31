@@ -6,7 +6,7 @@
 
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne, isNull, lt } from "drizzle-orm";
+import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne, isNull, lt, gte, lte } from "drizzle-orm";
 import * as schema from "./schema";
 import crypto from "crypto";
 import type {
@@ -1219,6 +1219,67 @@ export async function getRecentContractsFromDb(
     .from(schema.contracts)
     .orderBy(desc(schema.contracts.deploymentTimestamp))
     .limit(limit);
+
+  return results.map(dbRowToContract);
+}
+
+/**
+ * Get contracts for agent discovery / temporal queries.
+ * Optional filters: era_id, featured, undocumented_only, from_timestamp, to_timestamp.
+ * Pagination: limit (default 50, max 200), offset (default 0).
+ */
+export async function getContractsForAgentDiscoveryFromDb(params: {
+  eraId?: string | null;
+  featured?: boolean | null;
+  undocumentedOnly?: boolean | null;
+  fromTimestamp?: string | null; // ISO string
+  toTimestamp?: string | null; // ISO string
+  limit?: number;
+  offset?: number;
+}): Promise<AppContract[]> {
+  const database = getDb();
+  const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
+  const offset = Math.max(params.offset ?? 0, 0);
+
+  const conditions: SQL[] = [];
+  if (params.eraId != null && params.eraId !== "") {
+    conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.featured === true) {
+    conditions.push(eq(schema.contracts.featured, true));
+  }
+  if (params.undocumentedOnly === true) {
+    conditions.push(
+      or(
+        isNull(schema.contracts.shortDescription),
+        eq(schema.contracts.shortDescription, "")
+      )!
+    );
+  }
+  if (params.fromTimestamp != null && params.fromTimestamp !== "") {
+    try {
+      conditions.push(gte(schema.contracts.deploymentTimestamp, new Date(params.fromTimestamp)));
+    } catch {
+      // ignore invalid date
+    }
+  }
+  if (params.toTimestamp != null && params.toTimestamp !== "") {
+    try {
+      conditions.push(lte(schema.contracts.deploymentTimestamp, new Date(params.toTimestamp)));
+    } catch {
+      // ignore invalid date
+    }
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const results = await database
+    .select()
+    .from(schema.contracts)
+    .where(whereClause ?? sql`true`)
+    .orderBy(asc(schema.contracts.deploymentTimestamp))
+    .limit(limit)
+    .offset(offset);
 
   return results.map(dbRowToContract);
 }
