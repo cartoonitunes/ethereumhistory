@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn, UserPlus, User } from "lucide-react";
+import { LogIn, UserPlus, User, Github, MessageCircle } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
@@ -102,10 +102,58 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             >
               Discord
             </a>
+            <a
+              href="https://github.com/cartoonitunes/ethereumhistory"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-obsidian-100 transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              Source
+            </a>
           </nav>
 
-          {/* Right side: Profile (if logged in), Invite link (trusted), Login button, or Search hint */}
-          <div className="hidden sm:flex items-center gap-3">
+          {/* Mobile: Discord, GitHub, and Login/Profile icons */}
+          <div className="flex md:hidden items-center gap-1">
+            <a
+              href="https://discord.gg/3KV6dt2euF"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+              aria-label="Discord"
+            >
+              <MessageCircle className="w-5 h-5" />
+            </a>
+            <a
+              href="https://github.com/cartoonitunes/ethereumhistory"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+              aria-label="Source code on GitHub"
+            >
+              <Github className="w-5 h-5" />
+            </a>
+            {me ? (
+              <Link
+                href="/historian/profile"
+                className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                aria-label="Profile"
+              >
+                <User className="w-5 h-5" />
+              </Link>
+            ) : (
+              <Link
+                href={loginUrl}
+                className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                aria-label="Historian login"
+              >
+                <LogIn className="w-5 h-5" />
+              </Link>
+            )}
+          </div>
+
+          {/* Right side (desktop): Profile (if logged in), Invite link (trusted), Login button, or Search hint */}
+          <div className="hidden md:flex items-center gap-3">
             {me ? (
               <>
                 {me.trusted && (

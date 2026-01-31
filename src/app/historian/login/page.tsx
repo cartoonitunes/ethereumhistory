@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { Header } from "@/components/Header";
 
 export default function HistorianLoginPage() {
   // `useSearchParams()` requires a Suspense boundary in Next 16.
@@ -11,6 +12,7 @@ export default function HistorianLoginPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-obsidian-950 text-obsidian-50">
+          <Header showHistorianLogin={false} />
           <div className="max-w-md mx-auto px-4 py-16">
             <h1 className="text-2xl font-bold mb-2">Historian Login</h1>
             <p className="text-sm text-obsidian-500">Loading…</p>
@@ -62,6 +64,7 @@ function HistorianLoginInner() {
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-50">
+      <Header showHistorianLogin={false} />
       <div className="max-w-md mx-auto px-4 py-16">
         <h1 className="text-2xl font-bold mb-2">Historian Login</h1>
         <p className="text-sm text-obsidian-500 mb-8">
