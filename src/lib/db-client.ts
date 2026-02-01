@@ -100,7 +100,8 @@ function dbRowToContract(row: schema.Contract): AppContract {
       isErc20Like: row.isErc20Like || false,
       notes: null,
     },
-    ensName: null,
+    ensName: row.ensName ?? null,
+    deployerEnsName: row.deployerEnsName ?? null,
     etherscanVerified: !!row.sourceCode,
     etherscanContractName: row.etherscanContractName,
     sourceCode: row.sourceCode,
@@ -914,6 +915,22 @@ export async function updateContractHistoryFieldsFromDb(
   if (!hasFieldUpdates) return;
   
   await database.update(schema.contracts).set(updates).where(eq(schema.contracts.address, address.toLowerCase()));
+}
+
+/**
+ * Update ENS names for a contract (persist after reverse resolution).
+ */
+export async function updateContractEnsNamesFromDb(
+  address: string,
+  patch: { ensName?: string | null; deployerEnsName?: string | null }
+): Promise<void> {
+  const database = getDb();
+  const normalized = address.toLowerCase();
+  const updates: Partial<schema.NewContract> = { updatedAt: new Date() };
+  if (patch.ensName !== undefined) updates.ensName = patch.ensName;
+  if (patch.deployerEnsName !== undefined) updates.deployerEnsName = patch.deployerEnsName;
+  if (patch.ensName === undefined && patch.deployerEnsName === undefined) return;
+  await database.update(schema.contracts).set(updates).where(eq(schema.contracts.address, normalized));
 }
 
 /**

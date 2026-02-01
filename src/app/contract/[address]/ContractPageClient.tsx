@@ -172,7 +172,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     archiveNotice,
   } = data!;
 
-  const displayName = contract.tokenName || contract.etherscanContractName || null;
+  const displayName = contract.tokenName || contract.ensName || contract.etherscanContractName || null;
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
 
   return (
@@ -481,6 +481,21 @@ function OverviewTab({
         <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
           <h2 className="text-lg font-semibold mb-4">Key Facts</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {contract.ensName && (
+              <FactItem
+                label="ENS name"
+                value={
+                  <a
+                    href="https://app.ens.domains/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-ether-400 hover:text-ether-300 transition-colors"
+                  >
+                    {contract.ensName}
+                  </a>
+                }
+              />
+            )}
             <FactItem
               label="Deployer"
               value={
@@ -490,11 +505,22 @@ function OverviewTab({
                       href={`/people/${deployerPerson.slug}`}
                       className="text-sm hover:text-ether-400 transition-colors"
                     >
-                      <span className="font-medium">{deployerPerson.name}</span>{" "}
-                      <span className="font-mono text-obsidian-400">
-                        ({formatAddress(contract.deployerAddress)})
-                      </span>
+                      <span className="font-medium">{deployerPerson.name}</span>
+                      {contract.deployerEnsName ? (
+                        <span className="text-obsidian-400"> ({contract.deployerEnsName})</span>
+                      ) : (
+                        <span className="font-mono text-obsidian-400">
+                          {" "}({formatAddress(contract.deployerAddress)})
+                        </span>
+                      )}
                     </Link>
+                  ) : contract.deployerEnsName ? (
+                    <span className="text-sm text-obsidian-300">
+                      <span className="text-ether-400">{contract.deployerEnsName}</span>
+                      <span className="font-mono text-obsidian-400">
+                        {" "}({formatAddress(contract.deployerAddress)})
+                      </span>
+                    </span>
                   ) : (
                     <span className="font-mono text-sm text-obsidian-300">
                       {formatAddress(contract.deployerAddress)}
