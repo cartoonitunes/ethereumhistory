@@ -76,6 +76,8 @@ export async function GET(
       has_selfdestruct: contract.heuristics.hasSelfDestruct,
       is_erc20_like: contract.heuristics.isErc20Like,
     },
+    ens_name: contract.ensName,
+    deployer_ens_name: contract.deployerEnsName,
     etherscan_contract_name: contract.etherscanContractName,
     etherscan_verified: contract.etherscanVerified,
     source_code: contract.sourceCode,
