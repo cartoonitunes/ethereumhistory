@@ -140,8 +140,9 @@ export interface Contract {
     notes: string | null;
   };
 
-  // External data (from Etherscan, on-chain calls)
+  // External data (from Etherscan, on-chain calls, ENS)
   ensName: string | null;
+  deployerEnsName: string | null;
   etherscanVerified: boolean;
   etherscanContractName: string | null;
   sourceCode: string | null;

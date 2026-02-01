@@ -47,6 +47,7 @@ import {
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
   updateContractRuntimeBytecodeFromDb as dbUpdateContractRuntimeBytecode,
   insertContractIfMissing as dbInsertContractIfMissing,
+  updateContractEnsNamesFromDb as dbUpdateContractEnsNames,
   getContractMetadataJsonValueByKeyFromDb as dbGetContractMetadataJsonByKey,
   setContractMetadataJsonValueByKeyFromDb as dbSetContractMetadataJsonByKey,
   getPersonByAddressFromDb as dbGetPersonByAddress,
@@ -75,6 +76,7 @@ import {
   fetchEtherscanContractCreation,
   fetchEtherscanSourceCode,
 } from "./etherscan";
+import { getEnsName } from "./ens";
 
 // =============================================================================
 // Data Source Selection
@@ -134,13 +136,16 @@ function shuffle<T>(items: readonly T[]): T[] {
 
 export async function getContract(address: string): Promise<Contract | null> {
   const normalizedAddress = address.toLowerCase();
+  let fromDb = false;
 
   // Priority 1: PostgreSQL database (production)
   if (isDatabaseEnabled()) {
     try {
       const dbContract = await dbGetContract(normalizedAddress);
       if (dbContract) {
-        return dbContract;
+        fromDb = true;
+        const withEns = await ensureEnsNames(dbContract, fromDb);
+        return withEns;
       }
     } catch (error) {
       console.error("[db] Database query failed, falling back:", error);
@@ -156,12 +161,58 @@ export async function getContract(address: string): Promise<Contract | null> {
   if (allowJsonFallback()) {
     const realContract = getContractFromData(normalizedAddress);
     if (realContract) {
-      return realContract;
+      const withEns = await ensureEnsNames(realContract, false);
+      return withEns;
     }
   }
 
   // Priority 3: Mock data (fallback)
-  return MOCK_CONTRACTS[normalizedAddress] || null;
+  const mock = MOCK_CONTRACTS[normalizedAddress] || null;
+  if (mock) {
+    return ensureEnsNames(mock, false);
+  }
+  return null;
+}
+
+/**
+ * Resolve ENS names for contract and deployer when missing; persist to DB when fromDb.
+ */
+async function ensureEnsNames(
+  contract: Contract,
+  fromDb: boolean
+): Promise<Contract> {
+  const needContractName = contract.ensName == null;
+  const needDeployerName =
+    contract.deployerAddress != null && contract.deployerEnsName == null;
+  if (!needContractName && !needDeployerName) return contract;
+
+  try {
+    const [ensName, deployerEnsName] = await Promise.all([
+      needContractName ? getEnsName(contract.address) : Promise.resolve(null),
+      needDeployerName
+        ? getEnsName(contract.deployerAddress!)
+        : Promise.resolve(null),
+    ]);
+    const resolvedContract =
+      ensName != null || deployerEnsName != null
+        ? {
+            ...contract,
+            ensName: ensName ?? contract.ensName,
+            deployerEnsName: deployerEnsName ?? contract.deployerEnsName,
+          }
+        : contract;
+    if (fromDb && (ensName != null || deployerEnsName != null)) {
+      await dbUpdateContractEnsNames(contract.address, {
+        ensName: resolvedContract.ensName,
+        deployerEnsName: resolvedContract.deployerEnsName,
+      }).catch((err) =>
+        console.warn("[db] Failed to persist ENS names:", err)
+      );
+    }
+    return resolvedContract;
+  } catch {
+    return contract;
+  }
 }
 
 /**
@@ -481,6 +532,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
       notes: null,
     },
     ensName: null,
+    deployerEnsName: null,
     etherscanVerified: false,
     etherscanContractName: null,
     sourceCode: null,
