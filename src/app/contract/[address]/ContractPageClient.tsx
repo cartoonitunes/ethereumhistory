@@ -486,7 +486,7 @@ function OverviewTab({
                 label="ENS name"
                 value={
                   <a
-                    href="https://app.ens.domains/"
+                    href={`https://app.ens.domains/${contract.ensName}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-ether-400 hover:text-ether-300 transition-colors"
@@ -501,30 +501,51 @@ function OverviewTab({
               value={
                 contract.deployerAddress ? (
                   deployerPerson && deployerPerson.slug ? (
-                    <Link
-                      href={`/people/${deployerPerson.slug}`}
-                      className="text-sm hover:text-ether-400 transition-colors"
-                    >
-                      <span className="font-medium">{deployerPerson.name}</span>
+                    <span className="text-sm">
+                      <Link
+                        href={`/people/${deployerPerson.slug}`}
+                        className="hover:text-ether-400 transition-colors font-medium"
+                      >
+                        {deployerPerson.name}
+                      </Link>
                       {contract.deployerEnsName ? (
-                        <span className="text-obsidian-400"> ({contract.deployerEnsName})</span>
+                        <a
+                          href={etherscanUrl(contract.deployerAddress)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-obsidian-400 hover:text-ether-400 transition-colors ml-1"
+                        >
+                          ({contract.deployerEnsName})
+                        </a>
                       ) : (
-                        <span className="font-mono text-obsidian-400">
-                          {" "}({formatAddress(contract.deployerAddress)})
+                        <span className="font-mono text-obsidian-400 ml-1">
+                          ({formatAddress(contract.deployerAddress)})
                         </span>
                       )}
-                    </Link>
+                    </span>
                   ) : contract.deployerEnsName ? (
                     <span className="text-sm text-obsidian-300">
-                      <span className="text-ether-400">{contract.deployerEnsName}</span>
+                      <a
+                        href={etherscanUrl(contract.deployerAddress)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-ether-400 hover:text-ether-300 transition-colors"
+                      >
+                        {contract.deployerEnsName}
+                      </a>
                       <span className="font-mono text-obsidian-400">
                         {" "}({formatAddress(contract.deployerAddress)})
                       </span>
                     </span>
                   ) : (
-                    <span className="font-mono text-sm text-obsidian-300">
+                    <a
+                      href={etherscanUrl(contract.deployerAddress)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm text-obsidian-300 hover:text-ether-400 transition-colors"
+                    >
                       {formatAddress(contract.deployerAddress)}
-                    </span>
+                    </a>
                   )
                 ) : (
                   "Unknown"
