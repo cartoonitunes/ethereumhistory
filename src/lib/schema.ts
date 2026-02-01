@@ -56,6 +56,8 @@ export const contracts = pgTable(
     isErc20Like: boolean("is_erc20_like").default(false),
 
     // External data
+    ensName: text("ens_name"),
+    deployerEnsName: text("deployer_ens_name"),
     etherscanContractName: text("etherscan_contract_name"),
     sourceCode: text("source_code"),
     abi: text("abi"),
