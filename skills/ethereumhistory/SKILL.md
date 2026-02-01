@@ -81,6 +81,8 @@ Use when the user asks for contracts deployed in a date range or era.
     "gas_used": number | null,
     "gas_price": "string | null",
     "heuristics": { "contract_type": "string | null", "confidence": number, "is_proxy": boolean, "has_selfdestruct": boolean, "is_erc20_like": boolean },
+    "ens_name": "string | null",
+    "deployer_ens_name": "string | null",
     "etherscan_contract_name": "string | null",
     "etherscan_verified": boolean,
     "source_code": "string | null",
