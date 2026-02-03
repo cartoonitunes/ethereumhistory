@@ -2,11 +2,13 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Archive, Search, Clock, Code, Users } from "lucide-react";
+import Link from "next/link";
+import { Archive, Search, Clock, Code, Users, BookOpen, Plug } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
-import { ContractCard } from "@/components/ContractCard";
+import { EraCompact } from "@/components/EraTimeline";
+import { formatAddress, formatDate } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
 
 const FEATURED_FALLBACK: FeaturedContract[] = [];
@@ -18,8 +20,17 @@ interface TopEditor {
   newPagesCount: number;
 }
 
+interface MarqueeContract {
+  address: string;
+  name: string;
+  shortDescription: string | null;
+  eraId: string | null;
+  deploymentDate: string | null;
+}
+
 export default function HomePage() {
   const [featuredContracts, setFeaturedContracts] = useState<FeaturedContract[]>(FEATURED_FALLBACK);
+  const [marqueeContracts, setMarqueeContracts] = useState<MarqueeContract[]>([]);
   const [topEditors, setTopEditors] = useState<TopEditor[]>([]);
 
   useEffect(() => {
@@ -34,6 +45,25 @@ export default function HomePage() {
         }
       } catch {
         // fall back to empty state
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/browse?limit=24");
+        const json = await res.json();
+        const list = (json?.data?.contracts || []) as MarqueeContract[];
+        if (!cancelled && Array.isArray(list) && list.length > 0) {
+          setMarqueeContracts(list);
+        }
+      } catch {
+        // leave empty, will fall back to featured in render
       }
     })();
     return () => {
@@ -85,7 +115,7 @@ export default function HomePage() {
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-ether-500/10 border border-ether-500/20 text-ether-400 text-sm mb-6"
             >
               <Archive className="w-4 h-4" />
-              Historical Archive
+              Wikipedia for Ethereum Smart Contracts
             </motion.div>
 
             {/* Headline */}
@@ -117,6 +147,127 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Archived Contracts (browse-style section) */}
+      <section className="py-20 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10"
+          >
+            <div>
+              <h2 className="text-3xl font-bold mb-2">Archived contracts</h2>
+              <p className="text-obsidian-400 max-w-xl">
+                Find documented contracts for your research. Early Ethereum mainnet contracts with editorial history.
+              </p>
+            </div>
+            <Link
+              href="/browse"
+              className="inline-flex items-center justify-center sm:justify-end px-5 py-2.5 rounded-xl border border-obsidian-600 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors shrink-0"
+            >
+              View all
+            </Link>
+          </motion.div>
+
+          {/* Moving single line (marquee) of archived contracts */}
+          <div className="overflow-hidden py-2 -mx-4 sm:-mx-6 lg:-mx-8">
+            <div className="animate-marquee flex w-max gap-4">
+              {(marqueeContracts.length > 0 ? marqueeContracts : featuredContracts.map((c) => ({
+                address: c.address,
+                name: c.name,
+                shortDescription: c.shortDescription,
+                eraId: c.eraId,
+                deploymentDate: c.deploymentDate,
+              }))).map((contract) => (
+                <Link
+                  key={contract.address}
+                  href={`/contract/${contract.address}`}
+                  className="flex-shrink-0 w-[240px] sm:w-[260px] rounded-xl border border-obsidian-800 bg-obsidian-900/50 hover:border-ether-500/30 p-4 transition-colors group"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors truncate text-sm">
+                      {contract.name || "Contract"}
+                    </h3>
+                    {contract.eraId && <EraCompact eraId={contract.eraId} showLabel={false} />}
+                  </div>
+                  <code className="text-xs text-obsidian-500 font-mono block truncate">
+                    {formatAddress(contract.address, 6)}
+                  </code>
+                  {contract.deploymentDate && (
+                    <p className="text-xs text-obsidian-500 mt-1">
+                      {formatDate(contract.deploymentDate)}
+                    </p>
+                  )}
+                </Link>
+              ))}
+              {/* Duplicate list for seamless infinite scroll */}
+              {(marqueeContracts.length > 0 ? marqueeContracts : featuredContracts.map((c) => ({
+                address: c.address,
+                name: c.name,
+                shortDescription: c.shortDescription,
+                eraId: c.eraId,
+                deploymentDate: c.deploymentDate,
+              }))).map((contract) => (
+                <Link
+                  key={`${contract.address}-dup`}
+                  href={`/contract/${contract.address}`}
+                  className="flex-shrink-0 w-[240px] sm:w-[260px] rounded-xl border border-obsidian-800 bg-obsidian-900/50 hover:border-ether-500/30 p-4 transition-colors group"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors truncate text-sm">
+                      {contract.name || "Contract"}
+                    </h3>
+                    {contract.eraId && <EraCompact eraId={contract.eraId} showLabel={false} />}
+                  </div>
+                  <code className="text-xs text-obsidian-500 font-mono block truncate">
+                    {formatAddress(contract.address, 6)}
+                  </code>
+                  {contract.deploymentDate && (
+                    <p className="text-xs text-obsidian-500 mt-1">
+                      {formatDate(contract.deploymentDate)}
+                    </p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* For agents */}
+      <section id="for-agents" className="py-16 border-t border-obsidian-800 scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-obsidian-700 bg-obsidian-900/40 p-8 md:p-10"
+          >
+            <h2 className="text-2xl font-bold mb-2">For agents</h2>
+            <p className="text-obsidian-400 mb-6 max-w-2xl">
+              MCP integration. REST API. Let your bot query historical contract data.
+            </p>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <Link
+                href="/api-docs"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-ether-600 hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30"
+              >
+                <BookOpen className="w-4 h-4" />
+                API Docs
+              </Link>
+              <Link
+                href="/mcp-setup"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
+              >
+                <Plug className="w-4 h-4" />
+                MCP Setup
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="py-16 border-t border-obsidian-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -136,38 +287,6 @@ export default function HomePage() {
               title="Historical Context"
               description="Every contract is placed in its historical context with era information."
             />
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Contracts */}
-      <section className="py-20 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl font-bold mb-4">Featured Contracts</h2>
-            <p className="text-obsidian-400 max-w-2xl mx-auto">
-              These are pioneering contracts in Ethereum's history. From the first tokens to
-              governance experiments, explore the smart contracts that shaped the early era.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredContracts.map((contract, index) => (
-              <motion.div
-                key={contract.address}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <ContractCard contract={contract} variant="featured" />
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>
