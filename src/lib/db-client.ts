@@ -1508,6 +1508,112 @@ export async function getFeaturedContracts(
   return results.map(dbRowToContract);
 }
 
+/**
+ * Get documented contracts for browse page.
+ * Documented = has non-empty shortDescription.
+ * Optional filters: eraId, contractType, codeQuery (search in decompiled/source code).
+ */
+export async function getDocumentedContractsFromDb(params: {
+  eraId?: string | null;
+  contractType?: string | null;
+  codeQuery?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<AppContract[]> {
+  const database = getDb();
+  const limit = Math.min(Math.max(params.limit ?? 24, 1), 100);
+  const offset = Math.max(params.offset ?? 0, 0);
+
+  const conditions: SQL[] = [
+    isNotNull(schema.contracts.shortDescription),
+    ne(schema.contracts.shortDescription, ""),
+  ];
+  if (params.eraId != null && params.eraId !== "") {
+    conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.contractType != null && params.contractType !== "") {
+    conditions.push(eq(schema.contracts.contractType, params.contractType));
+  }
+  if (params.codeQuery != null && params.codeQuery.trim() !== "") {
+    const pattern = `%${params.codeQuery.trim()}%`;
+    conditions.push(
+      or(
+        ilike(schema.contracts.decompiledCode, pattern),
+        ilike(schema.contracts.sourceCode, pattern)
+      )!
+    );
+  }
+
+  const whereClause = and(...conditions);
+  const results = await database
+    .select()
+    .from(schema.contracts)
+    .where(whereClause)
+    .orderBy(asc(schema.contracts.deploymentTimestamp))
+    .limit(limit)
+    .offset(offset);
+
+  return results.map(dbRowToContract);
+}
+
+/**
+ * Get count of documented contracts (with same filters as getDocumentedContractsFromDb).
+ */
+export async function getDocumentedContractsCountFromDb(params: {
+  eraId?: string | null;
+  contractType?: string | null;
+  codeQuery?: string | null;
+}): Promise<number> {
+  const database = getDb();
+  const conditions: SQL[] = [
+    isNotNull(schema.contracts.shortDescription),
+    ne(schema.contracts.shortDescription, ""),
+  ];
+  if (params.eraId != null && params.eraId !== "") {
+    conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.contractType != null && params.contractType !== "") {
+    conditions.push(eq(schema.contracts.contractType, params.contractType));
+  }
+  if (params.codeQuery != null && params.codeQuery.trim() !== "") {
+    const pattern = `%${params.codeQuery.trim()}%`;
+    conditions.push(
+      or(
+        ilike(schema.contracts.decompiledCode, pattern),
+        ilike(schema.contracts.sourceCode, pattern)
+      )!
+    );
+  }
+  const whereClause = and(...conditions);
+  const result = await database
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.contracts)
+    .where(whereClause);
+  return Number(result[0]?.count ?? 0);
+}
+
+/**
+ * Get distinct contract types among documented contracts (has shortDescription).
+ * Used to populate the Type filter on the browse page.
+ */
+export async function getDocumentedContractTypesFromDb(): Promise<string[]> {
+  const database = getDb();
+  const rows = await database
+    .selectDistinct({ contractType: schema.contracts.contractType })
+    .from(schema.contracts)
+    .where(
+      and(
+        isNotNull(schema.contracts.shortDescription),
+        ne(schema.contracts.shortDescription, ""),
+        isNotNull(schema.contracts.contractType),
+        ne(schema.contracts.contractType, "")
+      )
+    )
+    .orderBy(asc(schema.contracts.contractType));
+
+  return rows.map((r) => r.contractType as string).filter(Boolean);
+}
+
 // =============================================================================
 // Similarity Queries
 // =============================================================================
