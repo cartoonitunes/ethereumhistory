@@ -88,7 +88,7 @@ export async function GET(
     token_logo: contract.tokenLogo,
     short_description: contract.shortDescription,
     description: contract.description,
-    historical_summary: contract.historicalSummary,
+    historical_summary: contract.description ?? contract.historicalSummary,
     historical_significance: contract.historicalSignificance,
     historical_context: contract.historicalContext,
     verification_status: contract.verificationStatus,

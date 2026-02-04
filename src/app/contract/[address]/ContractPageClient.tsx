@@ -58,7 +58,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "code">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "history" | "code">("overview");
 
   // Load historian status for header
   useEffect(() => {
@@ -184,7 +184,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     <div className="min-h-screen">
       <Header showHistorianLogin={!me} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
         {/* Back link */}
         <Link
           href="/"
@@ -331,6 +331,13 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               Overview
             </TabButton>
             <TabButton
+              active={activeTab === "history"}
+              onClick={() => setActiveTab("history")}
+              icon={<History className="w-4 h-4" />}
+            >
+              History
+            </TabButton>
+            <TabButton
               active={activeTab === "code"}
               onClick={() => setActiveTab("code")}
               icon={<FileCode className="w-4 h-4" />}
@@ -354,6 +361,11 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               deployerPerson={deployerPerson ?? null}
               txCountsByYear={txCountsByYear ?? null}
             />
+          )}
+          {activeTab === "history" && (
+            <div className="min-w-0">
+              <HistoricalDocsSection contract={contract} />
+            </div>
           )}
           {activeTab === "code" && (
             <CodeTab
@@ -430,9 +442,9 @@ function OverviewTab({
   const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply || contract.tokenLogo;
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
+    <div className="grid lg:grid-cols-3 gap-6 min-w-0">
       {/* Main info */}
-      <div className="lg:col-span-2 space-y-6">
+      <div className="lg:col-span-2 space-y-6 min-w-0">
         {/* Token Info - Show if available */}
         {hasTokenInfo && (
           <section className="p-6 rounded-xl border border-ether-500/20 bg-ether-500/5">
@@ -631,6 +643,16 @@ function OverviewTab({
           )}
         </section>
 
+        {/* Description (from contract data, above Heuristics when present) */}
+        {contract.description?.trim() && (
+          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
+            <h2 className="text-lg font-semibold mb-4">Description</h2>
+            <div className="prose prose-invert max-w-none overflow-hidden break-words">
+              <MarkdownRenderer content={contract.description.trim()} />
+            </div>
+          </section>
+        )}
+
         {/* Heuristics */}
         {contract.heuristics.contractType && (
           <section className="p-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
@@ -673,12 +695,10 @@ function OverviewTab({
             </div>
           </section>
         )}
-
-        <HistoricalDocsSection contract={contract} />
       </div>
 
       {/* Sidebar */}
-      <div className="space-y-6">
+      <div className="space-y-6 min-w-0">
         {/* Era info */}
         {contract.era && (
           <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
@@ -1212,7 +1232,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   }
 
   return (
-    <div className="space-y-6" id="history">
+    <div className="space-y-6 min-w-0 overflow-hidden" id="history">
       {/* Historical narrative */}
       <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
         <div className="flex items-start justify-between gap-4 mb-4">
@@ -1409,14 +1429,8 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
               />
             </div>
           </div>
-        ) : savedDescription || savedSignificance || savedContext ? (
-          <div className="prose prose-invert max-w-none">
-            {savedDescription && (
-              <div className="mb-4">
-                <MarkdownRenderer content={savedDescription} />
-              </div>
-            )}
-
+        ) : savedSignificance || savedContext ? (
+          <div className="prose prose-invert max-w-none overflow-hidden break-words">
             {savedSignificance && (
               <>
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
@@ -1573,27 +1587,28 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         </section>
       )}
 
-
-      {/* Community contribution */}
-      <section className="p-6 rounded-xl border border-dashed border-obsidian-700 bg-obsidian-900/20">
-        <div className="text-center">
-          <Users className="w-8 h-8 mx-auto mb-3 text-obsidian-500" />
-          <h3 className="font-medium mb-2">Contribute Historical Context</h3>
-          <p className="text-sm text-obsidian-500 mb-4">
-            Know something about this contract? We welcome contributions from the community
-            to help preserve Ethereum's history.
-          </p>
-          <a
-            href="https://discord.gg/3KV6dt2euF"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-200 text-sm"
-          >
-            Request Historian access on Discord
-            <ExternalLink className="w-3.5 h-3.5 mb-[3px]" />
-          </a>
-        </div>
-      </section>
+      {/* Community contribution: show only for non-historians or when no narrative yet */}
+      {(!me?.active || (!savedSignificance && !savedContext && (historyData?.links?.length ?? 0) === 0)) && (
+        <section className="p-6 rounded-xl border border-dashed border-obsidian-700 bg-obsidian-900/20">
+          <div className="text-center">
+            <Users className="w-8 h-8 mx-auto mb-3 text-obsidian-500" />
+            <h3 className="font-medium mb-2">Contribute Historical Context</h3>
+            <p className="text-sm text-obsidian-500 mb-4">
+              Know something about this contract? We welcome contributions from the community
+              to help preserve Ethereum's history.
+            </p>
+            <a
+              href="https://discord.gg/3KV6dt2euF"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-200 text-sm"
+            >
+              Request Historian access on Discord
+              <ExternalLink className="w-3.5 h-3.5 mb-[3px]" />
+            </a>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
