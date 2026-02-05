@@ -51,13 +51,14 @@ interface ContractPageClientProps {
   error: string | null;
 }
 
+// Max characters for the header short description display.
+const SHORT_DESCRIPTION_MAX_CHARS = 160;
+
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "code" | "history">(
-    "overview"
-  );
+  const [activeTab, setActiveTab] = useState<"overview" | "history" | "code">("overview");
 
   // Load historian status for header
   useEffect(() => {
@@ -174,12 +175,16 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
 
   const displayName = contract.tokenName || contract.ensName || contract.etherscanContractName || null;
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
+  const shortDescriptionText = contract.shortDescription?.trim();
+  const shortDescriptionDisplay = shortDescriptionText
+    ? truncateText(shortDescriptionText, SHORT_DESCRIPTION_MAX_CHARS)
+    : null;
 
   return (
     <div className="min-h-screen">
       <Header showHistorianLogin={!me} />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
         {/* Back link */}
         <Link
           href="/"
@@ -205,9 +210,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="mb-6"
         >
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-1">
             <div>
               {/* Contract name */}
               <div className="flex items-center gap-3 mb-2">
@@ -241,7 +246,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
 
               {/* Address */}
               <div className="flex items-center gap-2">
-                <code className="text-lg text-obsidian-300 font-mono">
+                <code className="text-md text-obsidian-300 font-mono">
                   {formatAddress(address, 12)}
                 </code>
                 <button
@@ -250,9 +255,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                   title="Copy full address"
                 >
                   {copied ? (
-                    <Check className="w-4 h-4 text-green-400" />
+                    <Check className="w-3 h-3 text-green-400" />
                   ) : (
-                    <Copy className="w-4 h-4 text-obsidian-500" />
+                    <Copy className="w-3 h-3 text-obsidian-500" />
                   )}
                 </button>
                 <a
@@ -262,7 +267,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                   className="p-1.5 rounded-lg hover:bg-obsidian-800 transition-colors"
                   title="View on Etherscan"
                 >
-                  <ExternalLink className="w-4 h-4 text-obsidian-500" />
+                  <ExternalLink className="w-3 h-3 text-obsidian-500" />
                 </a>
               </div>
 
@@ -304,6 +309,15 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               </a>
             )}
           </div>
+
+          {shortDescriptionDisplay && (
+                <p
+                  className="mt-4 text-lg text-obsidian-400 max-w-2xl"
+                  title={shortDescriptionText}
+                >
+                  {shortDescriptionDisplay}
+                </p>
+              )}
         </motion.div>
 
         {/* Tabs (scrollable on mobile) */}
@@ -317,18 +331,18 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               Overview
             </TabButton>
             <TabButton
-              active={activeTab === "code"}
-              onClick={() => setActiveTab("code")}
-              icon={<FileCode className="w-4 h-4" />}
-            >
-              Code
-            </TabButton>
-            <TabButton
               active={activeTab === "history"}
               onClick={() => setActiveTab("history")}
               icon={<History className="w-4 h-4" />}
             >
               History
+            </TabButton>
+            <TabButton
+              active={activeTab === "code"}
+              onClick={() => setActiveTab("code")}
+              icon={<FileCode className="w-4 h-4" />}
+            >
+              Code
             </TabButton>
           </div>
         </div>
@@ -348,6 +362,11 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               txCountsByYear={txCountsByYear ?? null}
             />
           )}
+          {activeTab === "history" && (
+            <div className="min-w-0">
+              <HistoricalDocsSection contract={contract} />
+            </div>
+          )}
           {activeTab === "code" && (
             <CodeTab
               bytecode={contract.runtimeBytecode}
@@ -359,9 +378,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               sourceCode={contract.sourceCode}
               abi={contract.abi}
             />
-          )}
-          {activeTab === "history" && (
-            <HistoryTab contract={contract} />
           )}
         </motion.div>
       </div>
@@ -426,9 +442,9 @@ function OverviewTab({
   const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply || contract.tokenLogo;
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
+    <div className="grid lg:grid-cols-3 gap-6 min-w-0">
       {/* Main info */}
-      <div className="lg:col-span-2 space-y-6">
+      <div className="lg:col-span-2 space-y-6 min-w-0">
         {/* Token Info - Show if available */}
         {hasTokenInfo && (
           <section className="p-6 rounded-xl border border-ether-500/20 bg-ether-500/5">
@@ -627,6 +643,16 @@ function OverviewTab({
           )}
         </section>
 
+        {/* Description (from contract data, above Heuristics when present) */}
+        {contract.description?.trim() && (
+          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
+            <h2 className="text-lg font-semibold mb-4">Description</h2>
+            <div className="prose prose-invert max-w-none overflow-hidden break-words">
+              <MarkdownRenderer content={contract.description.trim()} />
+            </div>
+          </section>
+        )}
+
         {/* Heuristics */}
         {contract.heuristics.contractType && (
           <section className="p-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
@@ -669,18 +695,10 @@ function OverviewTab({
             </div>
           </section>
         )}
-
-        {/* Historical summary */}
-        {contract.historicalSummary && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-            <h2 className="text-lg font-semibold mb-4">Historical Summary</h2>
-            <MarkdownRenderer content={contract.historicalSummary} />
-          </section>
-        )}
       </div>
 
       {/* Sidebar */}
-      <div className="space-y-6">
+      <div className="space-y-6 min-w-0">
         {/* Era info */}
         {contract.era && (
           <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
@@ -692,8 +710,13 @@ function OverviewTab({
               <h3 className="font-semibold">{contract.era.name} Era</h3>
             </div>
             <p className="text-sm text-obsidian-400 mb-3">{contract.era.description}</p>
-            <div className="text-xs text-obsidian-500">
-              {formatDate(contract.era.startDate)} — {contract.era.endDate ? formatDate(contract.era.endDate) : "Present"}
+            <div className="space-y-1 text-xs text-obsidian-500">
+              <div>
+                Block span: {contract.era.startBlock.toLocaleString()} — {contract.era.endBlock?.toLocaleString() || "present"}
+              </div>
+              <div>
+                {formatDate(contract.era.startDate)} — {contract.era.endDate ? formatDate(contract.era.endDate) : "Present"}
+              </div>
             </div>
           </section>
         )}
@@ -810,6 +833,13 @@ function formatTokenSupplyDisplay(supply: string, decimals: number): string {
   }
 }
 
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength).trimEnd()}...`;
+}
+
 function CodeTab({
   bytecode,
   analysis,
@@ -898,7 +928,7 @@ function SimilarityTab({
   );
 }
 
-function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
+function HistoricalDocsSection({ contract }: { contract: ContractPageData["contract"] }) {
   type DraftLink = {
     clientId: string;
     id: number | null;
@@ -927,7 +957,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [savedContractType, setSavedContractType] = useState(contract.heuristics.contractType || "");
   const [savedShortDescription, setSavedShortDescription] = useState(contract.shortDescription || "");
   const [savedDescription, setSavedDescription] = useState(contract.description || "");
-  const [savedSummary, setSavedSummary] = useState(contract.historicalSummary || "");
   const [savedSignificance, setSavedSignificance] = useState(contract.historicalSignificance || "");
   const [savedContext, setSavedContext] = useState(contract.historicalContext || "");
   const [savedTokenLogo, setSavedTokenLogo] = useState(contract.tokenLogo || "");
@@ -938,7 +967,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   const [draftContractType, setDraftContractType] = useState(savedContractType);
   const [draftShortDescription, setDraftShortDescription] = useState(savedShortDescription);
   const [draftDescription, setDraftDescription] = useState(savedDescription);
-  const [draftSummary, setDraftSummary] = useState(savedSummary);
   const [draftSignificance, setDraftSignificance] = useState(savedSignificance);
   const [draftContext, setDraftContext] = useState(savedContext);
   const [draftTokenLogo, setDraftTokenLogo] = useState(savedTokenLogo);
@@ -959,7 +987,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     setSavedContractType(contract.heuristics.contractType || "");
     setSavedShortDescription(contract.shortDescription || "");
     setSavedDescription(contract.description || "");
-    setSavedSummary(contract.historicalSummary || "");
     setSavedSignificance(contract.historicalSignificance || "");
     setSavedContext(contract.historicalContext || "");
     setSavedTokenLogo(contract.tokenLogo || "");
@@ -969,7 +996,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     setDraftContractType(contract.heuristics.contractType || "");
     setDraftShortDescription(contract.shortDescription || "");
     setDraftDescription(contract.description || "");
-    setDraftSummary(contract.historicalSummary || "");
     setDraftSignificance(contract.historicalSignificance || "");
     setDraftContext(contract.historicalContext || "");
     setDraftTokenLogo(contract.tokenLogo || "");
@@ -1069,6 +1095,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
     () => draftLinks.filter((l) => l._deleted && l.id != null).map((l) => l.id as number),
     [draftLinks]
   );
+  const hasLinks = (historyData?.links?.length ?? 0) > 0;
 
   async function createNewPerson() {
     if (!newPersonName.trim() || !contract.deployerAddress) {
@@ -1128,7 +1155,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             contractType: draftContractType,
             shortDescription: draftShortDescription,
             description: draftDescription,
-            historicalSummary: draftSummary,
             historicalSignificance: draftSignificance,
             historicalContext: draftContext,
             tokenLogo: draftTokenLogo,
@@ -1158,7 +1184,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
       setSavedContractType(draftContractType.trim());
       setSavedShortDescription(draftShortDescription.trim());
       setSavedDescription(draftDescription.trim());
-      setSavedSummary(draftSummary.trim());
       setSavedSignificance(draftSignificance.trim());
       setSavedContext(draftContext.trim());
       setSavedTokenLogo(draftTokenLogo.trim());
@@ -1207,7 +1232,7 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
   }
 
   return (
-    <div className="space-y-6" id="history">
+    <div className="space-y-6 min-w-0 overflow-hidden" id="history">
       {/* Historical narrative */}
       <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
         <div className="flex items-start justify-between gap-4 mb-4">
@@ -1359,8 +1384,9 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
               <input
                 value={draftShortDescription}
                 onChange={(e) => setDraftShortDescription(e.target.value)}
+                maxLength={SHORT_DESCRIPTION_MAX_CHARS}
                 className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
-                placeholder="One-line summary (used on homepage cards)"
+                placeholder={`One-line summary (${SHORT_DESCRIPTION_MAX_CHARS} characters max)`}
               />
             </div>
             <div>
@@ -1385,15 +1411,6 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
               </div>
             </div>
             <div>
-              <div className="text-xs text-obsidian-500 mb-1">Summary</div>
-              <MarkdownEditor
-                value={draftSummary}
-                onChange={setDraftSummary}
-                placeholder="What is this contract, historically?"
-                minHeight="120px"
-              />
-            </div>
-            <div>
               <div className="text-xs text-obsidian-500 mb-1">Historical Significance</div>
               <MarkdownEditor
                 value={draftSignificance}
@@ -1412,26 +1429,8 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
               />
             </div>
           </div>
-        ) : savedShortDescription || savedDescription || savedSummary ? (
-          <div className="prose prose-invert max-w-none">
-            {savedShortDescription && (
-              <p className="text-obsidian-300 leading-relaxed mb-4">
-                {savedShortDescription}
-              </p>
-            )}
-
-            {savedDescription && (
-              <div className="mb-4">
-                <MarkdownRenderer content={savedDescription} />
-              </div>
-            )}
-
-            {savedSummary && (
-              <div className="mb-4">
-                <MarkdownRenderer content={savedSummary} />
-              </div>
-            )}
-
+        ) : savedSignificance || savedContext ? (
+          <div className="prose prose-invert max-w-none overflow-hidden break-words">
             {savedSignificance && (
               <>
                 <h3 className="text-base font-medium text-obsidian-200 mt-6 mb-2">
@@ -1461,8 +1460,8 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
         )}
       </section>
 
-      {/* Historical links */}
-      <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+      {(editMode || hasLinks) && (
+        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
         <div className="flex items-center justify-between gap-4 mb-4">
           <h3 className="font-semibold">Historical Links</h3>
           {editMode && (
@@ -1585,49 +1584,31 @@ function HistoryTab({ contract }: { contract: ContractPageData["contract"] }) {
             ))}
           </div>
         )}
-      </section>
-
-      {/* Era context */}
-      {contract.era && (
-        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: contract.era.color }}
-            />
-            About the {contract.era.name} Era
-          </h3>
-          <p className="text-obsidian-300 leading-relaxed mb-4">
-            {contract.era.description}
-          </p>
-          <div className="text-sm text-obsidian-500">
-            This contract was deployed during blocks {contract.era.startBlock.toLocaleString()} —{" "}
-            {contract.era.endBlock?.toLocaleString() || "present"} ({formatDate(contract.era.startDate)}{" "}
-            — {contract.era.endDate ? formatDate(contract.era.endDate) : "present"}).
-          </div>
         </section>
       )}
 
-      {/* Community contribution */}
-      <section className="p-6 rounded-xl border border-dashed border-obsidian-700 bg-obsidian-900/20">
-        <div className="text-center">
-          <Users className="w-8 h-8 mx-auto mb-3 text-obsidian-500" />
-          <h3 className="font-medium mb-2">Contribute Historical Context</h3>
-          <p className="text-sm text-obsidian-500 mb-4">
-            Know something about this contract? We welcome contributions from the community
-            to help preserve Ethereum's history.
-          </p>
-          <a
-            href="https://discord.gg/3KV6dt2euF"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-200 text-sm"
-          >
-            Request Historian access on Discord
-            <ExternalLink className="w-4 h-4" />
-          </a>
-        </div>
-      </section>
+      {/* Community contribution: show only for non-historians or when no narrative yet */}
+      {(!me?.active || (!savedSignificance && !savedContext && (historyData?.links?.length ?? 0) === 0)) && (
+        <section className="p-6 rounded-xl border border-dashed border-obsidian-700 bg-obsidian-900/20">
+          <div className="text-center">
+            <Users className="w-8 h-8 mx-auto mb-3 text-obsidian-500" />
+            <h3 className="font-medium mb-2">Contribute Historical Context</h3>
+            <p className="text-sm text-obsidian-500 mb-4">
+              Know something about this contract? We welcome contributions from the community
+              to help preserve Ethereum's history.
+            </p>
+            <a
+              href="https://discord.gg/3KV6dt2euF"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-200 text-sm"
+            >
+              Request Historian access on Discord
+              <ExternalLink className="w-3.5 h-3.5 mb-[3px]" />
+            </a>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -867,7 +867,6 @@ export async function updateContractHistoryFieldsFromDb(
     contractType?: string | null;
     shortDescription?: string | null;
     description?: string | null;
-    historicalSummary?: string | null;
     historicalSignificance?: string | null;
     historicalContext?: string | null;
   }
@@ -896,10 +895,6 @@ export async function updateContractHistoryFieldsFromDb(
   }
   if (patch.description !== undefined) {
     updates.description = patch.description;
-    hasFieldUpdates = true;
-  }
-  if (patch.historicalSummary !== undefined) {
-    updates.historicalSummary = patch.historicalSummary;
     hasFieldUpdates = true;
   }
   if (patch.historicalSignificance !== undefined) {
