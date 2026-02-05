@@ -102,7 +102,7 @@ export default function ApiDocsPage() {
             {/* Contract facts */}
             <Section title="Contract facts (one address)" id="contract-facts">
               <p className="text-obsidian-300 mb-4">
-                Full factual data for a single contract: address, era, deployer, deployment block/timestamp, <strong>runtime_bytecode</strong>, <strong>decompiled_code</strong> (when available), short_description, historical_summary, historical_significance, historical_context, token metadata, heuristics, links, metadata.
+                Full factual data for a single contract: address, era, deployer, deployment block/timestamp, <strong>runtime_bytecode</strong>, <strong>decompiled_code</strong> (when available), short_description, description (canonical narrative; historical_summary mirrors it for API compatibility), historical_significance, historical_context, token metadata, heuristics, links, metadata.
               </p>
               <Endpoint method="GET" path="/api/agent/contracts/{address}" />
               <p className="text-obsidian-400 text-sm mt-2 mb-2">
@@ -154,7 +154,8 @@ export default function ApiDocsPage() {
     "token_symbol": "EXT",
     "token_decimals": 18,
     "short_description": "Early ERC-20 style token...",
-    "historical_summary": "...",
+    "description": "...",
+    "historical_summary": "... (same as description; deprecated, use description)",
     "historical_significance": "...",
     "historical_context": "...",
     "verification_status": "verified",

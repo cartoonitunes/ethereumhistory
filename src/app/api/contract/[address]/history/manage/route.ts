@@ -88,10 +88,6 @@ export async function POST(
         contractPatch.description !== undefined
           ? (String(contractPatch.description || "").trim() || null)
           : undefined,
-      historicalSummary:
-        contractPatch.historicalSummary !== undefined
-          ? (String(contractPatch.historicalSummary || "").trim() || null)
-          : undefined,
       historicalSignificance:
         contractPatch.historicalSignificance !== undefined
           ? (String(contractPatch.historicalSignificance || "").trim() || null)
@@ -126,7 +122,6 @@ export async function POST(
     if (contractPatch.contractType !== undefined) fieldsChanged.push("contractType");
     if (contractPatch.shortDescription !== undefined) fieldsChanged.push("shortDescription");
     if (contractPatch.description !== undefined) fieldsChanged.push("description");
-    if (contractPatch.historicalSummary !== undefined) fieldsChanged.push("historicalSummary");
     if (contractPatch.historicalSignificance !== undefined) fieldsChanged.push("historicalSignificance");
     if (contractPatch.historicalContext !== undefined) fieldsChanged.push("historicalContext");
 
