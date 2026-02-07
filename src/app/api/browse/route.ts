@@ -36,6 +36,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const era = searchParams.get("era")?.trim() || undefined;
   const type = searchParams.get("type")?.trim() || undefined;
   const q = searchParams.get("q")?.trim() || undefined;
+  const yearParam = searchParams.get("year")?.trim();
   const undocumented = searchParams.get("undocumented") === "1";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(
@@ -44,10 +45,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
   const offset = (page - 1) * limit;
 
+  const year = yearParam ? parseInt(yearParam, 10) : null;
+
   const filterParams = {
     eraId: era || null,
     contractType: type || null,
     codeQuery: q || null,
+    year: year && year >= 2015 && year <= 2017 ? year : null,
   };
 
   const [contracts, total] = undocumented

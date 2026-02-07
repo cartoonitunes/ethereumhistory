@@ -46,6 +46,7 @@ function BrowseContent() {
 
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const era = searchParams.get("era") || "";
+  const year = searchParams.get("year") || "";
   const type = searchParams.get("type") || "";
   const q = searchParams.get("q") || "";
   const undocumented = searchParams.get("undocumented") === "1";
@@ -67,6 +68,7 @@ function BrowseContent() {
     setLoading(true);
     const params = new URLSearchParams();
     if (era) params.set("era", era);
+    if (year) params.set("year", year);
     if (type) params.set("type", type);
     if (q.trim()) params.set("q", q.trim());
     if (undocumented) params.set("undocumented", "1");
@@ -87,13 +89,13 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, type, q, undocumented, page]);
+  }, [era, year, type, q, undocumented, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "type" | "q" | "page" | "undocumented", value: string) => {
+  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
@@ -137,6 +139,19 @@ function BrowseContent() {
             className="flex flex-col sm:flex-row gap-4 mb-8"
           >
             <div className="flex flex-col sm:flex-row gap-3 flex-1">
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="text-obsidian-400">Year</span>
+                <select
+                  value={year}
+                  onChange={(e) => setFilter("year", e.target.value)}
+                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
+                >
+                  <option value="">All years</option>
+                  <option value="2015">2015</option>
+                  <option value="2016">2016</option>
+                  <option value="2017">2017</option>
+                </select>
+              </label>
               <label className="flex flex-col gap-1.5 text-sm">
                 <span className="text-obsidian-400">Era</span>
                 <select
@@ -197,7 +212,7 @@ function BrowseContent() {
 
           {/* Documentation Progress */}
           <div className="mb-8">
-            <DocumentationProgress variant="browse" filterEra={era || undefined} />
+            <DocumentationProgress variant="browse" filterEra={era || undefined} filterYear={year || undefined} />
           </div>
 
           {/* Results */}
