@@ -977,6 +977,8 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingReview, setPendingReview] = useState(false);
+  const [pendingFields, setPendingFields] = useState<string[]>([]);
 
   // Local editable state (initialized from contract + fetched links)
   const [savedEtherscanContractName, setSavedEtherscanContractName] = useState(
@@ -1118,6 +1120,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   }, []);
 
   const canEdit = !!me?.active;
+  const isTrusted = !!me?.trusted;
 
   const visibleLinks = useMemo(() => draftLinks.filter((l) => !l._deleted), [draftLinks]);
   const deletedIds = useMemo(
@@ -1206,6 +1209,15 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         setSaveError(errorMsg);
         return;
       }
+
+      // Check if edits were queued for review (untrusted historian)
+      if (json?.meta?.pendingReview) {
+        setPendingReview(true);
+        setPendingFields(json.meta.fieldsSubmitted || []);
+        setEditMode(false);
+        return;
+      }
+
       const updated = json.data as ContractHistoryData;
       setHistoryData(updated);
       setSavedEtherscanContractName(draftEtherscanContractName.trim());
@@ -1230,7 +1242,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         }))
       );
       setEditMode(false);
-      
+
       // Refresh the page data to get updated contract fields from server
       // This ensures tokenName and other contract fields are updated in the UI
       // Use window.location.reload() since router is not available in this scope
@@ -1283,10 +1295,16 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                     type="button"
                     onClick={saveHistory}
                     disabled={saving}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-sm text-white disabled:opacity-50"
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-white disabled:opacity-50 ${
+                      isTrusted
+                        ? "bg-ether-600 hover:bg-ether-500"
+                        : "bg-amber-600 hover:bg-amber-500"
+                    }`}
                   >
                     <Save className="w-4 h-4" />
-                    {saving ? "Saving…" : "Save"}
+                    {saving
+                      ? isTrusted ? "Saving…" : "Submitting…"
+                      : isTrusted ? "Save" : "Submit for Review"}
                   </button>
                 </>
               ) : (
@@ -1312,6 +1330,27 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         </div>
 
         {saveError && <div className="mb-3 text-sm text-red-400">{saveError}</div>}
+
+        {/* Pending review banner (shown after untrusted submit) */}
+        {pendingReview && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm">
+            <span className="font-medium">Edit submitted for review.</span>{" "}
+            {pendingFields.length > 0 && (
+              <span className="text-amber-400">
+                Fields: {pendingFields.map(f => f.replace(/([A-Z])/g, " $1").trim()).join(", ")}.
+              </span>
+            )}{" "}
+            A trusted historian will review your changes before they go live.
+          </div>
+        )}
+
+        {/* Info banner for untrusted historians in edit mode */}
+        {editMode && canEdit && !isTrusted && (
+          <div className="mb-4 p-3 rounded-lg bg-obsidian-800/50 border border-obsidian-700 text-obsidian-300 text-sm flex items-start gap-2">
+            <Info className="w-4 h-4 shrink-0 mt-0.5 text-obsidian-400" />
+            <span>New historians: your edits will be reviewed by a trusted historian before going live. Link and deployer edits require trusted status.</span>
+          </div>
+        )}
 
         {editMode ? (
           <div className="space-y-4">
@@ -1344,6 +1383,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                 />
               </div>
             </div>
+            {isTrusted && (
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Deployer</div>
               {showAddPerson ? (
@@ -1408,6 +1448,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                 </div>
               )}
             </div>
+            )}
             <div>
               <div className="text-xs text-obsidian-500 mb-1">Short description</div>
               <input
@@ -1489,11 +1530,11 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         )}
       </section>
 
-      {(editMode || hasLinks) && (
+      {((editMode && isTrusted) || hasLinks) && (
         <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
         <div className="flex items-center justify-between gap-4 mb-4">
           <h3 className="font-semibold">Historical Links</h3>
-          {editMode && (
+          {editMode && isTrusted && (
             <button
               type="button"
               onClick={addNewLink}
@@ -1506,11 +1547,11 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
 
         {historyError && <div className="text-sm text-red-400">{historyError}</div>}
 
-        {!editMode && (historyData?.links?.length || 0) === 0 ? (
+        {!(editMode && isTrusted) && (historyData?.links?.length || 0) === 0 ? (
           <div className="text-sm text-obsidian-500">No links yet.</div>
         ) : (
           <div className="space-y-3">
-            {(editMode ? visibleLinks : (historyData?.links || []).map((l) => ({
+            {((editMode && isTrusted) ? visibleLinks : (historyData?.links || []).map((l) => ({
               clientId: String(l.id),
               id: l.id,
               contractAddress: l.contractAddress,
@@ -1524,7 +1565,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                 key={l.clientId}
                 className="rounded-xl border border-obsidian-800 bg-obsidian-900/20 p-4"
               >
-                {editMode ? (
+                {(editMode && isTrusted) ? (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <input

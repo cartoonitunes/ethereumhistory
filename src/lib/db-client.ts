@@ -647,6 +647,10 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
     name: row.name,
     active: row.active ?? true,
     trusted: row.trusted ?? false,
+    avatarUrl: row.avatarUrl || null,
+    bio: row.bio || null,
+    websiteUrl: row.websiteUrl || null,
+    githubUsername: row.githubUsername || null,
   };
 }
 
@@ -1975,6 +1979,8 @@ export async function insertEditSuggestionFromDb(params: {
   reason?: string | null;
   submitterGithub?: string | null;
   submitterName?: string | null;
+  submitterHistorianId?: number | null;
+  batchId?: string | null;
 }): Promise<{ id: number }> {
   const database = getDb();
   const [result] = await database
@@ -1986,11 +1992,251 @@ export async function insertEditSuggestionFromDb(params: {
       reason: params.reason || null,
       submitterGithub: params.submitterGithub || null,
       submitterName: params.submitterName || null,
+      submitterHistorianId: params.submitterHistorianId || null,
+      batchId: params.batchId || null,
       status: "pending",
       createdAt: new Date(),
     })
     .returning({ id: schema.editSuggestions.id });
   return { id: result.id };
+}
+
+/**
+ * Insert a batch of edit suggestions (one per changed field) with a shared batchId.
+ * Auto-supersedes any previous pending suggestions from the same historian for the same contract+field.
+ */
+export async function insertBatchEditSuggestionsFromDb(params: {
+  contractAddress: string;
+  submitterHistorianId: number;
+  submitterName: string;
+  submitterGithub?: string | null;
+  fields: Array<{ fieldName: string; suggestedValue: string }>;
+  reason?: string | null;
+}): Promise<{ batchId: string; ids: number[] }> {
+  const database = getDb();
+  const normalized = params.contractAddress.toLowerCase();
+  const batchId = `batch_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+
+  // Supersede any previous pending suggestions from this historian for these fields
+  const fieldNames = params.fields.map((f) => f.fieldName);
+  if (fieldNames.length > 0) {
+    await database
+      .update(schema.editSuggestions)
+      .set({ status: "superseded" })
+      .where(
+        and(
+          eq(schema.editSuggestions.contractAddress, normalized),
+          eq(schema.editSuggestions.submitterHistorianId, params.submitterHistorianId),
+          eq(schema.editSuggestions.status, "pending"),
+          inArray(schema.editSuggestions.fieldName, fieldNames)
+        )
+      );
+  }
+
+  const ids: number[] = [];
+  for (const field of params.fields) {
+    const [result] = await database
+      .insert(schema.editSuggestions)
+      .values({
+        contractAddress: normalized,
+        fieldName: field.fieldName,
+        suggestedValue: field.suggestedValue,
+        reason: params.reason || null,
+        submitterGithub: params.submitterGithub || null,
+        submitterName: params.submitterName,
+        submitterHistorianId: params.submitterHistorianId,
+        batchId,
+        status: "pending",
+        createdAt: new Date(),
+      })
+      .returning({ id: schema.editSuggestions.id });
+    ids.push(result.id);
+  }
+
+  return { batchId, ids };
+}
+
+/**
+ * Get a single edit suggestion by ID.
+ */
+export async function getEditSuggestionByIdFromDb(id: number): Promise<schema.EditSuggestion | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.editSuggestions)
+    .where(eq(schema.editSuggestions.id, id))
+    .limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Get pending suggestions for a specific historian (for "my pending edits" view).
+ */
+export async function getPendingSuggestionsForHistorianFromDb(
+  historianId: number,
+  contractAddress?: string
+): Promise<schema.EditSuggestion[]> {
+  const database = getDb();
+  const conditions: SQL[] = [
+    eq(schema.editSuggestions.submitterHistorianId, historianId),
+    eq(schema.editSuggestions.status, "pending"),
+  ];
+  if (contractAddress) {
+    conditions.push(eq(schema.editSuggestions.contractAddress, contractAddress.toLowerCase()));
+  }
+  return database
+    .select()
+    .from(schema.editSuggestions)
+    .where(and(...conditions))
+    .orderBy(desc(schema.editSuggestions.createdAt))
+    .limit(100);
+}
+
+/**
+ * Get pending suggestions for the review dashboard (for trusted historians).
+ * Includes submitter information via join.
+ */
+export async function getEditSuggestionsForReviewFromDb(params: {
+  limit?: number;
+  offset?: number;
+}): Promise<Array<schema.EditSuggestion & { submitterHistorianName: string | null; submitterHistorianGithub: string | null }>> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      id: schema.editSuggestions.id,
+      contractAddress: schema.editSuggestions.contractAddress,
+      fieldName: schema.editSuggestions.fieldName,
+      suggestedValue: schema.editSuggestions.suggestedValue,
+      reason: schema.editSuggestions.reason,
+      submitterGithub: schema.editSuggestions.submitterGithub,
+      submitterName: schema.editSuggestions.submitterName,
+      submitterHistorianId: schema.editSuggestions.submitterHistorianId,
+      batchId: schema.editSuggestions.batchId,
+      status: schema.editSuggestions.status,
+      reviewedBy: schema.editSuggestions.reviewedBy,
+      reviewedAt: schema.editSuggestions.reviewedAt,
+      createdAt: schema.editSuggestions.createdAt,
+      submitterHistorianName: schema.historians.name,
+      submitterHistorianGithub: schema.historians.githubUsername,
+    })
+    .from(schema.editSuggestions)
+    .leftJoin(schema.historians, eq(schema.editSuggestions.submitterHistorianId, schema.historians.id))
+    .where(eq(schema.editSuggestions.status, "pending"))
+    .orderBy(desc(schema.editSuggestions.createdAt))
+    .limit(params.limit ?? 100)
+    .offset(params.offset ?? 0);
+
+  return rows.map((r) => ({
+    id: r.id,
+    contractAddress: r.contractAddress,
+    fieldName: r.fieldName,
+    suggestedValue: r.suggestedValue,
+    reason: r.reason,
+    submitterGithub: r.submitterGithub,
+    submitterName: r.submitterName,
+    submitterHistorianId: r.submitterHistorianId,
+    batchId: r.batchId,
+    status: r.status,
+    reviewedBy: r.reviewedBy,
+    reviewedAt: r.reviewedAt,
+    createdAt: r.createdAt,
+    submitterHistorianName: r.submitterHistorianName || null,
+    submitterHistorianGithub: r.submitterHistorianGithub || null,
+  }));
+}
+
+/**
+ * Apply an approved suggestion: update the contract field and log the edit.
+ * Used when a trusted historian approves an untrusted historian's suggestion.
+ */
+export async function applyApprovedSuggestionFromDb(params: {
+  suggestionId: number;
+  reviewerId: number;
+}): Promise<void> {
+  const database = getDb();
+
+  // Get the suggestion (must be pending)
+  const suggestion = await getEditSuggestionByIdFromDb(params.suggestionId);
+  if (!suggestion || suggestion.status !== "pending") {
+    throw new Error("Suggestion not found or already processed");
+  }
+
+  // Map field names to contract fields
+  const fieldMapping: Record<string, string> = {
+    description: "description",
+    short_description: "shortDescription",
+    shortDescription: "shortDescription",
+    historical_significance: "historicalSignificance",
+    historicalSignificance: "historicalSignificance",
+    historical_context: "historicalContext",
+    historicalContext: "historicalContext",
+    etherscanContractName: "etherscanContractName",
+    tokenName: "tokenName",
+    contractType: "contractType",
+  };
+
+  const contractField = fieldMapping[suggestion.fieldName];
+  if (!contractField) {
+    throw new Error(`Cannot auto-apply field: ${suggestion.fieldName}`);
+  }
+
+  // Apply the change to the contract
+  const patch: Record<string, string | null> = {};
+  patch[contractField] = suggestion.suggestedValue;
+  await updateContractHistoryFieldsFromDb(suggestion.contractAddress, patch as any);
+
+  // Mark suggestion as approved
+  await updateEditSuggestionStatusFromDb({
+    id: params.suggestionId,
+    status: "approved",
+    reviewedBy: params.reviewerId,
+  });
+
+  // Log the edit under the submitter's historian ID (if they have one)
+  const editHistorianId = suggestion.submitterHistorianId || params.reviewerId;
+  await logContractEditFromDb({
+    contractAddress: suggestion.contractAddress,
+    historianId: editHistorianId,
+    fieldsChanged: [suggestion.fieldName],
+  });
+}
+
+/**
+ * Get count of pending suggestions (for review badge).
+ */
+export async function getPendingSuggestionsCountFromDb(): Promise<number> {
+  const database = getDb();
+  const result = await database
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(schema.editSuggestions)
+    .where(eq(schema.editSuggestions.status, "pending"));
+  return result[0]?.count || 0;
+}
+
+/**
+ * Update historian profile fields (avatar, bio, website).
+ */
+export async function updateHistorianProfileFromDb(
+  historianId: number,
+  patch: {
+    avatarUrl?: string | null;
+    bio?: string | null;
+    websiteUrl?: string | null;
+  }
+): Promise<void> {
+  const database = getDb();
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (patch.avatarUrl !== undefined) updates.avatarUrl = patch.avatarUrl;
+  if (patch.bio !== undefined) updates.bio = patch.bio;
+  if (patch.websiteUrl !== undefined) updates.websiteUrl = patch.websiteUrl;
+
+  if (Object.keys(updates).length <= 1) return;
+
+  await database
+    .update(schema.historians)
+    .set(updates as any)
+    .where(eq(schema.historians.id, historianId));
 }
 
 /**

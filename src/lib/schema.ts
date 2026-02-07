@@ -190,6 +190,10 @@ export const historians = pgTable(
     // GitHub OAuth
     githubId: text("github_id"),
     githubUsername: text("github_username"),
+    // Profile personalization
+    avatarUrl: text("avatar_url"),
+    bio: text("bio"),
+    websiteUrl: text("website_url"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -394,6 +398,9 @@ export const editSuggestions = pgTable(
     // Submitter identity (optional — GitHub username if authed, null if anonymous)
     submitterGithub: text("submitter_github"),
     submitterName: text("submitter_name"),
+    // Linked historian account (for moderated edits from untrusted historians)
+    submitterHistorianId: integer("submitter_historian_id").references(() => historians.id, { onDelete: "set null" }),
+    batchId: text("batch_id"),
     // Moderation
     status: text("status").notNull().default("pending"), // pending, approved, rejected
     reviewedBy: integer("reviewed_by").references(() => historians.id, { onDelete: "set null" }),
@@ -405,6 +412,8 @@ export const editSuggestions = pgTable(
     contractIdx: index("edit_suggestions_contract_idx").on(table.contractAddress),
     statusIdx: index("edit_suggestions_status_idx").on(table.status),
     createdAtIdx: index("edit_suggestions_created_at_idx").on(table.createdAt),
+    historianIdx: index("edit_suggestions_historian_idx").on(table.submitterHistorianId),
+    batchIdx: index("edit_suggestions_batch_idx").on(table.batchId),
   })
 );
 

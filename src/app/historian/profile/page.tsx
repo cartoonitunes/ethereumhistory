@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { Loader2, ArrowLeft, Save, UserPlus, LogOut } from "lucide-react";
+import { Loader2, ArrowLeft, Save, UserPlus, LogOut, ClipboardCheck, ExternalLink, Github } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 export default function HistorianProfilePage() {
@@ -14,10 +14,14 @@ export default function HistorianProfilePage() {
 
   // Form state
   const [name, setName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [bio, setBio] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [currentToken, setCurrentToken] = useState("");
   const [newToken, setNewToken] = useState("");
   const [confirmToken, setConfirmToken] = useState("");
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -37,6 +41,9 @@ export default function HistorianProfilePage() {
         }
         
         setName(historian.name);
+        setAvatarUrl(historian.avatarUrl || "");
+        setBio(historian.bio || "");
+        setWebsiteUrl(historian.websiteUrl || "");
       } catch {
         if (!cancelled) setMe(null);
       } finally {
@@ -131,6 +138,39 @@ export default function HistorianProfilePage() {
     }
   }
 
+  async function handleUpdateProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingProfile(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await fetch("/api/historian/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          avatarUrl: avatarUrl.trim() || null,
+          bio: bio.trim() || null,
+          websiteUrl: websiteUrl.trim() || null,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        setError(String(json?.error || "Failed to update profile."));
+        return;
+      }
+
+      setMe(json.data);
+      setSuccess("Profile updated successfully.");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch {
+      setError("Failed to update profile.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
   async function handleLogout() {
     try {
       await fetch("/api/historian/logout", { method: "POST" });
@@ -193,8 +233,32 @@ export default function HistorianProfilePage() {
                 )}
               </span>
             </div>
+            {me.githubUsername && (
+              <div>
+                <span className="text-obsidian-500">GitHub:</span>{" "}
+                <a
+                  href={`https://github.com/${me.githubUsername}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-obsidian-200 hover:text-ether-400 transition-colors inline-flex items-center gap-1"
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  {me.githubUsername}
+                </a>
+              </div>
+            )}
+            <div>
+              <span className="text-obsidian-500">Public profile:</span>{" "}
+              <Link
+                href={`/historian/${me.id}`}
+                className="text-ether-400 hover:text-ether-300 transition-colors inline-flex items-center gap-1"
+              >
+                /historian/{me.id}
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
             {me.trusted && (
-              <div className="mt-4 pt-4 border-t border-obsidian-800">
+              <div className="mt-4 pt-4 border-t border-obsidian-800 flex flex-wrap gap-3">
                 <Link
                   href="/historian/invite"
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
@@ -202,9 +266,96 @@ export default function HistorianProfilePage() {
                   <UserPlus className="w-4 h-4" />
                   Invite Historians
                 </Link>
+                <Link
+                  href="/historian/review"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-200 text-sm font-medium transition-colors"
+                >
+                  <ClipboardCheck className="w-4 h-4" />
+                  Review Edits
+                </Link>
               </div>
             )}
           </div>
+        </div>
+
+        {/* Profile Personalization */}
+        <div className="mb-8 p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+          <h2 className="text-lg font-semibold mb-4">Profile Personalization</h2>
+          <form onSubmit={handleUpdateProfile} className="space-y-4">
+            <div>
+              <label className="block text-sm text-obsidian-400 mb-1">Avatar URL</label>
+              <input
+                type="url"
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder={me.githubUsername ? `Auto: https://github.com/${me.githubUsername}.png` : "https://example.com/avatar.png"}
+                disabled={savingProfile}
+              />
+              {!avatarUrl && me.githubUsername && (
+                <button
+                  type="button"
+                  onClick={() => setAvatarUrl(`https://github.com/${me.githubUsername}.png`)}
+                  className="text-xs text-ether-400 hover:text-ether-300 mt-1"
+                >
+                  Use GitHub avatar
+                </button>
+              )}
+              {avatarUrl && (
+                <div className="mt-2 flex items-center gap-3">
+                  <img
+                    src={avatarUrl}
+                    alt="Preview"
+                    className="w-10 h-10 rounded-full object-cover border border-obsidian-700"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <span className="text-xs text-obsidian-500">Preview</span>
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm text-obsidian-400 mb-1">
+                Bio <span className="text-obsidian-600">({bio.length}/280)</span>
+              </label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value.slice(0, 280))}
+                maxLength={280}
+                rows={3}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 resize-none"
+                placeholder="A short bio about yourself"
+                disabled={savingProfile}
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-obsidian-400 mb-1">Website URL</label>
+              <input
+                type="url"
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="https://yourwebsite.com"
+                disabled={savingProfile}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={savingProfile}
+              className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {savingProfile ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 inline mr-2" />
+                  Save Profile
+                </>
+              )}
+            </button>
+          </form>
         </div>
 
         {/* Update Name */}
