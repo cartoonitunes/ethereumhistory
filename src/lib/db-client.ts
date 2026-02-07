@@ -1648,6 +1648,93 @@ export async function getDocumentedContractTypesFromDb(): Promise<string[]> {
   return rows.map((r) => r.contractType as string).filter(Boolean);
 }
 
+/**
+ * Get undocumented contracts (missing or empty shortDescription).
+ * Used by the "Undocumented" filter on the browse page.
+ */
+export async function getUndocumentedContractsFromDb(params: {
+  eraId?: string | null;
+  contractType?: string | null;
+  codeQuery?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<AppContract[]> {
+  const database = getDb();
+  const limit = Math.min(Math.max(params.limit ?? 24, 1), 100);
+  const offset = Math.max(params.offset ?? 0, 0);
+
+  const conditions: SQL[] = [
+    or(
+      isNull(schema.contracts.shortDescription),
+      eq(schema.contracts.shortDescription, "")
+    )!,
+  ];
+  if (params.eraId != null && params.eraId !== "") {
+    conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.contractType != null && params.contractType !== "") {
+    conditions.push(eq(schema.contracts.contractType, params.contractType));
+  }
+  if (params.codeQuery != null && params.codeQuery.trim() !== "") {
+    const pattern = `%${params.codeQuery.trim()}%`;
+    conditions.push(
+      or(
+        ilike(schema.contracts.decompiledCode, pattern),
+        ilike(schema.contracts.sourceCode, pattern)
+      )!
+    );
+  }
+
+  const whereClause = and(...conditions);
+  const results = await database
+    .select()
+    .from(schema.contracts)
+    .where(whereClause)
+    .orderBy(asc(schema.contracts.deploymentTimestamp))
+    .limit(limit)
+    .offset(offset);
+
+  return results.map(dbRowToContract);
+}
+
+/**
+ * Get count of undocumented contracts (matching same filters as getUndocumentedContractsFromDb).
+ */
+export async function getUndocumentedContractsCountFromDb(params: {
+  eraId?: string | null;
+  contractType?: string | null;
+  codeQuery?: string | null;
+}): Promise<number> {
+  const database = getDb();
+  const conditions: SQL[] = [
+    or(
+      isNull(schema.contracts.shortDescription),
+      eq(schema.contracts.shortDescription, "")
+    )!,
+  ];
+  if (params.eraId != null && params.eraId !== "") {
+    conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.contractType != null && params.contractType !== "") {
+    conditions.push(eq(schema.contracts.contractType, params.contractType));
+  }
+  if (params.codeQuery != null && params.codeQuery.trim() !== "") {
+    const pattern = `%${params.codeQuery.trim()}%`;
+    conditions.push(
+      or(
+        ilike(schema.contracts.decompiledCode, pattern),
+        ilike(schema.contracts.sourceCode, pattern)
+      )!
+    );
+  }
+  const whereClause = and(...conditions);
+  const result = await database
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.contracts)
+    .where(whereClause);
+  return Number(result[0]?.count ?? 0);
+}
+
 // =============================================================================
 // Similarity Queries
 // =============================================================================
