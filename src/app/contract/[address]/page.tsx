@@ -14,8 +14,12 @@ function getMetadataBaseUrl(): URL {
   const explicit =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  return new URL(explicit || "http://localhost:3000");
+    (process.env.VERCEL_ENV === "production"
+      ? "https://www.ethereumhistory.com"
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+  return new URL(explicit || "https://www.ethereumhistory.com");
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
