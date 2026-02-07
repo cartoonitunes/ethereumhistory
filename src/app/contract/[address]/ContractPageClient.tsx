@@ -701,11 +701,6 @@ function OverviewTab({
                     <span className="text-obsidian-300">
                       {getContractTypeLabel(contract.heuristics.contractType)}
                     </span>
-                    {Math.round(contract.heuristics.confidence * 100) !== 50 && (
-                      <span className="text-obsidian-500 ml-1">
-                        ({Math.round(contract.heuristics.confidence * 100)}% confidence)
-                      </span>
-                    )}
                   </div>
                   {contract.heuristics.isProxy && (
                     <div className="text-obsidian-300">Appears to be a proxy contract</div>
@@ -910,7 +905,6 @@ function CodeTab({
                   <th>Selector</th>
                   <th>Signature</th>
                   <th>Source</th>
-                  <th>Confidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -925,7 +919,6 @@ function CodeTab({
                       </code>
                     </td>
                     <td className="text-xs text-obsidian-500">{sig.source}</td>
-                    <td className="text-xs">{Math.round(sig.confidence * 100)}%</td>
                   </tr>
                 ))}
               </tbody>

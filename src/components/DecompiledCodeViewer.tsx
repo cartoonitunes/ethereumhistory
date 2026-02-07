@@ -61,26 +61,60 @@ function parsePythonDecompiledCode(code: string): {
   let currentFunction: Partial<ParsedFunction> | null = null;
   let functionLines: string[] = [];
   let inStorage = false;
+  let headerDone = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Detect header (comments at the start)
-    if (i < 5 && trimmed.startsWith("#")) {
+    // Detect header (comments and blank lines before any def)
+    if (!headerDone && !trimmed.startsWith("def ") && (trimmed.startsWith("#") || trimmed === "")) {
       header += line + "\n";
       continue;
     }
+    headerDone = true;
 
     // Detect storage section
-    if (trimmed.startsWith("def storage:") || trimmed === "def storage:") {
+    if (trimmed === "def storage:" || trimmed.startsWith("def storage:")) {
       inStorage = true;
       continue;
     }
 
-    // Storage variables
-    if (inStorage && trimmed && !trimmed.startsWith("def ") && !trimmed.startsWith("#")) {
-      storage.push(trimmed);
+    // Storage variables (indented lines under def storage:)
+    if (inStorage) {
+      // Blank line or section comment ends storage section
+      if (trimmed === "" || (trimmed.startsWith("#") && !trimmed.startsWith("# "))) {
+        inStorage = false;
+        // fall through to handle this line normally
+      } else if (trimmed.startsWith("def ")) {
+        inStorage = false;
+        // fall through to function detection below
+      } else {
+        // Storage variable line (including # comments within storage)
+        if (trimmed.startsWith("#")) {
+          // Section comment within storage — skip
+        } else {
+          storage.push(trimmed);
+        }
+        continue;
+      }
+    }
+
+    // Section comments like "# Regular functions" — skip but end storage
+    if (trimmed.startsWith("#")) {
+      // If we're building a function body and the next non-blank line is a def,
+      // this is a section separator. Include it in function body for context.
+      if (currentFunction) {
+        functionLines.push(line);
+      }
+      continue;
+    }
+
+    // Blank lines
+    if (trimmed === "") {
+      if (currentFunction) {
+        functionLines.push(line);
+      }
       continue;
     }
 
@@ -97,10 +131,10 @@ function parsePythonDecompiledCode(code: string): {
         });
       }
 
-      inStorage = false;
       const isPayable = trimmed.includes("payable");
 
       // Extract function name and signature
+      // Handles: def funcName(params), def funcName(?), def _fallback(?) payable:
       const match = trimmed.match(/def\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(([^)]*)\)/);
       if (match) {
         currentFunction = {
@@ -110,6 +144,21 @@ function parsePythonDecompiledCode(code: string): {
           lineStart: i,
         };
         functionLines = [line];
+      } else {
+        // Fallback: try to extract just the name (handles unusual signatures)
+        const nameMatch = trimmed.match(/def\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/);
+        if (nameMatch) {
+          currentFunction = {
+            name: nameMatch[1],
+            signature: nameMatch[1] + "(…)",
+            isPayable,
+            lineStart: i,
+          };
+          functionLines = [line];
+        } else {
+          currentFunction = null;
+          functionLines = [];
+        }
       }
       continue;
     }
@@ -360,17 +409,32 @@ function parseSoliditySimple(code: string, header: string): {
 // Unified parser entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * Normalize escaped newlines/tabs that may have been stored literally
+ * in the database (e.g. Python pipeline double-escaping).
+ *
+ * Detects strings that contain literal `\n` (two characters: backslash + n)
+ * instead of real newline characters and converts them.
+ */
+function normalizeEscapedWhitespace(code: string): string {
+  // If the code already has real newlines, no fixup needed
+  if (code.includes("\n")) return code;
+  // Replace literal \n and \t sequences with real whitespace
+  return code.replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+}
+
 function parseDecompiledCode(code: string): {
   storage: string[];
   functions: ParsedFunction[];
   header: string;
   format: CodeFormat;
 } {
-  const format = detectCodeFormat(code);
+  const normalized = normalizeEscapedWhitespace(code);
+  const format = detectCodeFormat(normalized);
   const result =
     format === "solidity"
-      ? parseSolidityDecompiledCode(code)
-      : parsePythonDecompiledCode(code);
+      ? parseSolidityDecompiledCode(normalized)
+      : parsePythonDecompiledCode(normalized);
   return { ...result, format };
 }
 
@@ -388,22 +452,54 @@ export function DecompiledCodeViewer({
   const [expandedFunctions, setExpandedFunctions] = useState<Set<string>>(new Set());
   const [showAllCode, setShowAllCode] = useState(false);
 
+  // Normalize escaped whitespace (some DB records store literal \n)
+  const normalizedCode = useMemo(
+    () => decompiledCode ? normalizeEscapedWhitespace(decompiledCode) : null,
+    [decompiledCode]
+  );
+
+  // Parse the decompiled code
+  const parsed = useMemo(() => {
+    if (!normalizedCode || !decompilationSuccess) return null;
+    return parseDecompiledCode(normalizedCode);
+  }, [normalizedCode, decompilationSuccess]);
+
+  const isAutoGenerated = useMemo(
+    () => normalizedCode ? isAutoDecompiled(normalizedCode) : false,
+    [normalizedCode]
+  );
+
+  // Filter functions by search query, preserving original indices
+  const filteredFunctions = useMemo(() => {
+    if (!parsed) return [];
+    const indexed = parsed.functions.map((f, i) => ({ ...f, originalIndex: i }));
+    if (!searchQuery.trim()) return indexed;
+
+    const query = searchQuery.toLowerCase();
+    return indexed.filter(
+      (f) =>
+        f.name.toLowerCase().includes(query) ||
+        f.signature.toLowerCase().includes(query) ||
+        f.body.toLowerCase().includes(query)
+    );
+  }, [parsed, searchQuery]);
+
   const handleCopy = async () => {
-    if (!decompiledCode) return;
-    const success = await copyToClipboard(decompiledCode);
+    if (!normalizedCode) return;
+    const success = await copyToClipboard(normalizedCode);
     if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const toggleFunction = (name: string) => {
+  const toggleFunction = (key: string) => {
     setExpandedFunctions((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(name);
+        next.add(key);
       }
       return next;
     });
@@ -411,38 +507,13 @@ export function DecompiledCodeViewer({
 
   const expandAll = () => {
     if (parsed) {
-      setExpandedFunctions(new Set(parsed.functions.map((f) => f.name)));
+      setExpandedFunctions(new Set(parsed.functions.map((f, i) => `${f.name}-${i}`)));
     }
   };
 
   const collapseAll = () => {
     setExpandedFunctions(new Set());
   };
-
-  // Parse the decompiled code
-  const parsed = useMemo(() => {
-    if (!decompiledCode || !decompilationSuccess) return null;
-    return parseDecompiledCode(decompiledCode);
-  }, [decompiledCode, decompilationSuccess]);
-
-  const isAutoGenerated = useMemo(
-    () => decompiledCode ? isAutoDecompiled(decompiledCode) : false,
-    [decompiledCode]
-  );
-
-  // Filter functions by search query
-  const filteredFunctions = useMemo(() => {
-    if (!parsed) return [];
-    if (!searchQuery.trim()) return parsed.functions;
-
-    const query = searchQuery.toLowerCase();
-    return parsed.functions.filter(
-      (f) =>
-        f.name.toLowerCase().includes(query) ||
-        f.signature.toLowerCase().includes(query) ||
-        f.body.toLowerCase().includes(query)
-    );
-  }, [parsed, searchQuery]);
 
   // No decompiled code available
   if (!decompiledCode) {
@@ -575,15 +646,18 @@ export function DecompiledCodeViewer({
 
       {/* Functions List */}
       <div className="space-y-2">
-        {filteredFunctions.map((func, idx) => (
-          <FunctionBlock
-            key={`${func.name}-${idx}`}
-            func={func}
-            isExpanded={expandedFunctions.has(func.name)}
-            onToggle={() => toggleFunction(func.name)}
-            searchQuery={searchQuery}
-          />
-        ))}
+        {filteredFunctions.map((func) => {
+          const key = `${func.name}-${func.originalIndex}`;
+          return (
+            <FunctionBlock
+              key={key}
+              func={func}
+              isExpanded={expandedFunctions.has(key)}
+              onToggle={() => toggleFunction(key)}
+              searchQuery={searchQuery}
+            />
+          );
+        })}
 
         {searchQuery && filteredFunctions.length === 0 && (
           <div className="text-center py-8 text-obsidian-500">
@@ -593,7 +667,7 @@ export function DecompiledCodeViewer({
         )}
       </div>
 
-      {/* Show raw decompiled code toggle */}
+      {/* Show full decompiled code toggle */}
       <div className="pt-4 border-t border-obsidian-800">
         <button
           onClick={() => setShowAllCode(!showAllCode)}
@@ -604,13 +678,15 @@ export function DecompiledCodeViewer({
           ) : (
             <ChevronDown className="w-4 h-4" />
           )}
-          {showAllCode ? "Hide" : "Show"} raw decompiled output
+          {showAllCode ? "Hide" : "Show"} full decompiled output
         </button>
 
-        {showAllCode && (
-          <pre className="mt-4 p-4 bg-obsidian-900/50 rounded-lg text-xs font-mono text-obsidian-400 overflow-x-auto whitespace-pre-wrap border border-obsidian-800">
-            {decompiledCode}
-          </pre>
+        {showAllCode && normalizedCode && (
+          <FormattedCodeBlock
+            code={normalizedCode}
+            format={parsed?.format || "python"}
+            searchQuery={searchQuery}
+          />
         )}
       </div>
     </div>
@@ -671,6 +747,165 @@ function FunctionBlock({
         </div>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Syntax-highlighted full code view
+// ---------------------------------------------------------------------------
+
+const PYTHON_KEYWORDS = new Set([
+  "def", "return", "if", "else", "elif", "while", "for", "not", "and", "or",
+  "require", "assert", "revert", "stop", "continue", "log", "call", "static",
+  "delegatecall", "selfdestruct", "payable",
+]);
+
+const SOLIDITY_KEYWORDS = new Set([
+  "function", "return", "returns", "if", "else", "while", "for", "require",
+  "revert", "assert", "emit", "contract", "mapping", "address", "uint256",
+  "uint8", "uint16", "uint128", "int256", "bool", "bytes", "bytes32", "string",
+  "memory", "storage", "calldata", "public", "private", "internal", "external",
+  "view", "pure", "payable", "modifier", "event", "struct", "enum",
+  "constructor", "fallback", "receive", "true", "false",
+]);
+
+function tokenizeLine(
+  line: string,
+  format: CodeFormat
+): { text: string; type: "keyword" | "comment" | "string" | "number" | "type" | "normal" }[] {
+  const tokens: { text: string; type: "keyword" | "comment" | "string" | "number" | "type" | "normal" }[] = [];
+  const keywords = format === "python" ? PYTHON_KEYWORDS : SOLIDITY_KEYWORDS;
+
+  // Check for full-line comment
+  const trimmed = line.trim();
+  if (
+    (format === "python" && trimmed.startsWith("#")) ||
+    (format === "solidity" && (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")))
+  ) {
+    tokens.push({ text: line, type: "comment" });
+    return tokens;
+  }
+
+  // Check for inline comment
+  const commentChar = format === "python" ? "#" : "//";
+  const commentIdx = line.indexOf(commentChar);
+
+  const codePart = commentIdx >= 0 ? line.substring(0, commentIdx) : line;
+  const commentPart = commentIdx >= 0 ? line.substring(commentIdx) : "";
+
+  // Tokenize the code part
+  // Match words, numbers (hex and decimal), strings, and everything else
+  const regex = /(\b0x[0-9a-fA-F]+\b|\b\d+\b|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b|"[^"]*"|'[^']*'|[^\w\s]|\s+)/g;
+  let match;
+  let lastIdx = 0;
+
+  while ((match = regex.exec(codePart)) !== null) {
+    // Add any gap (shouldn't happen, but safety)
+    if (match.index > lastIdx) {
+      tokens.push({ text: codePart.slice(lastIdx, match.index), type: "normal" });
+    }
+
+    const text = match[0];
+    if (text.startsWith('"') || text.startsWith("'")) {
+      tokens.push({ text, type: "string" });
+    } else if (/^0x[0-9a-fA-F]+$/.test(text) || /^\d+$/.test(text)) {
+      tokens.push({ text, type: "number" });
+    } else if (keywords.has(text)) {
+      tokens.push({ text, type: "keyword" });
+    } else if (
+      format === "solidity" &&
+      /^(uint\d*|int\d*|bytes\d*|address|bool|string)$/.test(text)
+    ) {
+      tokens.push({ text, type: "type" });
+    } else if (
+      format === "python" &&
+      /^(addr|uint256|uint8|int256|bool|bytes|bytes32|address|mapping|array|struct)$/.test(text)
+    ) {
+      tokens.push({ text, type: "type" });
+    } else {
+      tokens.push({ text, type: "normal" });
+    }
+
+    lastIdx = match.index + text.length;
+  }
+
+  // Remaining code
+  if (lastIdx < codePart.length) {
+    tokens.push({ text: codePart.slice(lastIdx), type: "normal" });
+  }
+
+  // Append comment
+  if (commentPart) {
+    tokens.push({ text: commentPart, type: "comment" });
+  }
+
+  return tokens;
+}
+
+const TOKEN_COLORS: Record<string, string> = {
+  keyword: "text-purple-400",
+  comment: "text-obsidian-600 italic",
+  string: "text-green-400",
+  number: "text-amber-400",
+  type: "text-sky-400",
+  normal: "text-obsidian-300",
+};
+
+function FormattedCodeBlock({
+  code,
+  format,
+  searchQuery,
+}: {
+  code: string;
+  format: CodeFormat;
+  searchQuery: string;
+}) {
+  const lines = code.split("\n");
+  const gutterWidth = String(lines.length).length;
+
+  return (
+    <div className="mt-4 rounded-lg border border-obsidian-800 bg-obsidian-950 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <tbody>
+            {lines.map((line, i) => (
+              <tr key={i} className="hover:bg-obsidian-900/40 transition-colors">
+                <td
+                  className="select-none text-right pr-4 pl-4 py-0 text-xs font-mono text-obsidian-700 border-r border-obsidian-800/50 align-top"
+                  style={{ minWidth: `${gutterWidth + 2}ch` }}
+                >
+                  {i + 1}
+                </td>
+                <td className="pl-4 pr-4 py-0 text-xs font-mono whitespace-pre-wrap break-all">
+                  {searchQuery.trim() ? (
+                    <HighlightedCode code={line} searchQuery={searchQuery} />
+                  ) : (
+                    <SyntaxLine tokens={tokenizeLine(line, format)} />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SyntaxLine({
+  tokens,
+}: {
+  tokens: { text: string; type: string }[];
+}) {
+  if (tokens.length === 0) return <span>{"\u00A0"}</span>;
+  return (
+    <>
+      {tokens.map((tok, i) => (
+        <span key={i} className={TOKEN_COLORS[tok.type] || TOKEN_COLORS.normal}>
+          {tok.text}
+        </span>
+      ))}
+    </>
   );
 }
 
