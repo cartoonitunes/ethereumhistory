@@ -18,6 +18,7 @@ const FEATURED_FALLBACK: FeaturedContract[] = [];
 interface TopEditor {
   historianId: number;
   name: string;
+  avatarUrl: string | null;
   editCount: number;
   newPagesCount: number;
 }
@@ -462,9 +463,17 @@ export default function HomePage() {
                   transition={{ delay: index * 0.05 }}
                   className="p-5 rounded-xl bg-obsidian-900/30 border border-obsidian-800 text-center"
                 >
-                  <div className="w-12 h-12 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 mx-auto mb-3">
-                    <Users className="w-6 h-6" />
-                  </div>
+                  {editor.avatarUrl ? (
+                    <img
+                      src={editor.avatarUrl}
+                      alt={editor.name}
+                      className="w-12 h-12 rounded-full object-cover mx-auto mb-3"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 text-lg font-bold mx-auto mb-3">
+                      {editor.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <Link href={`/historian/${editor.historianId}`} className="text-lg font-semibold text-obsidian-100 hover:text-ether-400 transition-colors mb-1">
                     {editor.name}
                   </Link>

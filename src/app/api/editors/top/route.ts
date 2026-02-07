@@ -15,6 +15,7 @@ interface TopEditorsResponse {
   editors: Array<{
     historianId: number;
     name: string;
+    avatarUrl: string | null;
     editCount: number;
     newPagesCount: number;
   }>;
