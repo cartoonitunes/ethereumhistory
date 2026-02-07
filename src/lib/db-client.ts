@@ -203,6 +203,29 @@ export async function updateContractRuntimeBytecodeFromDb(
 }
 
 /**
+ * Update decompiled code fields for a contract (idempotent).
+ * Used to cache on-the-fly decompilation results.
+ */
+export async function updateContractDecompiledCodeFromDb(
+  address: string,
+  patch: {
+    decompiledCode: string;
+    decompilationSuccess: boolean;
+  }
+): Promise<void> {
+  const database = getDb();
+
+  await database
+    .update(schema.contracts)
+    .set({
+      decompiledCode: patch.decompiledCode,
+      decompilationSuccess: patch.decompilationSuccess,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.contracts.address, address.toLowerCase()));
+}
+
+/**
  * Update optional Etherscan-enriched fields for a contract (idempotent).
  */
 export async function updateContractEtherscanEnrichmentFromDb(
