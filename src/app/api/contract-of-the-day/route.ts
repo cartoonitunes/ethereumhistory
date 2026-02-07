@@ -62,8 +62,8 @@ export async function GET(): Promise<NextResponse> {
       error: null,
     }, {
       headers: {
-        // Cache for 1 hour at CDN level
-        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200",
+        // Cache for 60s at CDN level so edits show up quickly
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
       },
     });
   } catch (error) {
