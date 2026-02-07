@@ -46,6 +46,7 @@ import {
   updateContractTokenMetadataFromDb as dbUpdateContractTokenMetadata,
   updateContractEtherscanEnrichmentFromDb as dbUpdateContractEtherscanEnrichment,
   updateContractRuntimeBytecodeFromDb as dbUpdateContractRuntimeBytecode,
+  updateContractDecompiledCodeFromDb as dbUpdateContractDecompiledCode,
   insertContractIfMissing as dbInsertContractIfMissing,
   updateContractEnsNamesFromDb as dbUpdateContractEnsNames,
   getContractMetadataJsonValueByKeyFromDb as dbGetContractMetadataJsonByKey,
@@ -77,6 +78,7 @@ import {
   fetchEtherscanSourceCode,
 } from "./etherscan";
 import { getEnsName } from "./ens";
+import { decompileContract } from "./evm-decompile";
 
 // =============================================================================
 // Data Source Selection
@@ -1016,6 +1018,36 @@ export async function getContractPageData(address: string): Promise<ContractPage
 
   // Ensure bytecode exists (some seed sources only have decompiled code).
   contract = await getContractWithRuntimeBytecode(contract);
+
+  // On-the-fly decompilation when no source and no decompiled code
+  if (
+    contract.runtimeBytecode &&
+    !contract.sourceCode &&
+    !contract.decompiledCode
+  ) {
+    try {
+      const decompileResult = decompileContract(contract.runtimeBytecode);
+      if (decompileResult.success && decompileResult.decompiledCode) {
+        contract = {
+          ...contract,
+          decompiledCode: decompileResult.decompiledCode,
+          decompilationSuccess: true,
+        };
+
+        // Persist to DB so future loads are instant (fire-and-forget)
+        if (isDatabaseEnabled()) {
+          dbUpdateContractDecompiledCode(contract.address, {
+            decompiledCode: decompileResult.decompiledCode,
+            decompilationSuccess: true,
+          }).catch((err) =>
+            console.warn("[decompile] Failed to persist decompilation:", err)
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[decompile] On-the-fly decompilation failed:", err);
+    }
+  }
 
   const deployerPersonPromise =
     contract.deployerAddress && isDatabaseEnabled()
