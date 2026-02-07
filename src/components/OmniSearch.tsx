@@ -7,11 +7,13 @@ import { motion } from "framer-motion";
 import { Search, ArrowRight, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { UnifiedSearchResponse, UnifiedSearchResult } from "@/types";
 import { formatAddress, formatDate, getContractTypeLabel, isValidAddress } from "@/lib/utils";
+import { useTrackEvent } from "@/lib/useAnalytics";
 import { EraCompact } from "./EraTimeline";
 
 export function OmniSearch() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const trackEvent = useTrackEvent();
 
   const qParam = (searchParams.get("q") || "").trim();
   const pageParam = parseInt(searchParams.get("page") || "1", 10);
@@ -147,6 +149,7 @@ export function OmniSearch() {
       return;
     }
 
+    trackEvent({ eventType: "search", pagePath: "/", eventData: { query: trimmed } });
     pushSearch(trimmed, 1);
   }
 

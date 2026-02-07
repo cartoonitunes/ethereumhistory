@@ -650,6 +650,45 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
   };
 }
 
+/**
+ * Find historian by GitHub ID (for OAuth login).
+ */
+export async function getHistorianByGithubIdFromDb(githubId: string): Promise<schema.Historian | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historians)
+    .where(eq(schema.historians.githubId, githubId))
+    .limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Create a historian from GitHub OAuth (no password token needed).
+ */
+export async function createHistorianFromGithubFromDb(params: {
+  email: string;
+  name: string;
+  githubId: string;
+  githubUsername: string;
+}): Promise<schema.Historian> {
+  const database = getDb();
+  const [result] = await database
+    .insert(schema.historians)
+    .values({
+      email: params.email.trim().toLowerCase(),
+      name: params.name.trim(),
+      githubId: params.githubId,
+      githubUsername: params.githubUsername,
+      active: true,
+      trusted: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+  return result;
+}
+
 // =============================================================================
 // Historian Invitations
 // =============================================================================
@@ -1698,6 +1737,256 @@ export async function insertContractIfMissing(
 ): Promise<void> {
   const database = getDb();
   await database.insert(schema.contracts).values(contract).onConflictDoNothing();
+}
+
+// =============================================================================
+// Analytics Events
+// =============================================================================
+
+/**
+ * Insert an analytics event. Lightweight, fire-and-forget.
+ */
+export async function insertAnalyticsEventFromDb(params: {
+  eventType: string;
+  pagePath?: string | null;
+  contractAddress?: string | null;
+  eventData?: unknown;
+  sessionId?: string | null;
+  referrer?: string | null;
+}): Promise<void> {
+  const database = getDb();
+  await database.insert(schema.analyticsEvents).values({
+    eventType: params.eventType,
+    pagePath: params.pagePath || null,
+    contractAddress: params.contractAddress?.toLowerCase() || null,
+    eventData: (params.eventData as any) || null,
+    sessionId: params.sessionId || null,
+    referrer: params.referrer || null,
+    createdAt: new Date(),
+  });
+}
+
+/**
+ * Get analytics summary for a time range.
+ */
+export async function getAnalyticsSummaryFromDb(params: {
+  since: Date;
+  until?: Date;
+}): Promise<{
+  totalEvents: number;
+  uniqueSessions: number;
+  topPages: Array<{ pagePath: string; count: number }>;
+  topContracts: Array<{ contractAddress: string; count: number }>;
+  topSearchQueries: Array<{ query: string; count: number }>;
+  eventCounts: Array<{ eventType: string; count: number }>;
+}> {
+  const database = getDb();
+  const since = params.since;
+  const until = params.until || new Date();
+
+  const timeFilter = and(
+    gte(schema.analyticsEvents.createdAt, since),
+    lte(schema.analyticsEvents.createdAt, until)
+  );
+
+  const [totalResult, sessionResult, topPages, topContracts, searchEvents, eventCounts] =
+    await Promise.all([
+      // Total events
+      database
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(schema.analyticsEvents)
+        .where(timeFilter),
+      // Unique sessions
+      database
+        .select({ count: sql<number>`COUNT(DISTINCT ${schema.analyticsEvents.sessionId})::int` })
+        .from(schema.analyticsEvents)
+        .where(and(timeFilter, isNotNull(schema.analyticsEvents.sessionId))),
+      // Top pages
+      database
+        .select({
+          pagePath: schema.analyticsEvents.pagePath,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(schema.analyticsEvents)
+        .where(and(timeFilter, isNotNull(schema.analyticsEvents.pagePath)))
+        .groupBy(schema.analyticsEvents.pagePath)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20),
+      // Top contracts
+      database
+        .select({
+          contractAddress: schema.analyticsEvents.contractAddress,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(schema.analyticsEvents)
+        .where(and(timeFilter, isNotNull(schema.analyticsEvents.contractAddress)))
+        .groupBy(schema.analyticsEvents.contractAddress)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20),
+      // Search queries (from event_data)
+      database
+        .select({
+          query: sql<string>`${schema.analyticsEvents.eventData}->>'query'`,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(schema.analyticsEvents)
+        .where(
+          and(
+            timeFilter,
+            eq(schema.analyticsEvents.eventType, "search"),
+            isNotNull(sql`${schema.analyticsEvents.eventData}->>'query'`)
+          )
+        )
+        .groupBy(sql`${schema.analyticsEvents.eventData}->>'query'`)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20),
+      // Event type counts
+      database
+        .select({
+          eventType: schema.analyticsEvents.eventType,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(schema.analyticsEvents)
+        .where(timeFilter)
+        .groupBy(schema.analyticsEvents.eventType)
+        .orderBy(desc(sql`COUNT(*)`)),
+    ]);
+
+  return {
+    totalEvents: totalResult[0]?.count || 0,
+    uniqueSessions: sessionResult[0]?.count || 0,
+    topPages: topPages.filter((p) => p.pagePath).map((p) => ({
+      pagePath: p.pagePath!,
+      count: p.count,
+    })),
+    topContracts: topContracts.filter((c) => c.contractAddress).map((c) => ({
+      contractAddress: c.contractAddress!,
+      count: c.count,
+    })),
+    topSearchQueries: searchEvents.filter((s) => s.query).map((s) => ({
+      query: s.query!,
+      count: s.count,
+    })),
+    eventCounts: eventCounts.map((e) => ({
+      eventType: e.eventType,
+      count: e.count,
+    })),
+  };
+}
+
+// =============================================================================
+// Edit Suggestions
+// =============================================================================
+
+/**
+ * Insert an anonymous edit suggestion.
+ */
+export async function insertEditSuggestionFromDb(params: {
+  contractAddress: string;
+  fieldName: string;
+  suggestedValue: string;
+  reason?: string | null;
+  submitterGithub?: string | null;
+  submitterName?: string | null;
+}): Promise<{ id: number }> {
+  const database = getDb();
+  const [result] = await database
+    .insert(schema.editSuggestions)
+    .values({
+      contractAddress: params.contractAddress.toLowerCase(),
+      fieldName: params.fieldName,
+      suggestedValue: params.suggestedValue,
+      reason: params.reason || null,
+      submitterGithub: params.submitterGithub || null,
+      submitterName: params.submitterName || null,
+      status: "pending",
+      createdAt: new Date(),
+    })
+    .returning({ id: schema.editSuggestions.id });
+  return { id: result.id };
+}
+
+/**
+ * Get edit suggestions for a contract (for review by historians).
+ */
+export async function getEditSuggestionsFromDb(params: {
+  contractAddress?: string | null;
+  status?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<schema.EditSuggestion[]> {
+  const database = getDb();
+  const conditions: SQL[] = [];
+  if (params.contractAddress) {
+    conditions.push(eq(schema.editSuggestions.contractAddress, params.contractAddress.toLowerCase()));
+  }
+  if (params.status) {
+    conditions.push(eq(schema.editSuggestions.status, params.status));
+  }
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  return database
+    .select()
+    .from(schema.editSuggestions)
+    .where(whereClause ?? sql`true`)
+    .orderBy(desc(schema.editSuggestions.createdAt))
+    .limit(params.limit ?? 50)
+    .offset(params.offset ?? 0);
+}
+
+/**
+ * Update suggestion status (approve/reject).
+ */
+export async function updateEditSuggestionStatusFromDb(params: {
+  id: number;
+  status: "approved" | "rejected";
+  reviewedBy: number;
+}): Promise<void> {
+  const database = getDb();
+  await database
+    .update(schema.editSuggestions)
+    .set({
+      status: params.status,
+      reviewedBy: params.reviewedBy,
+      reviewedAt: new Date(),
+    })
+    .where(eq(schema.editSuggestions.id, params.id));
+}
+
+/**
+ * Get recent contract edits for the activity feed.
+ */
+export async function getRecentEditsFromDb(limit = 20): Promise<
+  Array<{
+    contractAddress: string;
+    historianName: string;
+    fieldsChanged: string[] | null;
+    editedAt: string;
+    contractName: string | null;
+  }>
+> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      contractAddress: schema.contractEdits.contractAddress,
+      historianName: schema.historians.name,
+      fieldsChanged: schema.contractEdits.fieldsChanged,
+      editedAt: schema.contractEdits.editedAt,
+      contractName: schema.contracts.etherscanContractName,
+      tokenName: schema.contracts.tokenName,
+    })
+    .from(schema.contractEdits)
+    .innerJoin(schema.historians, eq(schema.contractEdits.historianId, schema.historians.id))
+    .innerJoin(schema.contracts, eq(schema.contractEdits.contractAddress, schema.contracts.address))
+    .orderBy(desc(schema.contractEdits.editedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    contractAddress: r.contractAddress,
+    historianName: r.historianName,
+    fieldsChanged: r.fieldsChanged,
+    editedAt: r.editedAt.toISOString(),
+    contractName: r.tokenName || r.contractName || null,
+  }));
 }
 
 /**

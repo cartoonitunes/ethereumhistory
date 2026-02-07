@@ -106,13 +106,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title,
       description: tokenName
         ? `Historical analysis of ${tokenName} on Ethereum.`
         : `Historical analysis of Ethereum contract ${address}.`,
-      // For summary card, use contract image if available, otherwise fallback
-      images: [twitterImageUrl],
+      // Dynamic OG image is auto-discovered from opengraph-image.tsx
     },
   };
 }

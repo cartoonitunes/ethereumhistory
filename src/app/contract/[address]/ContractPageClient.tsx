@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
+import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
+import { SuggestEditForm } from "@/components/SuggestEditForm";
 import { EraCompact } from "@/components/EraTimeline";
 import { SimilarityTable, SimilarityDetail } from "@/components/SimilarityTable";
 import { BytecodeViewer } from "@/components/BytecodeViewer";
@@ -59,6 +61,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "history" | "code">("overview");
+  usePageView(`/contract/${address}`, address);
+  const trackEvent = useTrackEvent();
 
   // Load historian status for header
   useEffect(() => {
@@ -325,21 +329,21 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap">
             <TabButton
               active={activeTab === "overview"}
-              onClick={() => setActiveTab("overview")}
+              onClick={() => { setActiveTab("overview"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "overview" } }); }}
               icon={<Info className="w-4 h-4" />}
             >
               Overview
             </TabButton>
             <TabButton
               active={activeTab === "history"}
-              onClick={() => setActiveTab("history")}
+              onClick={() => { setActiveTab("history"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "history" } }); }}
               icon={<History className="w-4 h-4" />}
             >
               History
             </TabButton>
             <TabButton
               active={activeTab === "code"}
-              onClick={() => setActiveTab("code")}
+              onClick={() => { setActiveTab("code"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "code" } }); }}
               icon={<FileCode className="w-4 h-4" />}
             >
               Code
@@ -363,8 +367,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             />
           )}
           {activeTab === "history" && (
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-6">
               <HistoricalDocsSection contract={contract} />
+              <SuggestEditForm contractAddress={address} />
             </div>
           )}
           {activeTab === "code" && (
