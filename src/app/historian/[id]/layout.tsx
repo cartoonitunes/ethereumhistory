@@ -3,6 +3,18 @@ import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
 import { eq, and, sql } from "drizzle-orm";
 
+function getMetadataBaseUrl(): URL {
+  const explicit =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    (process.env.VERCEL_ENV === "production"
+      ? "https://www.ethereumhistory.com"
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+  return new URL(explicit || "https://www.ethereumhistory.com");
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -10,9 +22,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const historianId = parseInt(id, 10);
+  const metadataBase = getMetadataBaseUrl();
 
   if (isNaN(historianId) || historianId <= 0) {
     return {
+      metadataBase,
       title: "Historian Not Found | ethereumhistory.com",
     };
   }
@@ -44,6 +58,7 @@ export async function generateMetadata({
     const historian = historianRows[0];
     if (!historian) {
       return {
+        metadataBase,
         title: "Historian Not Found | ethereumhistory.com",
       };
     }
@@ -54,6 +69,7 @@ export async function generateMetadata({
       : `${historian.name} has made ${editCount} ${editCount === 1 ? "edit" : "edits"} documenting early Ethereum smart contracts on ethereumhistory.com.`;
 
     return {
+      metadataBase,
       title: `${historian.name} – Ethereum Historian | ethereumhistory.com`,
       description,
       openGraph: {
@@ -61,6 +77,7 @@ export async function generateMetadata({
         description,
         siteName: "ethereumhistory.com",
         type: "profile",
+        url: new URL(`/historian/${id}`, metadataBase).toString(),
       },
       twitter: {
         card: "summary_large_image",
@@ -70,6 +87,7 @@ export async function generateMetadata({
     };
   } catch {
     return {
+      metadataBase: getMetadataBaseUrl(),
       title: "Historian Profile | ethereumhistory.com",
     };
   }
