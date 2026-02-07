@@ -1005,18 +1005,19 @@ export async function logContractEditFromDb(params: {
  * Get top editors by edit count.
  * Returns historian name, total edit count, and count of new pages (first edits).
  */
-export async function getTopEditorsFromDb(limit = 10): Promise<Array<{ historianId: number; name: string; editCount: number; newPagesCount: number }>> {
+export async function getTopEditorsFromDb(limit = 10): Promise<Array<{ historianId: number; name: string; avatarUrl: string | null; editCount: number; newPagesCount: number }>> {
   const database = getDb();
-  
+
   // Use Drizzle query builder for consistency, with sql template for the complex correlated subquery
   // The subquery identifies first edits by checking if edited_at is the minimum for that contract+historian pair
   const results = await database
     .select({
       historianId: schema.contractEdits.historianId,
       name: schema.historians.name,
+      avatarUrl: schema.historians.avatarUrl,
       editCount: sql<number>`COUNT(*)::int`,
       newPagesCount: sql<number>`
-        COUNT(DISTINCT CASE 
+        COUNT(DISTINCT CASE
           WHEN ${schema.contractEdits.editedAt} = (
             SELECT MIN(ce2.edited_at)
             FROM contract_edits ce2
@@ -1030,13 +1031,14 @@ export async function getTopEditorsFromDb(limit = 10): Promise<Array<{ historian
     .from(schema.contractEdits)
     .innerJoin(schema.historians, eq(schema.contractEdits.historianId, schema.historians.id))
     .where(eq(schema.historians.active, true))
-    .groupBy(schema.contractEdits.historianId, schema.historians.name)
+    .groupBy(schema.contractEdits.historianId, schema.historians.name, schema.historians.avatarUrl)
     .orderBy(desc(sql`COUNT(*)`))
     .limit(limit);
-  
+
   return results.map(r => ({
     historianId: r.historianId,
     name: r.name,
+    avatarUrl: r.avatarUrl || null,
     editCount: r.editCount,
     newPagesCount: r.newPagesCount,
   }));
