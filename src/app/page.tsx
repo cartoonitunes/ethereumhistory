@@ -3,12 +3,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Archive, Search, Clock, Code, Users, BookOpen, Plug } from "lucide-react";
+import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
 import { EraCompact } from "@/components/EraTimeline";
-import { formatAddress, formatDate } from "@/lib/utils";
+import { formatAddress, formatDate, formatRelativeTime } from "@/lib/utils";
+import { usePageView } from "@/lib/useAnalytics";
 import type { FeaturedContract } from "@/types";
 
 const FEATURED_FALLBACK: FeaturedContract[] = [];
@@ -20,6 +21,14 @@ interface TopEditor {
   newPagesCount: number;
 }
 
+interface RecentEdit {
+  contractAddress: string;
+  historianName: string;
+  fieldsChanged: string[] | null;
+  editedAt: string;
+  contractName: string | null;
+}
+
 interface MarqueeContract {
   address: string;
   name: string;
@@ -29,9 +38,12 @@ interface MarqueeContract {
 }
 
 export default function HomePage() {
+  usePageView("/");
   const [featuredContracts, setFeaturedContracts] = useState<FeaturedContract[]>(FEATURED_FALLBACK);
   const [marqueeContracts, setMarqueeContracts] = useState<MarqueeContract[]>([]);
   const [topEditors, setTopEditors] = useState<TopEditor[]>([]);
+  const [recentEdits, setRecentEdits] = useState<RecentEdit[]>([]);
+  const [contractOfTheDay, setContractOfTheDay] = useState<FeaturedContract | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +95,45 @@ export default function HomePage() {
         }
       } catch {
         // fall back to empty state
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Contract of the Day
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/contract-of-the-day");
+        const json = await res.json();
+        if (!cancelled && json?.data) {
+          setContractOfTheDay(json.data);
+        }
+      } catch {
+        // fall back to null
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Activity Feed
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/activity?limit=10");
+        const json = await res.json();
+        const edits = (json?.data?.edits || []) as RecentEdit[];
+        if (!cancelled && Array.isArray(edits)) {
+          setRecentEdits(edits);
+        }
+      } catch {
+        // fall back to empty
       }
     })();
     return () => {
@@ -146,6 +197,56 @@ export default function HomePage() {
           </motion.div>
         </div>
       </section>
+
+      {/* Contract of the Day */}
+      {contractOfTheDay && (
+        <section className="py-16 border-t border-obsidian-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">Contract of the Day</h2>
+                  <p className="text-sm text-obsidian-500">A new historical contract featured every day</p>
+                </div>
+              </div>
+              <Link
+                href={`/contract/${contractOfTheDay.address}`}
+                className="block rounded-2xl border border-obsidian-700 bg-obsidian-900/40 hover:border-ether-500/30 p-6 md:p-8 transition-colors group"
+              >
+                <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-8">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-3 mb-3">
+                      <h3 className="text-xl md:text-2xl font-bold text-obsidian-100 group-hover:text-ether-400 transition-colors">
+                        {contractOfTheDay.name}
+                      </h3>
+                      {contractOfTheDay.eraId && <EraCompact eraId={contractOfTheDay.eraId} />}
+                    </div>
+                    {contractOfTheDay.shortDescription && (
+                      <p className="text-obsidian-300 mb-3 line-clamp-2">{contractOfTheDay.shortDescription}</p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-obsidian-500">
+                      <code className="font-mono">{formatAddress(contractOfTheDay.address, 8)}</code>
+                      {contractOfTheDay.deploymentDate && (
+                        <span>Deployed {formatDate(contractOfTheDay.deploymentDate)}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-obsidian-500 group-hover:text-ether-400 transition-colors">
+                    <Archive className="w-6 h-6" />
+                  </div>
+                </div>
+              </Link>
+            </motion.div>
+          </div>
+        </section>
+      )}
 
       {/* Archived Contracts (browse-style section) */}
       <section className="py-20 border-t border-obsidian-800">
@@ -332,6 +433,72 @@ export default function HomePage() {
                 </motion.div>
               ))}
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* Recent Activity Feed */}
+      {recentEdits.length > 0 && (
+        <section className="py-16 border-t border-obsidian-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-400">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">Recent Activity</h2>
+                  <p className="text-sm text-obsidian-500">Latest documentation updates by historians</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {recentEdits.map((edit, i) => (
+                  <motion.div
+                    key={`${edit.contractAddress}-${edit.editedAt}-${i}`}
+                    initial={{ opacity: 0, x: -10 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <Link
+                      href={`/contract/${edit.contractAddress}`}
+                      className="flex items-center gap-4 p-4 rounded-xl border border-obsidian-800 bg-obsidian-900/30 hover:border-obsidian-700 transition-colors group"
+                    >
+                      <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-obsidian-200 group-hover:text-ether-400 transition-colors">
+                            {edit.contractName || formatAddress(edit.contractAddress, 8)}
+                          </span>
+                          <span className="text-obsidian-500 text-sm">
+                            edited by {edit.historianName}
+                          </span>
+                        </div>
+                        {edit.fieldsChanged && edit.fieldsChanged.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {edit.fieldsChanged.slice(0, 3).map((field) => (
+                              <span key={field} className="text-xs px-1.5 py-0.5 rounded bg-obsidian-800 text-obsidian-400">
+                                {field.replace(/_/g, " ")}
+                              </span>
+                            ))}
+                            {edit.fieldsChanged.length > 3 && (
+                              <span className="text-xs text-obsidian-500">+{edit.fieldsChanged.length - 3} more</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-xs text-obsidian-500 shrink-0">
+                        {formatRelativeTime(edit.editedAt)}
+                      </span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
           </div>
         </section>
       )}

@@ -187,6 +187,9 @@ export const historians = pgTable(
     active: boolean("active").notNull().default(true),
     trusted: boolean("trusted").notNull().default(false),
     trustedOverride: boolean("trusted_override"), // NULL = auto, TRUE/FALSE = manual
+    // GitHub OAuth
+    githubId: text("github_id"),
+    githubUsername: text("github_username"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -194,6 +197,7 @@ export const historians = pgTable(
     emailUnique: uniqueIndex("historians_email_unique").on(table.email),
     activeIdx: index("historians_active_idx").on(table.active),
     trustedIdx: index("historians_trusted_idx").on(table.trusted),
+    githubIdIdx: uniqueIndex("historians_github_id_unique").on(table.githubId),
   })
 );
 
@@ -337,3 +341,72 @@ export const historianInvitations = pgTable(
 
 export type HistorianInvitation = typeof historianInvitations.$inferSelect;
 export type NewHistorianInvitation = typeof historianInvitations.$inferInsert;
+
+// =============================================================================
+// Analytics Events (self-hosted engagement tracking)
+// =============================================================================
+
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: serial("id").primaryKey(),
+    // Event classification
+    eventType: text("event_type").notNull(), // page_view, tab_click, search, contract_view, etc.
+    // Page / contract context
+    pagePath: text("page_path"),
+    contractAddress: text("contract_address"),
+    // Event-specific payload (e.g. search query, tab name, scroll depth)
+    eventData: jsonb("event_data"),
+    // Anonymous visitor fingerprint (hashed, no PII)
+    sessionId: text("session_id"),
+    // Referrer
+    referrer: text("referrer"),
+    // Timestamp
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    eventTypeIdx: index("analytics_event_type_idx").on(table.eventType),
+    createdAtIdx: index("analytics_created_at_idx").on(table.createdAt),
+    contractIdx: index("analytics_contract_idx").on(table.contractAddress),
+    sessionIdx: index("analytics_session_idx").on(table.sessionId),
+  })
+);
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type NewAnalyticsEvent = typeof analyticsEvents.$inferInsert;
+
+// =============================================================================
+// Edit Suggestions (anonymous community suggestions)
+// =============================================================================
+
+export const editSuggestions = pgTable(
+  "edit_suggestions",
+  {
+    id: serial("id").primaryKey(),
+    contractAddress: text("contract_address")
+      .notNull()
+      .references(() => contracts.address, { onDelete: "cascade" }),
+    // What they want to change
+    fieldName: text("field_name").notNull(), // description, historical_context, etc.
+    suggestedValue: text("suggested_value").notNull(),
+    // Optional context
+    reason: text("reason"),
+    // Submitter identity (optional — GitHub username if authed, null if anonymous)
+    submitterGithub: text("submitter_github"),
+    submitterName: text("submitter_name"),
+    // Moderation
+    status: text("status").notNull().default("pending"), // pending, approved, rejected
+    reviewedBy: integer("reviewed_by").references(() => historians.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at"),
+    // Timestamps
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    contractIdx: index("edit_suggestions_contract_idx").on(table.contractAddress),
+    statusIdx: index("edit_suggestions_status_idx").on(table.status),
+    createdAtIdx: index("edit_suggestions_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type EditSuggestion = typeof editSuggestions.$inferSelect;
+export type NewEditSuggestion = typeof editSuggestions.$inferInsert;
