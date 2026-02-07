@@ -3,6 +3,7 @@
  *
  * GET /api/browse?era=homestead&type=token&q=transfer&page=1&limit=24
  * Returns contracts that have a short_description (documented).
+ * Pass undocumented=1 to instead return contracts without documentation.
  * Filters: era (era_id), type (contract_type), q (search in decompiled/source code).
  */
 
@@ -11,6 +12,8 @@ import {
   isDatabaseConfigured,
   getDocumentedContractsFromDb,
   getDocumentedContractsCountFromDb,
+  getUndocumentedContractsFromDb,
+  getUndocumentedContractsCountFromDb,
 } from "@/lib/db-client";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +36,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const era = searchParams.get("era")?.trim() || undefined;
   const type = searchParams.get("type")?.trim() || undefined;
   const q = searchParams.get("q")?.trim() || undefined;
+  const undocumented = searchParams.get("undocumented") === "1";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.min(
     MAX_LIMIT,
@@ -40,26 +44,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
   const offset = (page - 1) * limit;
 
-  const [contracts, total] = await Promise.all([
-    getDocumentedContractsFromDb({
-      eraId: era || null,
-      contractType: type || null,
-      codeQuery: q || null,
-      limit,
-      offset,
-    }),
-    getDocumentedContractsCountFromDb({
-      eraId: era || null,
-      contractType: type || null,
-      codeQuery: q || null,
-    }),
-  ]);
+  const filterParams = {
+    eraId: era || null,
+    contractType: type || null,
+    codeQuery: q || null,
+  };
+
+  const [contracts, total] = undocumented
+    ? await Promise.all([
+        getUndocumentedContractsFromDb({ ...filterParams, limit, offset }),
+        getUndocumentedContractsCountFromDb(filterParams),
+      ])
+    : await Promise.all([
+        getDocumentedContractsFromDb({ ...filterParams, limit, offset }),
+        getDocumentedContractsCountFromDb(filterParams),
+      ]);
 
   const totalPages = Math.ceil(total / limit);
 
   const list = contracts.map((c) => ({
     address: c.address,
-    name: c.etherscanContractName || `Contract ${c.address.slice(0, 10)}...`,
+    name: c.etherscanContractName || c.tokenName || `Contract ${c.address.slice(0, 10)}...`,
     shortDescription: c.shortDescription,
     eraId: c.eraId,
     deploymentDate: c.deploymentTimestamp?.split("T")[0] ?? null,

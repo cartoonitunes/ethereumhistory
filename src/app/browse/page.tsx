@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
 import { ContractCard } from "@/components/ContractCard";
+import { DocumentationProgress } from "@/components/DocumentationProgress";
 import { Search, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { ERAS } from "@/types";
 import { getContractTypeLabel } from "@/lib/utils";
@@ -47,6 +48,7 @@ function BrowseContent() {
   const era = searchParams.get("era") || "";
   const type = searchParams.get("type") || "";
   const q = searchParams.get("q") || "";
+  const undocumented = searchParams.get("undocumented") === "1";
 
   useEffect(() => {
     let cancelled = false;
@@ -67,6 +69,7 @@ function BrowseContent() {
     if (era) params.set("era", era);
     if (type) params.set("type", type);
     if (q.trim()) params.set("q", q.trim());
+    if (undocumented) params.set("undocumented", "1");
     params.set("page", String(page));
     try {
       const res = await fetch(`/api/browse?${params.toString()}`);
@@ -84,13 +87,13 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, type, q, page]);
+  }, [era, type, q, undocumented, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "type" | "q" | "page", value: string) => {
+  const setFilter = (key: "era" | "type" | "q" | "page" | "undocumented", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
@@ -178,7 +181,24 @@ function BrowseContent() {
                 </div>
               </label>
             </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => setFilter("undocumented", undocumented ? "" : "1")}
+                className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors border ${
+                  undocumented
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                    : "border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100"
+                }`}
+              >
+                {undocumented ? "✓ Undocumented only" : "Show undocumented"}
+              </button>
+            </div>
           </motion.div>
+
+          {/* Documentation Progress */}
+          <div className="mb-8">
+            <DocumentationProgress variant="browse" filterEra={era || undefined} />
+          </div>
 
           {/* Results */}
           {loading ? (

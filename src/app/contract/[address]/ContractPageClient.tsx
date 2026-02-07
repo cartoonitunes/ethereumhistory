@@ -25,6 +25,7 @@ import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
 import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
 import { SuggestEditForm } from "@/components/SuggestEditForm";
+import ShareOnX from "@/components/ShareOnX";
 import { EraCompact } from "@/components/EraTimeline";
 import { SimilarityTable, SimilarityDetail } from "@/components/SimilarityTable";
 import { BytecodeViewer } from "@/components/BytecodeViewer";
@@ -322,6 +323,29 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                   {shortDescriptionDisplay}
                 </p>
               )}
+
+          {/* Undocumented callout */}
+          {!contract.shortDescription && !contract.description && (
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-300 font-medium">This contract is not yet documented</p>
+                <p className="text-xs text-obsidian-400 mt-1">
+                  Know something about this contract? Switch to the History tab and suggest an edit to help preserve Ethereum history.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Share on X */}
+          <div className="mt-4">
+            <ShareOnX
+              contractAddress={address}
+              contractName={title}
+              eraId={contract.eraId}
+              shortDescription={contract.shortDescription}
+            />
+          </div>
         </motion.div>
 
         {/* Tabs (scrollable on mobile) */}

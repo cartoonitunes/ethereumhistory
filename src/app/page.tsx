@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History } from "lucide-react";
+import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History, Calendar } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
 import { EraCompact } from "@/components/EraTimeline";
+import { DocumentationProgress } from "@/components/DocumentationProgress";
 import { formatAddress, formatDate, formatRelativeTime } from "@/lib/utils";
 import { usePageView } from "@/lib/useAnalytics";
 import type { FeaturedContract } from "@/types";
@@ -369,6 +370,49 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Documentation Progress + This Week */}
+      <section className="py-16 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-2 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <DocumentationProgress variant="homepage" />
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1 }}
+            >
+              <Link
+                href="/this-week"
+                className="block h-full rounded-xl border border-obsidian-800 bg-obsidian-900/30 hover:border-ether-500/30 p-5 transition-colors group"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-ether-500/10 flex items-center justify-center text-ether-400">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors">
+                      This Week in Ethereum History
+                    </h3>
+                    <p className="text-xs text-obsidian-500">
+                      Contracts deployed this same week in 2015-2017
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-obsidian-400">
+                  Discover which contracts were being deployed at this time in Ethereum&apos;s earliest years. Updated weekly.
+                </p>
+              </Link>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="py-16 border-t border-obsidian-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -421,7 +465,9 @@ export default function HomePage() {
                   <div className="w-12 h-12 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 mx-auto mb-3">
                     <Users className="w-6 h-6" />
                   </div>
-                  <h3 className="text-lg font-semibold text-obsidian-100 mb-1">{editor.name}</h3>
+                  <Link href={`/historian/${editor.historianId}`} className="text-lg font-semibold text-obsidian-100 hover:text-ether-400 transition-colors mb-1">
+                    {editor.name}
+                  </Link>
                   <p className="text-sm text-obsidian-400">
                     {editor.editCount} {editor.editCount === 1 ? "edit" : "edits"}
                   </p>
