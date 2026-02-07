@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowLeft, Users, GitBranch, FileText, Calendar } from "lucide-react";
+import { ArrowLeft, Users, GitBranch, FileText, Calendar, Globe, ExternalLink } from "lucide-react";
 import { Header } from "@/components/Header";
 import { formatAddress, formatDate, formatRelativeTime } from "@/lib/utils";
 
@@ -11,6 +11,9 @@ interface HistorianProfile {
   id: number;
   name: string;
   githubUsername: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  websiteUrl: string | null;
   joinedAt: string | null;
   totalEdits: number;
   uniqueContracts: number;
@@ -134,30 +137,56 @@ export default function HistorianProfilePage({
             className="space-y-8"
           >
             {/* Profile header */}
-            <div className="flex items-center gap-5">
-              <div className="w-16 h-16 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 text-2xl font-bold shrink-0">
-                {profile.name.charAt(0).toUpperCase()}
-              </div>
+            <div className="flex items-start gap-5">
+              {profile.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={profile.name}
+                  className="w-16 h-16 rounded-full object-cover shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-ether-500/10 flex items-center justify-center text-ether-400 text-2xl font-bold shrink-0">
+                  {profile.name.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-obsidian-100">
                   {profile.name}
                 </h1>
-                {profile.githubUsername && (
-                  <a
-                    href={`https://github.com/${profile.githubUsername}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-ether-400 transition-colors mt-1"
-                  >
-                    <GitBranch className="w-3.5 h-3.5" />
-                    {profile.githubUsername}
-                  </a>
-                )}
-                {profile.joinedAt && (
-                  <div className="flex items-center gap-1.5 text-sm text-obsidian-500 mt-1">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Joined {formatDate(profile.joinedAt)}
-                  </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
+                  {profile.githubUsername && (
+                    <a
+                      href={`https://github.com/${profile.githubUsername}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      {profile.githubUsername}
+                    </a>
+                  )}
+                  {profile.websiteUrl && (
+                    <a
+                      href={profile.websiteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      {profile.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                  {profile.joinedAt && (
+                    <div className="flex items-center gap-1.5 text-sm text-obsidian-500">
+                      <Calendar className="w-3.5 h-3.5" />
+                      Joined {formatDate(profile.joinedAt)}
+                    </div>
+                  )}
+                </div>
+                {profile.bio && (
+                  <p className="text-sm text-obsidian-300 mt-3 max-w-xl leading-relaxed">
+                    {profile.bio}
+                  </p>
                 )}
               </div>
             </div>

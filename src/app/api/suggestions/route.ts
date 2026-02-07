@@ -10,6 +10,7 @@ import {
   isDatabaseConfigured,
   insertEditSuggestionFromDb,
   getEditSuggestionsFromDb,
+  getPendingSuggestionsForHistorianFromDb,
 } from "@/lib/db-client";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 
@@ -78,8 +79,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const contractAddress = request.nextUrl.searchParams.get("contract") || undefined;
   const status = request.nextUrl.searchParams.get("status") || "pending";
+  const mine = request.nextUrl.searchParams.get("mine") === "true";
 
   try {
+    // If mine=true, return only the current historian's pending suggestions
+    if (mine) {
+      const suggestions = await getPendingSuggestionsForHistorianFromDb(
+        me.id,
+        contractAddress || undefined
+      );
+
+      return NextResponse.json({
+        data: {
+          suggestions: suggestions.map((s) => ({
+            id: s.id,
+            contractAddress: s.contractAddress,
+            fieldName: s.fieldName,
+            suggestedValue: s.suggestedValue,
+            reason: s.reason,
+            submitterName: s.submitterName,
+            submitterGithub: s.submitterGithub,
+            submitterHistorianId: s.submitterHistorianId,
+            batchId: s.batchId,
+            status: s.status,
+            createdAt: s.createdAt?.toISOString() || null,
+          })),
+        },
+        error: null,
+      });
+    }
+
     const suggestions = await getEditSuggestionsFromDb({
       contractAddress,
       status,
@@ -96,6 +125,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           reason: s.reason,
           submitterName: s.submitterName,
           submitterGithub: s.submitterGithub,
+          submitterHistorianId: s.submitterHistorianId,
+          batchId: s.batchId,
           status: s.status,
           createdAt: s.createdAt?.toISOString() || null,
         })),

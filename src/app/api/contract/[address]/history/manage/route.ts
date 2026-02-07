@@ -8,6 +8,7 @@ import {
   getContractByAddress,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
+  insertBatchEditSuggestionsFromDb,
   isFirstContractDocumentation,
   logContractEditFromDb,
   sendContractDocumentationEvent,
@@ -26,6 +27,18 @@ type LinkInput = {
   source?: string | null;
   note?: string | null;
 };
+
+/** Fields that untrusted historians are allowed to edit via the review queue. */
+const UNTRUSTED_ALLOWED_FIELDS = new Set([
+  "etherscanContractName",
+  "tokenName",
+  "contractType",
+  "shortDescription",
+  "description",
+  "historicalSignificance",
+  "historicalContext",
+  "tokenLogo",
+]);
 
 export async function POST(
   request: NextRequest,
@@ -56,6 +69,120 @@ export async function POST(
     ? body.deleteIds.filter((n: any) => Number.isFinite(n)).map((n: any) => Number(n))
     : [];
 
+  // =========================================================================
+  // UNTRUSTED HISTORIAN → route edits to review queue
+  // =========================================================================
+  if (!me.trusted) {
+    // Untrusted historians cannot edit links or deployer address
+    if (links.length > 0 || deleteIds.length > 0) {
+      return NextResponse.json(
+        { data: null, error: "New historians cannot modify links. These edits require trusted status." },
+        { status: 403 }
+      );
+    }
+    if (contractPatch.deployerAddress !== undefined) {
+      return NextResponse.json(
+        { data: null, error: "New historians cannot modify deployer address. This requires trusted status." },
+        { status: 403 }
+      );
+    }
+
+    try {
+      // Get current contract to compare against
+      const currentContract = await getContractByAddress(normalized);
+      if (!currentContract) {
+        return NextResponse.json(
+          { data: null, error: "Contract not found." },
+          { status: 404 }
+        );
+      }
+
+      // Compare submitted fields against current values — only queue actual changes
+      const changedFields: Array<{ fieldName: string; suggestedValue: string }> = [];
+
+      const fieldChecks: Array<{ key: string; currentValue: string | null }> = [
+        { key: "etherscanContractName", currentValue: currentContract.etherscanContractName },
+        { key: "tokenName", currentValue: currentContract.tokenName },
+        { key: "contractType", currentValue: currentContract.heuristics?.contractType ?? null },
+        { key: "shortDescription", currentValue: currentContract.shortDescription },
+        { key: "description", currentValue: currentContract.description },
+        { key: "historicalSignificance", currentValue: currentContract.historicalSignificance },
+        { key: "historicalContext", currentValue: currentContract.historicalContext },
+        { key: "tokenLogo", currentValue: currentContract.tokenLogo },
+      ];
+
+      for (const { key, currentValue } of fieldChecks) {
+        if (contractPatch[key] === undefined) continue;
+        if (!UNTRUSTED_ALLOWED_FIELDS.has(key)) continue;
+
+        let newValue = String(contractPatch[key] || "").trim() || null;
+        if (key === "contractType" && newValue) {
+          newValue = newValue.toLowerCase();
+        }
+
+        // Only queue if the value actually changed
+        if (newValue !== (currentValue || null)) {
+          changedFields.push({ fieldName: key, suggestedValue: newValue || "" });
+        }
+      }
+
+      if (changedFields.length === 0) {
+        // Nothing actually changed — return success with current data
+        const [outLinks, outMetadata] = await Promise.all([
+          getHistoricalLinksForContractFromDb(normalized),
+          getContractMetadataFromDb(normalized),
+        ]);
+        return NextResponse.json({
+          data: { links: outLinks, metadata: outMetadata },
+          error: null,
+          meta: {
+            timestamp: new Date().toISOString(),
+            cached: false,
+            pendingReview: false,
+            fieldsSubmitted: [],
+          } as any,
+        });
+      }
+
+      // Insert batch suggestions for review
+      const result = await insertBatchEditSuggestionsFromDb({
+        contractAddress: normalized,
+        submitterHistorianId: me.id,
+        submitterName: me.name,
+        submitterGithub: me.githubUsername || null,
+        fields: changedFields,
+        reason: body?.reason || null,
+      });
+
+      const [outLinks, outMetadata] = await Promise.all([
+        getHistoricalLinksForContractFromDb(normalized),
+        getContractMetadataFromDb(normalized),
+      ]);
+
+      return NextResponse.json({
+        data: { links: outLinks, metadata: outMetadata },
+        error: null,
+        meta: {
+          timestamp: new Date().toISOString(),
+          cached: false,
+          pendingReview: true,
+          fieldsSubmitted: changedFields.map((f) => f.fieldName),
+          batchId: result.batchId,
+        } as any,
+      });
+    } catch (error) {
+      console.error("Error submitting edit for review:", error);
+      return NextResponse.json(
+        { data: null, error: "Failed to submit edit for review." },
+        { status: 500 }
+      );
+    }
+  }
+
+  // =========================================================================
+  // TRUSTED HISTORIAN → existing direct-edit behavior
+  // =========================================================================
+
   // Track which fields were changed for edit logging
   const fieldsChanged: string[] = [];
 
@@ -63,7 +190,7 @@ export async function POST(
     // Get current contract's deployer address BEFORE updating (to add to person's wallets if needed)
     const currentContract = await getContractByAddress(normalized);
     const currentDeployerAddress = currentContract?.deployerAddress?.toLowerCase() || null;
-    
+
     await updateContractHistoryFieldsFromDb(normalized, {
       etherscanContractName:
         contractPatch.etherscanContractName !== undefined
@@ -103,13 +230,13 @@ export async function POST(
       const selectedPersonAddress = contractPatch.deployerAddress
         ? String(contractPatch.deployerAddress).trim().toLowerCase() || null
         : null;
-      
+
       // If a person is selected and the contract has a deployerAddress that's different from the person's address,
       // add the contract's deployerAddress to that person's wallets (if not already there)
       if (selectedPersonAddress && currentDeployerAddress && currentDeployerAddress !== selectedPersonAddress) {
         await addWalletToPersonFromDb(selectedPersonAddress, currentDeployerAddress, "Deployer address");
       }
-      
+
       await updateContractEtherscanEnrichmentFromDb(normalized, {
         deployerAddress: selectedPersonAddress,
       });
@@ -142,7 +269,7 @@ export async function POST(
     if (fieldsChanged.length > 0) {
       // Check if this is the first documentation BEFORE logging the edit
       const isFirstDoc = await isFirstContractDocumentation(normalized);
-      
+
       await logContractEditFromDb({
         contractAddress: normalized,
         historianId: me.id,
@@ -202,4 +329,3 @@ export async function POST(
     );
   }
 }
-

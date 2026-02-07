@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, HistorianMe } from "@/types";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
-import { getHistorianByIdFromDb, historianRowToMe } from "@/lib/db-client";
+import { getHistorianByIdFromDb, historianRowToMe, updateHistorianProfileFromDb } from "@/lib/db-client";
 import { hashHistorianToken } from "@/lib/historian-auth";
 import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
@@ -99,8 +99,51 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       });
     }
 
+    // Update profile fields (avatarUrl, bio, websiteUrl) if provided
+    const hasProfileUpdate =
+      body?.avatarUrl !== undefined ||
+      body?.bio !== undefined ||
+      body?.websiteUrl !== undefined;
+
+    if (hasProfileUpdate) {
+      const patch: { avatarUrl?: string | null; bio?: string | null; websiteUrl?: string | null } = {};
+
+      if (body?.avatarUrl !== undefined) {
+        patch.avatarUrl = typeof body.avatarUrl === "string" ? body.avatarUrl.trim() || null : null;
+      }
+      if (body?.bio !== undefined) {
+        const bioVal = typeof body.bio === "string" ? body.bio.trim() : "";
+        if (bioVal.length > 280) {
+          return NextResponse.json(
+            { data: null, error: "Bio must be 280 characters or fewer." },
+            { status: 400 }
+          );
+        }
+        patch.bio = bioVal || null;
+      }
+      if (body?.websiteUrl !== undefined) {
+        const urlVal = typeof body.websiteUrl === "string" ? body.websiteUrl.trim() : "";
+        if (urlVal && !urlVal.startsWith("http://") && !urlVal.startsWith("https://")) {
+          return NextResponse.json(
+            { data: null, error: "Website URL must start with http:// or https://" },
+            { status: 400 }
+          );
+        }
+        patch.websiteUrl = urlVal || null;
+      }
+
+      await updateHistorianProfileFromDb(me.id, patch);
+
+      const updated = await getHistorianByIdFromDb(me.id);
+      return NextResponse.json({
+        data: historianRowToMe(updated!),
+        error: null,
+        meta: { timestamp: new Date().toISOString(), cached: false },
+      });
+    }
+
     return NextResponse.json(
-      { data: null, error: "Either name or currentToken/newToken must be provided." },
+      { data: null, error: "Either name, profile fields, or currentToken/newToken must be provided." },
       { status: 400 }
     );
   } catch (error) {

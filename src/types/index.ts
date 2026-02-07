@@ -420,6 +420,10 @@ export interface HistorianMe {
   name: string;
   active: boolean;
   trusted: boolean;
+  avatarUrl: string | null;
+  bio: string | null;
+  websiteUrl: string | null;
+  githubUsername: string | null;
 }
 
 export interface HistorianInvitation {

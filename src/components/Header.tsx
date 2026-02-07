@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn, UserPlus, User, Github } from "lucide-react";
+import { LogIn, UserPlus, User, Github, ClipboardCheck } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
@@ -163,10 +163,21 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             )}
           </div>
 
-          {/* Right side (desktop): Profile (if logged in), Invite link (trusted), Login button, or Search hint */}
+          {/* Right side (desktop): Login/signup or logged-in user display */}
           <div className="hidden md:flex items-center gap-3">
-            {me ? (
+            {loadingMe ? (
+              <div className="h-9 w-24 bg-obsidian-800/50 rounded-lg animate-pulse" />
+            ) : me ? (
               <>
+                {me.trusted && (
+                  <Link
+                    href="/historian/review"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors"
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    Review
+                  </Link>
+                )}
                 {me.trusted && (
                   <Link
                     href="/historian/invite"
@@ -180,25 +191,37 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                   href="/historian/profile"
                   className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors"
                 >
-                  <User className="w-4 h-4" />
+                  {me.avatarUrl ? (
+                    <img
+                      src={me.avatarUrl}
+                      alt=""
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-ether-500/20 flex items-center justify-center text-ether-400 text-xs font-bold">
+                      {me.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   {me.name}
                 </Link>
               </>
-            ) : shouldShowLogin ? (
-              <Link
-                href={loginUrl}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
-              >
-                <LogIn className="w-4 h-4" />
-                Historian Login
-              </Link>
             ) : (
-              <div className="flex items-center gap-2 text-obsidian-500 text-sm">
-                <kbd className="px-2 py-1 rounded bg-obsidian-800 text-obsidian-400 text-xs font-mono">
-                  0x...
-                </kbd>
-                <span>to search</span>
-              </div>
+              <>
+                <Link
+                  href={loginUrl}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Sign in
+                </Link>
+                <a
+                  href="/api/auth/github"
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors"
+                >
+                  <Github className="w-4 h-4" />
+                  Sign up with GitHub
+                </a>
+              </>
             )}
           </div>
         </div>

@@ -36,6 +36,9 @@ export async function GET(
         id: schema.historians.id,
         name: schema.historians.name,
         githubUsername: schema.historians.githubUsername,
+        avatarUrl: schema.historians.avatarUrl,
+        bio: schema.historians.bio,
+        websiteUrl: schema.historians.websiteUrl,
         createdAt: schema.historians.createdAt,
       })
       .from(schema.historians)
@@ -105,6 +108,9 @@ export async function GET(
           id: historian.id,
           name: historian.name,
           githubUsername: historian.githubUsername || null,
+          avatarUrl: historian.avatarUrl || null,
+          bio: historian.bio || null,
+          websiteUrl: historian.websiteUrl || null,
           joinedAt: historian.createdAt?.toISOString() || null,
           totalEdits,
           uniqueContracts,
