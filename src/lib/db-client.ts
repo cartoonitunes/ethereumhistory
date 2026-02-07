@@ -1555,6 +1555,7 @@ export async function getDocumentedContractsFromDb(params: {
   eraId?: string | null;
   contractType?: string | null;
   codeQuery?: string | null;
+  year?: number | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1568,6 +1569,11 @@ export async function getDocumentedContractsFromDb(params: {
   ];
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.year != null) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${params.year}`
+    );
   }
   if (params.contractType != null && params.contractType !== "") {
     conditions.push(eq(schema.contracts.contractType, params.contractType));
@@ -1601,6 +1607,7 @@ export async function getDocumentedContractsCountFromDb(params: {
   eraId?: string | null;
   contractType?: string | null;
   codeQuery?: string | null;
+  year?: number | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1609,6 +1616,11 @@ export async function getDocumentedContractsCountFromDb(params: {
   ];
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.year != null) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${params.year}`
+    );
   }
   if (params.contractType != null && params.contractType !== "") {
     conditions.push(eq(schema.contracts.contractType, params.contractType));
@@ -1660,6 +1672,7 @@ export async function getUndocumentedContractsFromDb(params: {
   eraId?: string | null;
   contractType?: string | null;
   codeQuery?: string | null;
+  year?: number | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1675,6 +1688,11 @@ export async function getUndocumentedContractsFromDb(params: {
   ];
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.year != null) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${params.year}`
+    );
   }
   if (params.contractType != null && params.contractType !== "") {
     conditions.push(eq(schema.contracts.contractType, params.contractType));
@@ -1708,6 +1726,7 @@ export async function getUndocumentedContractsCountFromDb(params: {
   eraId?: string | null;
   contractType?: string | null;
   codeQuery?: string | null;
+  year?: number | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1718,6 +1737,11 @@ export async function getUndocumentedContractsCountFromDb(params: {
   ];
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
+  }
+  if (params.year != null) {
+    conditions.push(
+      sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${params.year}`
+    );
   }
   if (params.contractType != null && params.contractType !== "") {
     conditions.push(eq(schema.contracts.contractType, params.contractType));

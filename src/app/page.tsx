@@ -552,6 +552,41 @@ export default function HomePage() {
       {/* Era Timeline */}
       <EraTimeline />
 
+      {/* Join / Community CTA */}
+      <section className="py-16 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-ether-500/20 bg-gradient-to-br from-ether-500/5 to-obsidian-900/40 p-8 md:p-10 text-center"
+          >
+            <h2 className="text-2xl md:text-3xl font-bold mb-3">
+              Help preserve Ethereum&apos;s history
+            </h2>
+            <p className="text-obsidian-400 max-w-2xl mx-auto mb-6">
+              Join our community of historians documenting the earliest smart contracts
+              ever deployed. Sign up with GitHub, start editing, and build your contributor profile.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                href="/api/auth/github"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-ether-600 hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30"
+              >
+                <Users className="w-4 h-4" />
+                Sign up with GitHub
+              </Link>
+              <Link
+                href="/browse?undocumented=1"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-obsidian-600 bg-obsidian-900/50 hover:bg-obsidian-800 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
+              >
+                Browse undocumented contracts
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* About Section */}
       <section id="about" className="py-20 border-t border-obsidian-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
