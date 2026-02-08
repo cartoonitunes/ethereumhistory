@@ -16,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         // Allow AI crawlers to index the public API docs and agent endpoints
         userAgent: ["Anthropic-AI", "GPTBot", "Google-Extended", "CCBot"],
-        allow: ["/", "/contract/", "/browse", "/api-docs", "/api/agent/"],
+        allow: ["/", "/contract/", "/browse", "/api-docs", "/api/agent/", "/mcp"],
         disallow: ["/historian/", "/api/analytics/"],
       },
     ],
