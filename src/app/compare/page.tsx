@@ -17,6 +17,7 @@ import { getContract } from "@/lib/db";
 import { isValidAddress, formatAddress, formatDate, getContractTypeLabel } from "@/lib/utils";
 import { Header } from "@/components/Header";
 import { EraCompact } from "@/components/EraTimeline";
+import { CompareSearch } from "@/components/CompareSearch";
 import { ArrowLeft, ArrowLeftRight } from "lucide-react";
 import { ERAS } from "@/types";
 import type { Contract } from "@/types";
@@ -73,7 +74,7 @@ function ComparisonRow({
 export default async function ComparePage({ searchParams }: ComparePageProps) {
   const { a, b } = await searchParams;
 
-  // No addresses provided — show empty state
+  // No addresses provided or missing one — show search UI
   if (!a || !b) {
     return (
       <div className="min-h-screen">
@@ -86,16 +87,14 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
             <ArrowLeft className="w-4 h-4" />
             Back to browse
           </Link>
-          <div className="text-center py-20">
+          <div className="text-center mb-10">
             <ArrowLeftRight className="w-12 h-12 text-obsidian-600 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold mb-4">Compare Contracts</h1>
-            <p className="text-obsidian-400 max-w-md mx-auto mb-8">
-              Compare two early Ethereum contracts side by side. Add two addresses as query parameters:
+            <h1 className="text-3xl font-bold mb-3">Compare Contracts</h1>
+            <p className="text-obsidian-400 max-w-md mx-auto">
+              Search for two contracts to compare side by side.
             </p>
-            <code className="text-sm text-ether-400 bg-obsidian-900/50 border border-obsidian-800 rounded-lg px-4 py-2">
-              /compare?a=0x...&b=0x...
-            </code>
           </div>
+          <CompareSearch initialAddress={a && isValidAddress(a) ? a : undefined} />
         </div>
       </div>
     );
