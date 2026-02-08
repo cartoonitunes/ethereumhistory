@@ -15,9 +15,10 @@ import type { ContractSimilarity } from "@/types";
 
 interface SimilarityTableProps {
   similarities: ContractSimilarity[];
+  sourceAddress?: string;
 }
 
-export function SimilarityTable({ similarities }: SimilarityTableProps) {
+export function SimilarityTable({ similarities, sourceAddress }: SimilarityTableProps) {
   if (similarities.length === 0) {
     return (
       <div className="text-center py-12 text-obsidian-500">
@@ -55,12 +56,13 @@ export function SimilarityTable({ similarities }: SimilarityTableProps) {
               <th>Similarity</th>
               <th>Type</th>
               <th>Deployed</th>
+              {sourceAddress && <th className="w-20">Compare</th>}
               <th className="w-10"></th>
             </tr>
           </thead>
           <tbody>
             {similarities.map((sim, index) => (
-              <SimilarityRow key={sim.matchedAddress} similarity={sim} index={index} />
+              <SimilarityRow key={sim.matchedAddress} similarity={sim} index={index} sourceAddress={sourceAddress} />
             ))}
           </tbody>
         </table>
@@ -88,9 +90,11 @@ export function SimilarityTable({ similarities }: SimilarityTableProps) {
 function SimilarityRow({
   similarity,
   index,
+  sourceAddress,
 }: {
   similarity: ContractSimilarity;
   index: number;
+  sourceAddress?: string;
 }) {
   const typeColor = getSimilarityTypeColor(similarity.similarityType);
 
@@ -172,6 +176,18 @@ function SimilarityRow({
             : "Unknown"}
         </span>
       </td>
+
+      {/* Compare */}
+      {sourceAddress && (
+        <td>
+          <Link
+            href={`/compare?a=${sourceAddress}&b=${similarity.matchedAddress}`}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-obsidian-400 hover:text-ether-400 hover:bg-obsidian-800 transition-colors"
+          >
+            Compare
+          </Link>
+        </td>
+      )}
 
       {/* Link */}
       <td>

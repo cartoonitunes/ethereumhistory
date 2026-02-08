@@ -20,6 +20,8 @@ import {
   Save,
   X,
   Trash2,
+  ArrowLeftRight,
+  CodeXml,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -337,14 +339,22 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             </div>
           )}
 
-          {/* Share on X */}
-          <div className="mt-4">
+          {/* Action buttons: Share, Embed, Compare */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <ShareOnX
               contractAddress={address}
               contractName={title}
               eraId={contract.eraId}
               shortDescription={contract.shortDescription}
             />
+            <EmbedButton address={address} />
+            <Link
+              href={`/compare?a=${address}&b=`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5" />
+              Compare
+            </Link>
           </div>
         </motion.div>
 
@@ -933,12 +943,14 @@ function CodeTab({
 
 function SimilarityTab({
   similarities,
+  sourceAddress,
 }: {
   similarities: ContractPageData["similarContracts"];
+  sourceAddress: string;
 }) {
   return (
     <div className="space-y-6">
-      <SimilarityTable similarities={similarities} />
+      <SimilarityTable similarities={similarities} sourceAddress={sourceAddress} />
 
       {/* Show detail for top match */}
       {similarities.length > 0 && (
@@ -1795,5 +1807,62 @@ function EditHistorySection({ contractAddress }: { contractAddress: string }) {
         ))}
       </div>
     </section>
+  );
+}
+
+/** Embed button with copy-to-clipboard popover */
+function EmbedButton({ address }: { address: string }) {
+  const [showEmbed, setShowEmbed] = useState(false);
+  const [embedCopied, setEmbedCopied] = useState(false);
+  const embedUrl = `https://www.ethereumhistory.com/embed/contract/${address.toLowerCase()}`;
+  const snippet = `<iframe src="${embedUrl}" width="400" height="180" frameborder="0" style="border-radius:12px;overflow:hidden;" loading="lazy"></iframe>`;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowEmbed(!showEmbed)}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+      >
+        <CodeXml className="w-3.5 h-3.5" />
+        Embed
+      </button>
+      {showEmbed && (
+        <div className="absolute left-0 top-full mt-2 z-50 w-[380px] p-4 rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-obsidian-200">Embed this contract</h4>
+            <button
+              onClick={() => setShowEmbed(false)}
+              className="p-1 rounded hover:bg-obsidian-800 text-obsidian-500 hover:text-obsidian-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-xs text-obsidian-500 mb-3">
+            Copy the iframe snippet below and paste it into your website or blog.
+          </p>
+          <div className="relative rounded-lg bg-obsidian-950 border border-obsidian-800 p-3">
+            <pre className="text-xs text-obsidian-300 font-mono whitespace-pre-wrap break-all leading-relaxed">
+              {snippet}
+            </pre>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(snippet);
+                setEmbedCopied(true);
+                setTimeout(() => setEmbedCopied(false), 2000);
+              }}
+              className="absolute top-2 right-2 p-1.5 rounded bg-obsidian-800 hover:bg-obsidian-700 text-obsidian-400 hover:text-obsidian-200 transition-colors"
+            >
+              {embedCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-obsidian-500">Theme:</span>
+            <a href={`${embedUrl}?theme=dark`} target="_blank" rel="noopener noreferrer" className="text-xs text-ether-400 hover:text-ether-300 transition-colors">Dark</a>
+            <span className="text-obsidian-700">·</span>
+            <a href={`${embedUrl}?theme=light`} target="_blank" rel="noopener noreferrer" className="text-xs text-ether-400 hover:text-ether-300 transition-colors">Light</a>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
