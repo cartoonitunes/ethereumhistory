@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -22,6 +22,8 @@ import {
   Trash2,
   ArrowLeftRight,
   CodeXml,
+  Search,
+  Loader2,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -48,7 +50,7 @@ import {
   getVerificationStatusLabel,
   getVerificationStatusColor,
 } from "@/lib/utils";
-import type { ContractHistoryData, ContractPageData, HistorianMe, HistoricalLink } from "@/types";
+import type { ContractHistoryData, ContractPageData, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse } from "@/types";
 
 interface ContractPageClientProps {
   address: string;
@@ -63,7 +65,40 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "history" | "code">("overview");
+  // Hash-based tab persistence: read from URL hash on mount, update hash on change
+  const validTabs = useMemo(() => new Set(["overview", "history", "code"] as const), []);
+  type TabId = "overview" | "history" | "code";
+  const [activeTab, setActiveTabRaw] = useState<TabId>(() => {
+    if (typeof window !== "undefined") {
+      const h = window.location.hash.replace("#", "") as TabId;
+      if (validTabs.has(h)) return h;
+    }
+    return "overview";
+  });
+
+  const setActiveTab = useCallback((tab: TabId) => {
+    setActiveTabRaw(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.hash = tab === "overview" ? "" : tab;
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, []);
+
+  // Listen for back/forward navigation hash changes
+  useEffect(() => {
+    function onHashChange() {
+      const h = window.location.hash.replace("#", "") as TabId;
+      if (validTabs.has(h)) {
+        setActiveTabRaw(h);
+      } else {
+        setActiveTabRaw("overview");
+      }
+    }
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [validTabs]);
+
   usePageView(`/contract/${address}`, address);
   const trackEvent = useTrackEvent();
 
@@ -348,13 +383,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               shortDescription={contract.shortDescription}
             />
             <EmbedButton address={address} />
-            <Link
-              href={`/compare?a=${address}&b=`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
-            >
-              <ArrowLeftRight className="w-3.5 h-3.5" />
-              Compare
-            </Link>
+            <CompareButton sourceAddress={address} />
           </div>
         </motion.div>
 
@@ -1815,7 +1844,7 @@ function EmbedButton({ address }: { address: string }) {
   const [showEmbed, setShowEmbed] = useState(false);
   const [embedCopied, setEmbedCopied] = useState(false);
   const embedUrl = `https://www.ethereumhistory.com/embed/contract/${address.toLowerCase()}`;
-  const snippet = `<iframe src="${embedUrl}" width="400" height="180" frameborder="0" style="border-radius:12px;overflow:hidden;" loading="lazy"></iframe>`;
+  const snippet = `<iframe src="${embedUrl}" width="420" height="200" frameborder="0" style="border-radius:12px;overflow:hidden;" loading="lazy"></iframe>`;
 
   return (
     <div className="relative">
@@ -1861,6 +1890,152 @@ function EmbedButton({ address }: { address: string }) {
             <span className="text-obsidian-700">·</span>
             <a href={`${embedUrl}?theme=light`} target="_blank" rel="noopener noreferrer" className="text-xs text-ether-400 hover:text-ether-300 transition-colors">Light</a>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Compare button with inline search popover */
+function CompareButton({ sourceAddress }: { sourceAddress: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<UnifiedSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  // Debounced search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query.trim() || query.trim().length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/unified?q=${encodeURIComponent(query.trim())}&page=1`);
+        const json = await res.json();
+        const data = json.data as UnifiedSearchResponse | undefined;
+        // Filter out the current contract from results
+        const filtered = (data?.results || []).filter(
+          (r) => r.address.toLowerCase() !== sourceAddress.toLowerCase()
+        );
+        setResults(filtered.slice(0, 6));
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, sourceAddress]);
+
+  function selectContract(targetAddress: string) {
+    setOpen(false);
+    setQuery("");
+    setResults([]);
+    router.push(`/compare?a=${sourceAddress}&b=${targetAddress}`);
+  }
+
+  return (
+    <div className="relative" ref={popoverRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+      >
+        <ArrowLeftRight className="w-3.5 h-3.5" />
+        Compare
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-2 z-50 w-[380px] rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl overflow-hidden">
+          <div className="p-3 border-b border-obsidian-800">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-obsidian-200">Compare with...</h4>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1 rounded hover:bg-obsidian-800 text-obsidian-500 hover:text-obsidian-300 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-obsidian-500" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by name, address, or keyword..."
+                autoFocus
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-obsidian-950 border border-obsidian-800 text-sm text-obsidian-100 placeholder:text-obsidian-500 outline-none focus:border-ether-500/50 focus:ring-1 focus:ring-ether-500/20"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              {loading && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-obsidian-500 animate-spin" />
+              )}
+            </div>
+          </div>
+
+          {/* Results */}
+          {results.length > 0 && (
+            <div className="max-h-[280px] overflow-y-auto">
+              {results.map((r) => (
+                <button
+                  key={r.address}
+                  onClick={() => selectContract(r.address)}
+                  className="w-full text-left px-4 py-3 hover:bg-obsidian-800/70 transition-colors border-b border-obsidian-800/50 last:border-b-0"
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium text-obsidian-200 truncate">
+                      {r.title}
+                    </span>
+                    {r.heuristicContractType && (
+                      <span className="px-1.5 py-0.5 text-[10px] rounded bg-obsidian-800 text-obsidian-400">
+                        {r.heuristicContractType}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-obsidian-500">
+                    <code className="font-mono">{formatAddress(r.address, 8)}</code>
+                    {r.eraId && <span className="text-obsidian-600">·</span>}
+                    {r.eraId && <span>{r.eraId}</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {query.trim().length >= 2 && !loading && results.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-obsidian-500">
+              No contracts found for &ldquo;{query}&rdquo;
+            </div>
+          )}
+
+          {/* Hint when empty */}
+          {query.trim().length < 2 && (
+            <div className="px-4 py-6 text-center text-xs text-obsidian-500">
+              Type at least 2 characters to search for a contract to compare with.
+            </div>
+          )}
         </div>
       )}
     </div>

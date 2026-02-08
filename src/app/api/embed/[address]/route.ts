@@ -29,12 +29,12 @@ export async function GET(
 
   const embedUrl = `${BASE_URL}/embed/contract/${address.toLowerCase()}?theme=${theme}`;
 
-  const iframeSnippet = `<iframe src="${embedUrl}" width="400" height="180" frameborder="0" style="border-radius:12px;overflow:hidden;" loading="lazy"></iframe>`;
+  const iframeSnippet = `<iframe src="${embedUrl}" width="420" height="200" frameborder="0" style="border-radius:12px;overflow:hidden;" loading="lazy"></iframe>`;
 
   const jsSnippet = `<!-- Ethereum History Contract Card -->
 <div id="eth-history-${address.toLowerCase().slice(0, 10)}" data-address="${address.toLowerCase()}" data-theme="${theme}"></div>
 <script>
-(function(){var d=document,c=d.getElementById("eth-history-${address.toLowerCase().slice(0, 10)}"),i=d.createElement("iframe");i.src="${embedUrl}";i.width="400";i.height="180";i.frameBorder="0";i.style.borderRadius="12px";i.style.overflow="hidden";i.loading="lazy";c.appendChild(i)})();
+(function(){var d=document,c=d.getElementById("eth-history-${address.toLowerCase().slice(0, 10)}"),i=d.createElement("iframe");i.src="${embedUrl}";i.width="420";i.height="200";i.frameBorder="0";i.style.borderRadius="12px";i.style.overflow="hidden";i.loading="lazy";c.appendChild(i)})();
 </script>`;
 
   return NextResponse.json(
