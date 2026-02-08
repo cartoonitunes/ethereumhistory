@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { isDatabaseConfigured, getDb } from "@/lib/db-client";
 import { contracts } from "@/lib/schema";
 import { isNotNull, ne, and, asc } from "drizzle-orm";
+import { cached, CACHE_TTL } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -19,24 +20,29 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const db = getDb();
-
-    // Get all documented contracts (have a short_description)
-    const documented = await db
-      .select({
-        address: contracts.address,
-        etherscanContractName: contracts.etherscanContractName,
-        tokenName: contracts.tokenName,
-        tokenSymbol: contracts.tokenSymbol,
-        shortDescription: contracts.shortDescription,
-        description: contracts.description,
-        eraId: contracts.eraId,
-        deploymentTimestamp: contracts.deploymentTimestamp,
-        historicalSignificance: contracts.historicalSignificance,
-      })
-      .from(contracts)
-      .where(and(isNotNull(contracts.shortDescription), ne(contracts.shortDescription, "")))
-      .orderBy(asc(contracts.deploymentTimestamp));
+    // Cache the full documented list for 1 hour (it rarely changes)
+    const documented = await cached(
+      "cotd:documented-list",
+      CACHE_TTL.LONG,
+      async () => {
+        const db = getDb();
+        return db
+          .select({
+            address: contracts.address,
+            etherscanContractName: contracts.etherscanContractName,
+            tokenName: contracts.tokenName,
+            tokenSymbol: contracts.tokenSymbol,
+            shortDescription: contracts.shortDescription,
+            description: contracts.description,
+            eraId: contracts.eraId,
+            deploymentTimestamp: contracts.deploymentTimestamp,
+            historicalSignificance: contracts.historicalSignificance,
+          })
+          .from(contracts)
+          .where(and(isNotNull(contracts.shortDescription), ne(contracts.shortDescription, "")))
+          .orderBy(asc(contracts.deploymentTimestamp));
+      }
+    );
 
     if (documented.length === 0) {
       return NextResponse.json({ data: null, error: null });

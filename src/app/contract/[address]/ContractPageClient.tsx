@@ -393,6 +393,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           {activeTab === "history" && (
             <div className="min-w-0 space-y-6">
               <HistoricalDocsSection contract={contract} />
+              <EditHistorySection contractAddress={address} />
               <SuggestEditForm contractAddress={address} />
             </div>
           )}
@@ -1673,5 +1674,126 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
         </section>
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// Edit History Section — shows who edited what and when
+// =============================================================================
+
+interface EditHistoryEntry {
+  historianName: string;
+  historianAvatarUrl: string | null;
+  fieldsChanged: string[] | null;
+  editedAt: string;
+}
+
+function EditHistorySection({ contractAddress }: { contractAddress: string }) {
+  const [edits, setEdits] = useState<EditHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/contract/${contractAddress}/edits`);
+        const json = await res.json();
+        if (!cancelled && json?.data?.edits) {
+          setEdits(json.data.edits);
+        }
+      } catch {
+        // silently fail — edit history is supplementary
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contractAddress]);
+
+  if (loading) {
+    return (
+      <section className="p-5 rounded-xl border border-obsidian-800 bg-obsidian-900/50">
+        <div className="flex items-center gap-2 mb-3">
+          <History className="w-4 h-4 text-obsidian-400" />
+          <h3 className="text-sm font-semibold text-obsidian-300">Edit History</h3>
+        </div>
+        <div className="text-sm text-obsidian-500 animate-pulse">Loading edit history...</div>
+      </section>
+    );
+  }
+
+  if (edits.length === 0) {
+    return (
+      <section className="p-5 rounded-xl border border-obsidian-800 bg-obsidian-900/50">
+        <div className="flex items-center gap-2 mb-3">
+          <History className="w-4 h-4 text-obsidian-400" />
+          <h3 className="text-sm font-semibold text-obsidian-300">Edit History</h3>
+        </div>
+        <p className="text-sm text-obsidian-500">
+          No edits recorded yet. Be the first to document this contract!
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="p-5 rounded-xl border border-obsidian-800 bg-obsidian-900/50">
+      <div className="flex items-center gap-2 mb-4">
+        <History className="w-4 h-4 text-obsidian-400" />
+        <h3 className="text-sm font-semibold text-obsidian-300">
+          Edit History
+          <span className="ml-2 text-xs text-obsidian-500 font-normal">
+            {edits.length} edit{edits.length !== 1 ? "s" : ""}
+          </span>
+        </h3>
+      </div>
+      <div className="space-y-3">
+        {edits.map((edit, i) => (
+          <div
+            key={`${edit.editedAt}-${i}`}
+            className="flex items-start gap-3 text-sm"
+          >
+            {/* Avatar */}
+            {edit.historianAvatarUrl ? (
+              <img
+                src={edit.historianAvatarUrl}
+                alt={edit.historianName}
+                className="w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-obsidian-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Users className="w-3 h-3 text-obsidian-400" />
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-obsidian-200">
+                  {edit.historianName}
+                </span>
+                <span className="text-obsidian-500 text-xs">
+                  {formatRelativeTime(edit.editedAt)}
+                </span>
+              </div>
+              {edit.fieldsChanged && edit.fieldsChanged.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {edit.fieldsChanged.map((field) => (
+                    <span
+                      key={field}
+                      className="px-1.5 py-0.5 rounded bg-obsidian-800 text-obsidian-400 text-xs"
+                    >
+                      {field.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

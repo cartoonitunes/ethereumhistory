@@ -12,12 +12,22 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, UnifiedSearchResponse } from "@/types";
 import { searchUnifiedContracts } from "@/lib/db";
 import { isValidAddress } from "@/lib/utils";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<UnifiedSearchResponse>>> {
+  // Rate limit: 60 searches per minute per IP
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limit = checkRateLimit(`search:${ip}`, { maxRequests: 60, windowSeconds: 60 });
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { data: null, error: "Too many search requests. Please slow down." },
+      { status: 429 }
+    );
+  }
   const searchParams = request.nextUrl.searchParams;
   const raw = searchParams.get("q") || "";
   const page = parseInt(searchParams.get("page") || "1", 10);

@@ -15,6 +15,7 @@ import {
   getUndocumentedContractsFromDb,
   getUndocumentedContractsCountFromDb,
 } from "@/lib/db-client";
+import { cached, CACHE_TTL } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -54,15 +55,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     year: year && year >= 2015 && year <= 2017 ? year : null,
   };
 
-  const [contracts, total] = undocumented
-    ? await Promise.all([
-        getUndocumentedContractsFromDb({ ...filterParams, limit, offset }),
-        getUndocumentedContractsCountFromDb(filterParams),
-      ])
-    : await Promise.all([
-        getDocumentedContractsFromDb({ ...filterParams, limit, offset }),
-        getDocumentedContractsCountFromDb(filterParams),
-      ]);
+  // Build a cache key from all filter params for short-lived caching
+  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${page}:${limit}`;
+
+  const [contracts, total] = await cached(
+    cacheKey,
+    // Code search queries bypass cache (expensive + varied), others cache 1 min
+    q ? 0 : CACHE_TTL.SHORT,
+    async () => {
+      return undocumented
+        ? Promise.all([
+            getUndocumentedContractsFromDb({ ...filterParams, limit, offset }),
+            getUndocumentedContractsCountFromDb(filterParams),
+          ])
+        : Promise.all([
+            getDocumentedContractsFromDb({ ...filterParams, limit, offset }),
+            getDocumentedContractsCountFromDb(filterParams),
+          ]);
+    }
+  );
 
   const totalPages = Math.ceil(total / limit);
 
@@ -87,7 +98,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     meta: {
       timestamp: new Date().toISOString(),
-      cached: false,
+      cached: !q, // code-search queries bypass cache
     },
   });
 }

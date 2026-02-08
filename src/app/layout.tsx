@@ -62,6 +62,29 @@ export const metadata: Metadata = {
   },
 };
 
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Ethereum History",
+  description:
+    "A historical archive and analysis tool for Ethereum smart contracts from the early years. Explore the origins of decentralized applications.",
+  url: "https://www.ethereumhistory.com",
+  potentialAction: {
+    "@type": "SearchAction",
+    target: {
+      "@type": "EntryPoint",
+      urlTemplate:
+        "https://www.ethereumhistory.com/browse?q={search_term_string}",
+    },
+    "query-input": "required name=search_term_string",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: "Ethereum History",
+    url: "https://www.ethereumhistory.com",
+  },
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -70,6 +93,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-obsidian-950 text-obsidian-50 antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
+        />
         <div className="relative min-h-screen">
           {/* Background gradient */}
           <div className="fixed inset-0 gradient-radial pointer-events-none" />
