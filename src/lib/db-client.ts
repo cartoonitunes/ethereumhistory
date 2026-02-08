@@ -51,7 +51,7 @@ export function getDb() {
 
     // In serverless, keep pool tiny to avoid connection explosion
     // For Neon pooler/pgbouncer, disable prepared statements.
-    const client = postgres(dbUrl, { max: 1, prepare: !isPoolerUrl(dbUrl) });
+    const client = postgres(dbUrl, { max: 10, prepare: !isPoolerUrl(dbUrl) });
     db = drizzlePostgres(client, { schema });
   }
   return db;
@@ -2369,6 +2369,62 @@ export async function getRecentEditsFromDb(limit = 20): Promise<
     editedAt: r.editedAt.toISOString(),
     contractName: r.tokenName || r.contractName || null,
   }));
+}
+
+/**
+ * Get edit history for a specific contract
+ */
+export async function getEditsForContractFromDb(
+  contractAddress: string,
+  limit = 20
+): Promise<
+  Array<{
+    historianName: string;
+    historianAvatarUrl: string | null;
+    fieldsChanged: string[] | null;
+    editedAt: string;
+  }>
+> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      historianName: schema.historians.name,
+      historianAvatarUrl: schema.historians.avatarUrl,
+      fieldsChanged: schema.contractEdits.fieldsChanged,
+      editedAt: schema.contractEdits.editedAt,
+    })
+    .from(schema.contractEdits)
+    .innerJoin(
+      schema.historians,
+      eq(schema.contractEdits.historianId, schema.historians.id)
+    )
+    .where(eq(schema.contractEdits.contractAddress, contractAddress.toLowerCase()))
+    .orderBy(desc(schema.contractEdits.editedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    historianName: r.historianName,
+    historianAvatarUrl: r.historianAvatarUrl,
+    fieldsChanged: r.fieldsChanged,
+    editedAt: r.editedAt.toISOString(),
+  }));
+}
+
+/**
+ * Get all contract addresses for sitemap generation
+ */
+export async function getAllContractAddressesForSitemap(): Promise<
+  Array<{ address: string; updatedAt: Date | null; featured: boolean | null }>
+> {
+  const database = getDb();
+  return database
+    .select({
+      address: schema.contracts.address,
+      updatedAt: schema.contracts.updatedAt,
+      featured: schema.contracts.featured,
+    })
+    .from(schema.contracts)
+    .where(isNotNull(schema.contracts.shortDescription));
 }
 
 /**

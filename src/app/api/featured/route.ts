@@ -2,11 +2,13 @@
  * Featured Contracts API Route
  *
  * GET /api/featured
- * Returns featured historical contracts for the homepage
+ * Returns featured historical contracts for the homepage.
+ * Cached in-memory for 5 minutes to reduce DB load.
  */
 
 import { NextResponse } from "next/server";
 import { getFeaturedContracts, getRecentContracts, getAllEras } from "@/lib/db";
+import { cached, CACHE_TTL } from "@/lib/cache";
 import type { ApiResponse, FeaturedContract, EthereumEra, Contract } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -19,22 +21,25 @@ interface FeaturedResponse {
 
 export async function GET(): Promise<NextResponse<ApiResponse<FeaturedResponse>>> {
   try {
-    const [featuredContracts, recentContracts, eras] = await Promise.all([
-      getFeaturedContracts(),
-      getRecentContracts(5),
-      getAllEras(),
-    ]);
+    const data = await cached<FeaturedResponse>(
+      "featured:homepage",
+      CACHE_TTL.MEDIUM,
+      async () => {
+        const [featuredContracts, recentContracts, eras] = await Promise.all([
+          getFeaturedContracts(),
+          getRecentContracts(5),
+          getAllEras(),
+        ]);
+        return { featuredContracts, recentContracts, eras };
+      }
+    );
 
     return NextResponse.json({
-      data: {
-        featuredContracts,
-        recentContracts,
-        eras,
-      },
+      data,
       error: null,
       meta: {
         timestamp: new Date().toISOString(),
-        cached: false,
+        cached: true,
       },
     });
   } catch (error) {

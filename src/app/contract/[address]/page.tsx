@@ -79,10 +79,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const ogSocialImage = ogImageUrl || fallbackSocialImage;
 
+  const canonicalUrl = new URL(
+    `/contract/${address.toLowerCase()}`,
+    metadataBase
+  ).toString();
+
   return {
     metadataBase,
     title,
     description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       title,
       description: tokenName
@@ -90,7 +98,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         : `Historical analysis of Ethereum contract ${address}.`,
       type: "website",
       siteName: "Ethereum History",
-      url: new URL(`/contract/${address}`, metadataBase).toString(),
+      url: canonicalUrl,
       images: [
         ogImageUrl
           ? {
@@ -120,6 +128,46 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function buildJsonLd(address: string, data: NonNullable<Awaited<ReturnType<typeof getContractPageData>>>) {
+  const { contract } = data;
+  const metadataBase = getMetadataBaseUrl();
+  const displayName =
+    contract.tokenName || contract.ensName || contract.etherscanContractName || `Contract ${formatAddress(address, 12)}`;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "CreativeWork",
+    name: displayName,
+    description:
+      contract.shortDescription ||
+      `Historical analysis of Ethereum contract ${address}.`,
+    url: new URL(`/contract/${address.toLowerCase()}`, metadataBase).toString(),
+    datePublished: contract.deploymentTimestamp || undefined,
+    isAccessibleForFree: true,
+    keywords: [
+      "Ethereum",
+      "smart contract",
+      contract.eraId || "",
+      contract.heuristics?.contractType || "",
+      contract.tokenSymbol || "",
+    ].filter(Boolean),
+    publisher: {
+      "@type": "Organization",
+      name: "Ethereum History",
+      url: metadataBase.toString(),
+    },
+    about: {
+      "@type": "SoftwareApplication",
+      name: "Ethereum",
+      applicationCategory: "Blockchain",
+    },
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": new URL(`/contract/${address.toLowerCase()}`, metadataBase).toString(),
+    },
+  };
+}
+
 export default async function ContractPage({ params }: Props) {
   const { address } = await params;
 
@@ -143,5 +191,15 @@ export default async function ContractPage({ params }: Props) {
     return <ContractPageClient address={address} data={null} error={null} />;
   }
 
-  return <ContractPageClient address={address} data={data} error={null} />;
+  const jsonLd = buildJsonLd(address, data);
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ContractPageClient address={address} data={data} error={null} />
+    </>
+  );
 }
