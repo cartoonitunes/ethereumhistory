@@ -36,11 +36,52 @@ export async function generateMetadata({ searchParams }: ComparePageProps): Prom
       description: "Compare two early Ethereum smart contracts side by side.",
     };
   }
-  const nameA = formatAddress(a, 8);
-  const nameB = formatAddress(b, 8);
+
+  // Fetch contracts to get real names for metadata
+  const [contractA, contractB] = await Promise.all([
+    isValidAddress(a) ? getContract(a.toLowerCase()) : null,
+    isValidAddress(b) ? getContract(b.toLowerCase()) : null,
+  ]);
+
+  const nameA = contractA?.etherscanContractName || contractA?.tokenName || contractA?.ensName || formatAddress(a, 8);
+  const nameB = contractB?.etherscanContractName || contractB?.tokenName || contractB?.ensName || formatAddress(b, 8);
+
+  const descParts: string[] = [];
+  if (contractA?.shortDescription) descParts.push(`${nameA}: ${contractA.shortDescription}`);
+  if (contractB?.shortDescription) descParts.push(`${nameB}: ${contractB.shortDescription}`);
+  const description = descParts.length > 0
+    ? `${nameA} vs ${nameB}. ${descParts.join(" | ")}`
+    : `Side-by-side comparison of Ethereum contracts ${nameA} and ${nameB}: deployment, bytecode, type, and historical context.`;
+
+  const title = `${nameA} vs ${nameB} — Ethereum History`;
+
+  const ogImageUrl = `https://www.ethereumhistory.com/api/og/compare?a=${a}&b=${b}`;
+
   return {
-    title: `Compare ${nameA} vs ${nameB} — Ethereum History`,
-    description: `Side-by-side comparison of Ethereum contracts ${nameA} and ${nameB}: deployment, bytecode, type, and historical context.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      siteName: "Ethereum History",
+      url: `https://www.ethereumhistory.com/compare?a=${a}&b=${b}`,
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          type: "image/png",
+          alt: `Compare ${nameA} vs ${nameB}`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImageUrl],
+    },
   };
 }
 
@@ -153,12 +194,40 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
         </Link>
 
         {/* Page title */}
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <ArrowLeftRight className="w-6 h-6 text-ether-400" />
           <h1 className="text-2xl md:text-3xl font-bold">
             {nameA} <span className="text-obsidian-500 font-normal">vs</span> {nameB}
           </h1>
         </div>
+
+        {/* Description cards (above table so users read context first) */}
+        {(contractA.shortDescription || contractB.shortDescription) && (
+          <div className="mb-8 grid md:grid-cols-2 gap-6">
+            <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Link href={`/contract/${contractA.address}`} className="font-semibold text-obsidian-200 hover:text-ether-400 transition-colors">
+                  {nameA}
+                </Link>
+                {contractA.eraId && <EraCompact eraId={contractA.eraId} />}
+              </div>
+              <p className="text-sm text-obsidian-400">
+                {contractA.shortDescription || "No description yet."}
+              </p>
+            </div>
+            <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Link href={`/contract/${contractB.address}`} className="font-semibold text-obsidian-200 hover:text-ether-400 transition-colors">
+                  {nameB}
+                </Link>
+                {contractB.eraId && <EraCompact eraId={contractB.eraId} />}
+              </div>
+              <p className="text-sm text-obsidian-400">
+                {contractB.shortDescription || "No description yet."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Comparison table */}
         <div className="overflow-x-auto rounded-xl border border-obsidian-800">
@@ -264,24 +333,6 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
             </tbody>
           </table>
         </div>
-
-        {/* Description comparison (if either has one) */}
-        {(contractA.shortDescription || contractB.shortDescription) && (
-          <div className="mt-8 grid md:grid-cols-2 gap-6">
-            <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5">
-              <h3 className="font-semibold text-obsidian-200 mb-2">{nameA}</h3>
-              <p className="text-sm text-obsidian-400">
-                {contractA.shortDescription || "No description yet."}
-              </p>
-            </div>
-            <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5">
-              <h3 className="font-semibold text-obsidian-200 mb-2">{nameB}</h3>
-              <p className="text-sm text-obsidian-400">
-                {contractB.shortDescription || "No description yet."}
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Swap button */}
         <div className="mt-6 flex justify-center">

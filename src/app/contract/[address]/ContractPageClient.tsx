@@ -1932,9 +1932,9 @@ function CompareButton({ sourceAddress }: { sourceAddress: string }) {
         const res = await fetch(`/api/search/unified?q=${encodeURIComponent(query.trim())}&page=1`);
         const json = await res.json();
         const data = json.data as UnifiedSearchResponse | undefined;
-        // Filter out the current contract from results
+        // Filter to contracts only and exclude the current contract
         const filtered = (data?.results || []).filter(
-          (r) => r.address.toLowerCase() !== sourceAddress.toLowerCase()
+          (r) => r.entityType === "contract" && r.address.toLowerCase() !== sourceAddress.toLowerCase()
         );
         setResults(filtered.slice(0, 6));
       } catch {
