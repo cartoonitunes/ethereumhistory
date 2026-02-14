@@ -17,6 +17,7 @@
     "db:migrate": "npx tsx scripts/migrate.ts",
     "db:import": "npx tsx scripts/import-data.ts",
     "db:similarity": "npx tsx scripts/build-similarity-index.ts",
+    "db:capabilities:beta": "npx tsx scripts/backfill-capabilities-beta.ts",
     "similarity:run": "cd pipeline && python -m similarity.main"
   },
   "dependencies": {
