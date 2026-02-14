@@ -28,6 +28,7 @@ A historical archive and analysis tool for Ethereum smart contracts, with a focu
 - Ethereum era classification (Frontier, Homestead, DAO Fork, etc.)
 - Editorial narratives for significant contracts
 - Timeline visualization
+- Capability-first historical analysis (beta): functionality prevalence and earliest-known instances
 
 ## Tech Stack
 
