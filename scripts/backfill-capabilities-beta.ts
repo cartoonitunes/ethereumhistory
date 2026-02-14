@@ -184,9 +184,19 @@ async function replaceEvidence(contractAddress: string, capabilityPrefix: string
 }
 
 async function run() {
-  console.log("Backfilling capability classification (beta)...");
+  const argv = process.argv.slice(2);
+  const fullMode = argv.includes("--full");
+  const maxArg = argv.find((a) => a.startsWith("--max="));
+  const maxContracts = maxArg
+    ? Math.max(1, Number(maxArg.split("=")[1]) || 200)
+    : fullMode
+      ? Number.MAX_SAFE_INTEGER
+      : 200;
 
-  const contracts = await db
+  console.log("Backfilling capability classification (beta)...");
+  console.log(fullMode ? "Mode: FULL" : `Mode: SAMPLE (max ${maxContracts})`);
+
+  const baseQuery = db
     .select({
       address: schema.contracts.address,
       runtimeBytecode: schema.contracts.runtimeBytecode,
@@ -195,7 +205,12 @@ async function run() {
       deploymentTimestamp: schema.contracts.deploymentTimestamp,
     })
     .from(schema.contracts)
-    .where(sql`deployment_timestamp >= '2015-01-01'::timestamp AND deployment_timestamp < '2018-01-01'::timestamp`);
+    .where(sql`deployment_timestamp >= '2015-01-01'::timestamp AND deployment_timestamp < '2018-01-01'::timestamp`)
+    .orderBy(sql`deployment_timestamp ASC NULLS LAST`);
+
+  const contracts = fullMode
+    ? await baseQuery
+    : await baseQuery.limit(maxContracts);
 
   console.log(`Contracts to classify: ${contracts.length}`);
   let i = 0;
