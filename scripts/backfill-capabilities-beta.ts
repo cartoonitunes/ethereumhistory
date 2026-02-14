@@ -129,24 +129,36 @@ function statusFromScore(score: number): "present" | "probable" | "absent" {
   return "absent";
 }
 
-async function upsertCapability(
-  contractAddress: string,
-  capabilityKey: string,
-  score: number,
-  primaryEvidenceType: string | null
-) {
+type CapabilityRow = {
+  contractAddress: string;
+  capabilityKey: string;
+  status: string;
+  confidence: number;
+  primaryEvidenceType: string | null;
+};
+
+type EvidenceRow = {
+  contractAddress: string;
+  capabilityKey: string;
+  evidenceType: string;
+  evidenceKey: string;
+  confidence: number;
+  snippet: string | null;
+};
+
+const CAPABILITY_BATCH_SIZE = 500;
+const EVIDENCE_BATCH_SIZE = 500;
+
+async function flushCapabilities(batch: CapabilityRow[]) {
+  if (batch.length === 0) return;
+  const values = batch.map(
+    (r) =>
+      sql`(${r.contractAddress}, ${r.capabilityKey}, ${r.status}, ${r.confidence}, ${r.primaryEvidenceType}, ${DETECTOR_VERSION}, NOW())`
+  );
   await db.execute(sql`
     INSERT INTO contract_capabilities (
       contract_address, capability_key, status, confidence, primary_evidence_type, detector_version, updated_at
-    ) VALUES (
-      ${contractAddress},
-      ${capabilityKey},
-      ${statusFromScore(score)},
-      ${score},
-      ${primaryEvidenceType},
-      ${DETECTOR_VERSION},
-      NOW()
-    )
+    ) VALUES ${sql.join(values, sql`, `)}
     ON CONFLICT (contract_address, capability_key)
     DO UPDATE SET
       status = EXCLUDED.status,
@@ -157,30 +169,17 @@ async function upsertCapability(
   `);
 }
 
-async function replaceEvidence(contractAddress: string, capabilityPrefix: string, evidences: TraitEvidence[]) {
+async function flushEvidence(batch: EvidenceRow[]) {
+  if (batch.length === 0) return;
+  const values = batch.map(
+    (r) =>
+      sql`(${r.contractAddress}, ${r.capabilityKey}, ${r.evidenceType}, ${r.evidenceKey}, ${r.evidenceKey}, ${r.snippet}, ${r.confidence}, ${DETECTOR_VERSION})`
+  );
   await db.execute(sql`
-    DELETE FROM capability_evidence
-    WHERE contract_address = ${contractAddress}
-      AND capability_key LIKE ${capabilityPrefix + "%"}
-      AND detector_version = ${DETECTOR_VERSION}
+    INSERT INTO capability_evidence (
+      contract_address, capability_key, evidence_type, evidence_key, evidence_value, snippet, confidence, detector_version
+    ) VALUES ${sql.join(values, sql`, `)}
   `);
-
-  for (const e of evidences) {
-    await db.execute(sql`
-      INSERT INTO capability_evidence (
-        contract_address, capability_key, evidence_type, evidence_key, evidence_value, snippet, confidence, detector_version
-      ) VALUES (
-        ${contractAddress},
-        ${e.trait},
-        ${e.evidenceType},
-        ${e.evidenceKey},
-        ${e.evidenceKey},
-        ${e.snippet ?? null},
-        ${e.confidence},
-        ${DETECTOR_VERSION}
-      )
-    `);
-  }
 }
 
 async function run() {
@@ -213,27 +212,61 @@ async function run() {
     : await baseQuery.limit(maxContracts);
 
   console.log(`Contracts to classify: ${contracts.length}`);
-  let i = 0;
+
+  // Delete existing evidence in one shot so we can bulk-insert fresh
+  console.log("Clearing existing evidence for this detector version...");
+  await db.execute(sql`
+    DELETE FROM capability_evidence WHERE detector_version = ${DETECTOR_VERSION}
+  `);
+
+  let capBatch: CapabilityRow[] = [];
+  let evBatch: EvidenceRow[] = [];
+  let processed = 0;
+  const startTime = Date.now();
 
   for (const c of contracts) {
-    i += 1;
-
     const token = detectTokenFungible(c);
-    await upsertCapability(c.address, "token:fungible:concept", token.conceptScore, token.evidences[0]?.evidenceType ?? null);
-    await upsertCapability(c.address, "token:fungible:aligned", token.alignedScore, token.evidences[0]?.evidenceType ?? null);
-    await upsertCapability(c.address, "token:fungible:strict", token.strictScore, token.evidences[0]?.evidenceType ?? null);
-    await replaceEvidence(c.address, "fungible:", token.evidences);
-
     const dao = detectDao(c);
-    await upsertCapability(c.address, "dao:concept", dao.conceptScore, dao.evidences[0]?.evidenceType ?? null);
-    await upsertCapability(c.address, "dao:aligned", dao.alignedScore, dao.evidences[0]?.evidenceType ?? null);
-    await upsertCapability(c.address, "dao:strict", dao.strictScore, dao.evidences[0]?.evidenceType ?? null);
-    await replaceEvidence(c.address, "dao:", dao.evidences);
 
-    if (i % 500 === 0) console.log(`Processed ${i}/${contracts.length}`);
+    capBatch.push(
+      { contractAddress: c.address, capabilityKey: "token:fungible:concept", status: statusFromScore(token.conceptScore), confidence: token.conceptScore, primaryEvidenceType: token.evidences[0]?.evidenceType ?? null },
+      { contractAddress: c.address, capabilityKey: "token:fungible:aligned", status: statusFromScore(token.alignedScore), confidence: token.alignedScore, primaryEvidenceType: token.evidences[0]?.evidenceType ?? null },
+      { contractAddress: c.address, capabilityKey: "token:fungible:strict", status: statusFromScore(token.strictScore), confidence: token.strictScore, primaryEvidenceType: token.evidences[0]?.evidenceType ?? null },
+      { contractAddress: c.address, capabilityKey: "dao:concept", status: statusFromScore(dao.conceptScore), confidence: dao.conceptScore, primaryEvidenceType: dao.evidences[0]?.evidenceType ?? null },
+      { contractAddress: c.address, capabilityKey: "dao:aligned", status: statusFromScore(dao.alignedScore), confidence: dao.alignedScore, primaryEvidenceType: dao.evidences[0]?.evidenceType ?? null },
+      { contractAddress: c.address, capabilityKey: "dao:strict", status: statusFromScore(dao.strictScore), confidence: dao.strictScore, primaryEvidenceType: dao.evidences[0]?.evidenceType ?? null },
+    );
+
+    for (const e of token.evidences) {
+      evBatch.push({ contractAddress: c.address, capabilityKey: e.trait, evidenceType: e.evidenceType, evidenceKey: e.evidenceKey, confidence: e.confidence, snippet: e.snippet ?? null });
+    }
+    for (const e of dao.evidences) {
+      evBatch.push({ contractAddress: c.address, capabilityKey: e.trait, evidenceType: e.evidenceType, evidenceKey: e.evidenceKey, confidence: e.confidence, snippet: e.snippet ?? null });
+    }
+
+    if (capBatch.length >= CAPABILITY_BATCH_SIZE) {
+      await flushCapabilities(capBatch);
+      capBatch = [];
+    }
+    if (evBatch.length >= EVIDENCE_BATCH_SIZE) {
+      await flushEvidence(evBatch);
+      evBatch = [];
+    }
+
+    processed += 1;
+    if (processed % 5000 === 0) {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const rate = (processed / ((Date.now() - startTime) / 1000)).toFixed(0);
+      console.log(`Processed ${processed}/${contracts.length} (${elapsed}s, ${rate}/s)`);
+    }
   }
 
-  console.log("Done.");
+  // Flush remaining
+  await flushCapabilities(capBatch);
+  await flushEvidence(evBatch);
+
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`Done. ${processed} contracts in ${totalTime}s.`);
 }
 
 run()

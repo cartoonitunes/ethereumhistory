@@ -439,6 +439,17 @@ export interface HistorianInvitation {
   notes: string | null;
 }
 
+export const CAPABILITY_CATEGORIES: Record<string, { label: string; keys: string[] }> = {
+  "token-fungible": {
+    label: "Token (ERC-20)",
+    keys: ["token:fungible:concept", "token:fungible:aligned", "token:fungible:strict"],
+  },
+  dao: {
+    label: "DAO / Governance",
+    keys: ["dao:concept", "dao:aligned", "dao:strict"],
+  },
+};
+
 export interface CapabilitySnapshot {
   capabilityKey: string;
   firstSeen: string | null;

@@ -7,8 +7,8 @@ import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
 import { ContractCard } from "@/components/ContractCard";
 import { DocumentationProgress } from "@/components/DocumentationProgress";
-import { Search, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
-import { ERAS } from "@/types";
+import { Search, ArrowLeft, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ERAS, CAPABILITY_CATEGORIES } from "@/types";
 import { getContractTypeLabel } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
 
@@ -43,6 +43,7 @@ function BrowseContent() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
+  const [availableCapabilities, setAvailableCapabilities] = useState<string[]>([]);
 
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const era = searchParams.get("era") || "";
@@ -50,6 +51,7 @@ function BrowseContent() {
   const type = searchParams.get("type") || "";
   const q = searchParams.get("q") || "";
   const undocumented = searchParams.get("undocumented") === "1";
+  const capabilities = searchParams.get("capabilities") || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +59,12 @@ function BrowseContent() {
       .then((res) => res.json())
       .then((json) => {
         if (!cancelled && json?.data?.types) setTypeOptions(json.data.types);
+      })
+      .catch(() => {});
+    fetch("/api/browse/capabilities")
+      .then((res) => res.json())
+      .then((json) => {
+        if (!cancelled && json?.data?.categories) setAvailableCapabilities(json.data.categories);
       })
       .catch(() => {});
     return () => {
@@ -72,6 +80,7 @@ function BrowseContent() {
     if (type) params.set("type", type);
     if (q.trim()) params.set("q", q.trim());
     if (undocumented) params.set("undocumented", "1");
+    if (capabilities) params.set("capabilities", capabilities);
     params.set("page", String(page));
     try {
       const res = await fetch(`/api/browse?${params.toString()}`);
@@ -89,18 +98,26 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, year, type, q, undocumented, page]);
+  }, [era, year, type, q, undocumented, capabilities, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented", value: string) => {
+  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
     if (key !== "page") next.set("page", "1");
     window.history.replaceState(null, "", `?${next.toString()}`);
+  };
+
+  const toggleCapability = (slug: string) => {
+    const current = capabilities ? capabilities.split(",").filter(Boolean) : [];
+    const next = current.includes(slug)
+      ? current.filter((s) => s !== slug)
+      : [...current, slug];
+    setFilter("capabilities", next.join(","));
   };
 
   return (
@@ -209,6 +226,37 @@ function BrowseContent() {
               </button>
             </div>
           </motion.div>
+
+          {/* Capability Pills */}
+          {availableCapabilities.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="flex flex-wrap items-center gap-2 mb-8"
+            >
+              <span className="text-xs text-obsidian-500 uppercase tracking-wider mr-1">Capabilities</span>
+              {availableCapabilities.map((slug) => {
+                const cat = CAPABILITY_CATEGORIES[slug];
+                if (!cat) return null;
+                const active = capabilities.split(",").includes(slug);
+                return (
+                  <button
+                    key={slug}
+                    onClick={() => toggleCapability(slug)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-ether-500/20 border border-ether-500/40 text-ether-300"
+                        : "bg-obsidian-900/80 border border-obsidian-700 text-obsidian-400 hover:text-obsidian-200 hover:border-obsidian-600"
+                    }`}
+                  >
+                    {active && <Check className="w-3.5 h-3.5" />}
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </motion.div>
+          )}
 
           {/* Documentation Progress */}
           <div className="mb-8">
