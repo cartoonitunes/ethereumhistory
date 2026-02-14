@@ -1,17 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 
 export async function GET(
-  _req: Request,
-  { params }: { params: { address: string } }
+  _req: NextRequest,
+  context: { params: Promise<{ address: string }> }
 ) {
   try {
     if (!isDatabaseConfigured()) {
       return NextResponse.json({ data: { beta: true, capabilities: [], evidence: [] }, error: null });
     }
 
-    const address = params.address.toLowerCase();
+    const { address: rawAddress } = await context.params;
+    const address = rawAddress.toLowerCase();
     const db = getDb();
 
     const capabilities = await db.execute(sql`
