@@ -16,6 +16,7 @@ import {
   getUndocumentedContractsCountFromDb,
 } from "@/lib/db-client";
 import { cached, CACHE_TTL } from "@/lib/cache";
+import { CAPABILITY_CATEGORIES } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -47,16 +48,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const offset = (page - 1) * limit;
 
   const year = yearParam ? parseInt(yearParam, 10) : null;
+  const capabilitiesParam = searchParams.get("capabilities")?.trim() || "";
+  const capabilityKeys = capabilitiesParam
+    ? capabilitiesParam.split(",").flatMap((slug) => CAPABILITY_CATEGORIES[slug]?.keys ?? [])
+    : [];
 
   const filterParams = {
     eraId: era || null,
     contractType: type || null,
     codeQuery: q || null,
     year: year && year >= 2015 && year <= 2017 ? year : null,
+    capabilityKeys: capabilityKeys.length > 0 ? capabilityKeys : null,
   };
 
   // Build a cache key from all filter params for short-lived caching
-  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${page}:${limit}`;
+  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${capabilitiesParam}:${page}:${limit}`;
 
   const [contracts, total] = await cached(
     cacheKey,

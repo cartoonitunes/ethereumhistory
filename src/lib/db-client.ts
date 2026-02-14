@@ -1581,6 +1581,7 @@ export async function getDocumentedContractsFromDb(params: {
   contractType?: string | null;
   codeQuery?: string | null;
   year?: number | null;
+  capabilityKeys?: string[] | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1612,6 +1613,11 @@ export async function getDocumentedContractsFromDb(params: {
       )!
     );
   }
+  if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
+    conditions.push(
+      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+    );
+  }
 
   const whereClause = and(...conditions);
   const results = await database
@@ -1633,6 +1639,7 @@ export async function getDocumentedContractsCountFromDb(params: {
   contractType?: string | null;
   codeQuery?: string | null;
   year?: number | null;
+  capabilityKeys?: string[] | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1657,6 +1664,11 @@ export async function getDocumentedContractsCountFromDb(params: {
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
+    );
+  }
+  if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
+    conditions.push(
+      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
     );
   }
   const whereClause = and(...conditions);
@@ -1698,6 +1710,7 @@ export async function getUndocumentedContractsFromDb(params: {
   contractType?: string | null;
   codeQuery?: string | null;
   year?: number | null;
+  capabilityKeys?: string[] | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1731,6 +1744,11 @@ export async function getUndocumentedContractsFromDb(params: {
       )!
     );
   }
+  if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
+    conditions.push(
+      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+    );
+  }
 
   const whereClause = and(...conditions);
   const results = await database
@@ -1752,6 +1770,7 @@ export async function getUndocumentedContractsCountFromDb(params: {
   contractType?: string | null;
   codeQuery?: string | null;
   year?: number | null;
+  capabilityKeys?: string[] | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1778,6 +1797,11 @@ export async function getUndocumentedContractsCountFromDb(params: {
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
+    );
+  }
+  if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
+    conditions.push(
+      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
     );
   }
   const whereClause = and(...conditions);
@@ -2472,4 +2496,15 @@ export async function getCapabilityOverviewFromDb(limit = 100): Promise<
     contractsCount: Number(r.contractsCount ?? 0),
     avgConfidence: Number(r.avgConfidence ?? 0),
   }));
+}
+
+export async function getAvailableCapabilityCategoriesFromDb(): Promise<string[]> {
+  const database = getDb();
+  const rows = await database
+    .selectDistinct({ capabilityKey: schema.contractCapabilities.capabilityKey })
+    .from(schema.contractCapabilities)
+    .where(
+      sql`${schema.contractCapabilities.status} IN ('present', 'probable')`
+    );
+  return rows.map((r) => r.capabilityKey);
 }
