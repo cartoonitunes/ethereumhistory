@@ -438,3 +438,16 @@ export interface HistorianInvitation {
   expiresAt: string | null;
   notes: string | null;
 }
+
+export interface CapabilitySnapshot {
+  capabilityKey: string;
+  firstSeen: string | null;
+  contractsCount: number;
+  avgConfidence: number;
+}
+
+export interface CapabilityOverviewResponse {
+  beta: true;
+  methodology: string;
+  capabilities: CapabilitySnapshot[];
+}

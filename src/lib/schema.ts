@@ -419,3 +419,57 @@ export const editSuggestions = pgTable(
 
 export type EditSuggestion = typeof editSuggestions.$inferSelect;
 export type NewEditSuggestion = typeof editSuggestions.$inferInsert;
+
+// =============================================================================
+// Capability Classification (Beta)
+// =============================================================================
+
+export const contractCapabilities = pgTable(
+  "contract_capabilities",
+  {
+    contractAddress: text("contract_address")
+      .notNull()
+      .references(() => contracts.address, { onDelete: "cascade" }),
+    capabilityKey: text("capability_key").notNull(),
+    status: text("status").notNull().default("probable"), // present | probable | absent
+    confidence: real("confidence").notNull().default(0.5),
+    primaryEvidenceType: text("primary_evidence_type"),
+    detectorVersion: text("detector_version"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.contractAddress, table.capabilityKey] }),
+    capabilityIdx: index("contract_capabilities_key_idx").on(table.capabilityKey),
+    statusIdx: index("contract_capabilities_status_idx").on(table.status),
+    confidenceIdx: index("contract_capabilities_confidence_idx").on(table.confidence),
+  })
+);
+
+export const capabilityEvidence = pgTable(
+  "capability_evidence",
+  {
+    id: serial("id").primaryKey(),
+    contractAddress: text("contract_address")
+      .notNull()
+      .references(() => contracts.address, { onDelete: "cascade" }),
+    capabilityKey: text("capability_key").notNull(),
+    evidenceType: text("evidence_type").notNull(), // source | decompiled | selector | opcode | event | trace
+    evidenceKey: text("evidence_key"),
+    evidenceValue: text("evidence_value"),
+    snippet: text("snippet"),
+    confidence: real("confidence").notNull().default(0.5),
+    detectorVersion: text("detector_version"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    contractIdx: index("capability_evidence_contract_idx").on(table.contractAddress),
+    capabilityIdx: index("capability_evidence_key_idx").on(table.capabilityKey),
+    evidenceTypeIdx: index("capability_evidence_type_idx").on(table.evidenceType),
+  })
+);
+
+export type ContractCapability = typeof contractCapabilities.$inferSelect;
+export type NewContractCapability = typeof contractCapabilities.$inferInsert;
+export type CapabilityEvidence = typeof capabilityEvidence.$inferSelect;
+export type NewCapabilityEvidence = typeof capabilityEvidence.$inferInsert;
