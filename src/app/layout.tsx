@@ -93,7 +93,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        <script src="https://inlay.dev/s.js" data-key="sa_9804ff12bf4bc9e42c4bc6d6756fdb5ea0379f49e836d828" async></script>
+        <link rel="llms-txt" href="https://inlay.dev/api/llms/sa_9804ff12bf4bc9e42c4bc6d6756fdb5ea0379f49e836d828" />
+        <link rel="mcp-manifest" type="application/json" href="https://inlay.dev/api/mcp/sa_9804ff12bf4bc9e42c4bc6d6756fdb5ea0379f49e836d828/manifest" />
+        <script src="https://inlay.dev/api/script/s.js" data-key="sa_9804ff12bf4bc9e42c4bc6d6756fdb5ea0379f49e836d828" async></script>
       </head>
       <body className="min-h-screen bg-obsidian-950 text-obsidian-50 antialiased">
         <script
