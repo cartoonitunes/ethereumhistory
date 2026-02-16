@@ -92,6 +92,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        <script src="https://inlay.dev/s.js" data-key="sa_9804ff12bf4bc9e42c4bc6d6756fdb5ea0379f49e836d828" async></script>
+      </head>
       <body className="min-h-screen bg-obsidian-950 text-obsidian-50 antialiased">
         <script
           type="application/ld+json"
