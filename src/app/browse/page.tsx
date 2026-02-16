@@ -248,6 +248,10 @@ function BrowseContent() {
                 transition={{ delay: 0.1 }}
                 className="flex flex-col gap-3 mb-8"
               >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium text-obsidian-300">Filter by capability</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25">Beta</span>
+                </div>
                 {visibleGroups.map((group) => (
                   <div key={group} className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-obsidian-500 uppercase tracking-wider w-20 shrink-0">{group}</span>
