@@ -65,6 +65,7 @@ import {
   getDecompiledContractCount as dbGetDecompiledCount,
   getFeaturedContracts as dbGetFeatured,
   getSimilarContractsFromDb,
+  getDb,
 } from "./db-client";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
 import { fetchTxCountsByYearFromAlchemy, type TxCountsByYear } from "./tx-stats";
@@ -79,6 +80,7 @@ import {
 } from "./etherscan";
 import { getEnsName } from "./ens";
 import { decompileContract } from "./evm-decompile";
+import { classifyContract } from "./capabilities";
 
 // =============================================================================
 // Data Source Selection
@@ -108,6 +110,44 @@ function allowJsonFallback(): boolean {
   if (!hasLocalJsonData()) return false;
   if (!isDatabaseEnabled()) return true;
   return process.env.ALLOW_JSON_FALLBACK === "1";
+}
+
+async function persistContractCapabilities(contract: Contract): Promise<void> {
+  if (!isDatabaseEnabled()) return;
+  try {
+    const rows = classifyContract({
+      address: contract.address,
+      runtimeBytecode: contract.runtimeBytecode,
+      sourceCode: contract.sourceCode,
+      decompiledCode: contract.decompiledCode,
+      isErc20Like: contract.heuristics?.isErc20Like,
+      contractType: contract.heuristics?.contractType,
+      hasSelfDestruct: contract.heuristics?.hasSelfDestruct,
+    });
+    if (rows.length === 0) return;
+
+    const db = getDb();
+    const { sql } = await import("drizzle-orm");
+    const version = "capability-v2";
+    const values = rows.map(
+      (r) =>
+        sql`(${r.contractAddress}, ${r.capabilityKey}, ${r.status}, ${r.confidence}, ${r.primaryEvidenceType}, ${version}, NOW(), NOW())`
+    );
+    await db.execute(sql`
+      INSERT INTO contract_capabilities (
+        contract_address, capability_key, status, confidence, primary_evidence_type, detector_version, created_at, updated_at
+      ) VALUES ${sql.join(values, sql`, `)}
+      ON CONFLICT (contract_address, capability_key)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        confidence = EXCLUDED.confidence,
+        primary_evidence_type = EXCLUDED.primary_evidence_type,
+        detector_version = EXCLUDED.detector_version,
+        updated_at = NOW()
+    `);
+  } catch (err) {
+    console.warn("[capabilities] Failed to classify contract:", err);
+  }
 }
 
 const FEATURED_ADDRESSES = [
@@ -677,6 +717,13 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     }
   }
 
+  // Classify capabilities for newly ingested contract (fire-and-forget)
+  if (persisted) {
+    persistContractCapabilities(contract).catch((err) =>
+      console.warn("[capabilities] inline classification failed:", err)
+    );
+  }
+
   return { contract, archiveNotice, persisted };
 }
 
@@ -1041,6 +1088,11 @@ export async function getContractPageData(address: string): Promise<ContractPage
             decompilationSuccess: true,
           }).catch((err) =>
             console.warn("[decompile] Failed to persist decompilation:", err)
+          );
+
+          // Re-classify capabilities now that we have decompiled code
+          persistContractCapabilities(contract).catch((err) =>
+            console.warn("[capabilities] re-classification after decompile failed:", err)
           );
         }
       }

@@ -439,15 +439,37 @@ export interface HistorianInvitation {
   notes: string | null;
 }
 
-export const CAPABILITY_CATEGORIES: Record<string, { label: string; keys: string[] }> = {
-  "token-fungible": {
-    label: "Token (ERC-20)",
-    keys: ["token:fungible:concept", "token:fungible:aligned", "token:fungible:strict"],
-  },
-  dao: {
-    label: "DAO / Governance",
-    keys: ["dao:concept", "dao:aligned", "dao:strict"],
-  },
+export const CAPABILITY_CATEGORIES: Record<string, { label: string; group: string; keys: string[] }> = {
+  token:          { label: "Fungible Token",      group: "Type",     keys: ["type:token"] },
+  nft:            { label: "NFT / Collectible",   group: "Type",     keys: ["type:nft"] },
+  dao:            { label: "DAO / Governance",     group: "Type",     keys: ["type:dao"] },
+  multisig:       { label: "Multisig",            group: "Type",     keys: ["type:multisig"] },
+  crowdsale:      { label: "Crowdsale / ICO",     group: "Type",     keys: ["type:crowdsale"] },
+  exchange:       { label: "Exchange / DEX",      group: "Type",     keys: ["type:exchange"] },
+  gambling:       { label: "Gambling / Lottery",  group: "Type",     keys: ["type:gambling"] },
+  game:           { label: "Game",                group: "Type",     keys: ["type:game"] },
+  registry:       { label: "Registry",            group: "Type",     keys: ["type:registry"] },
+  unclassified:   { label: "Unclassified",        group: "Type",     keys: ["type:unclassified"] },
+  erc20:          { label: "ERC-20",              group: "Standard", keys: ["standard:erc20"] },
+  erc721:         { label: "ERC-721-like",        group: "Standard", keys: ["standard:erc721"] },
+  erc165:         { label: "ERC-165",             group: "Standard", keys: ["standard:erc165"] },
+  mintable:       { label: "Mintable",            group: "Token",    keys: ["token:mintable"] },
+  "mint-controlled": { label: "Mint Restricted",  group: "Token",    keys: ["token:mint-controlled"] },
+  "mint-open":    { label: "Open Minting",        group: "Token",    keys: ["token:mint-open"] },
+  burnable:       { label: "Burnable",            group: "Token",    keys: ["token:burnable"] },
+  "supply-capped":   { label: "Finite Supply",    group: "Token",    keys: ["token:supply-capped"] },
+  "supply-uncapped": { label: "Uncapped Supply",  group: "Token",    keys: ["token:supply-uncapped"] },
+  "has-allowance": { label: "Has Allowance",      group: "Token",    keys: ["token:has-allowance"] },
+  "has-metadata":  { label: "Has Metadata",       group: "Token",    keys: ["token:has-metadata"] },
+  deflationary:   { label: "Deflationary",        group: "Token",    keys: ["token:deflationary"] },
+  pausable:       { label: "Pausable",            group: "Feature",  keys: ["feature:pausable"] },
+  ownable:        { label: "Ownable",             group: "Feature",  keys: ["feature:ownable"] },
+  "role-based":   { label: "Role-Based Access",   group: "Feature",  keys: ["feature:role-based"] },
+  upgradeable:    { label: "Upgradeable",         group: "Feature",  keys: ["feature:upgradeable"] },
+  "self-destruct": { label: "Self-Destructible",  group: "Feature",  keys: ["feature:self-destruct"] },
+  payable:        { label: "Accepts ETH",         group: "Feature",  keys: ["feature:payable"] },
+  "time-locked":  { label: "Time-Locked",         group: "Feature",  keys: ["feature:time-locked"] },
+  "reentrancy-guard": { label: "Reentrancy Guard", group: "Feature", keys: ["feature:reentrancy-guard"] },
 };
 
 export interface CapabilitySnapshot {
