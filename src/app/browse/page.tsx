@@ -227,36 +227,53 @@ function BrowseContent() {
             </div>
           </motion.div>
 
-          {/* Capability Pills */}
-          {availableCapabilities.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="flex flex-wrap items-center gap-2 mb-8"
-            >
-              <span className="text-xs text-obsidian-500 uppercase tracking-wider mr-1">Capabilities</span>
-              {availableCapabilities.map((slug) => {
-                const cat = CAPABILITY_CATEGORIES[slug];
-                if (!cat) return null;
-                const active = capabilities.split(",").includes(slug);
-                return (
-                  <button
-                    key={slug}
-                    onClick={() => toggleCapability(slug)}
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-                      active
-                        ? "bg-ether-500/20 border border-ether-500/40 text-ether-300"
-                        : "bg-obsidian-900/80 border border-obsidian-700 text-obsidian-400 hover:text-obsidian-200 hover:border-obsidian-600"
-                    }`}
-                  >
-                    {active && <Check className="w-3.5 h-3.5" />}
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </motion.div>
-          )}
+          {/* Capability Pills — grouped by Type / Standard / Token / Feature */}
+          {availableCapabilities.length > 0 && (() => {
+            const groups: Record<string, string[]> = {};
+            for (const slug of availableCapabilities) {
+              const cat = CAPABILITY_CATEGORIES[slug];
+              if (!cat) continue;
+              const g = cat.group;
+              if (!groups[g]) groups[g] = [];
+              groups[g].push(slug);
+            }
+            const groupOrder = ["Type", "Standard", "Token", "Feature"];
+            const visibleGroups = groupOrder.filter((g) => groups[g]?.length);
+            if (!visibleGroups.length) return null;
+
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="flex flex-col gap-3 mb-8"
+              >
+                {visibleGroups.map((group) => (
+                  <div key={group} className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-obsidian-500 uppercase tracking-wider w-20 shrink-0">{group}</span>
+                    {groups[group].map((slug) => {
+                      const cat = CAPABILITY_CATEGORIES[slug]!;
+                      const active = capabilities.split(",").includes(slug);
+                      return (
+                        <button
+                          key={slug}
+                          onClick={() => toggleCapability(slug)}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            active
+                              ? "bg-ether-500/20 border border-ether-500/40 text-ether-300"
+                              : "bg-obsidian-900/80 border border-obsidian-700 text-obsidian-400 hover:text-obsidian-200 hover:border-obsidian-600"
+                          }`}
+                        >
+                          {active && <Check className="w-3 h-3" />}
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </motion.div>
+            );
+          })()}
 
           {/* Documentation Progress */}
           <div className="mb-8">

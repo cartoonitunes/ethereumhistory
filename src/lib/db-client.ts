@@ -1615,7 +1615,7 @@ export async function getDocumentedContractsFromDb(params: {
   }
   if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
     conditions.push(
-      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+      (() => { const keyList = sql.join(params.capabilityKeys!.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable'))`; })()
     );
   }
 
@@ -1668,7 +1668,7 @@ export async function getDocumentedContractsCountFromDb(params: {
   }
   if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
     conditions.push(
-      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+      (() => { const keyList = sql.join(params.capabilityKeys!.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable'))`; })()
     );
   }
   const whereClause = and(...conditions);
@@ -1746,7 +1746,7 @@ export async function getUndocumentedContractsFromDb(params: {
   }
   if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
     conditions.push(
-      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+      (() => { const keyList = sql.join(params.capabilityKeys!.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable'))`; })()
     );
   }
 
@@ -1801,7 +1801,7 @@ export async function getUndocumentedContractsCountFromDb(params: {
   }
   if (params.capabilityKeys != null && params.capabilityKeys.length > 0) {
     conditions.push(
-      sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key = ANY(${params.capabilityKeys}) AND status IN ('present', 'probable'))`
+      (() => { const keyList = sql.join(params.capabilityKeys!.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT DISTINCT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable'))`; })()
     );
   }
   const whereClause = and(...conditions);
