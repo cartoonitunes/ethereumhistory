@@ -14,6 +14,7 @@ import type {
   DetectedPattern,
   FunctionSignature,
   ContractPageData,
+  ContractMedia,
   EthereumEra,
   SearchResult,
   FeaturedContract,
@@ -65,6 +66,7 @@ import {
   getDecompiledContractCount as dbGetDecompiledCount,
   getFeaturedContracts as dbGetFeatured,
   getSimilarContractsFromDb,
+  getContractMediaFromDb,
   getDb,
 } from "./db-client";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
@@ -1113,13 +1115,21 @@ export async function getContractPageData(address: string): Promise<ContractPage
         })()
       : Promise.resolve(null);
 
-  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear] =
+  const mediaPromise: Promise<ContractMedia[]> = isDatabaseEnabled()
+    ? getContractMediaFromDb(address).catch((err) => {
+        console.warn("[db] Failed to load contract media:", err);
+        return [];
+      })
+    : Promise.resolve([]);
+
+  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear, media] =
     await Promise.all([
       getBytecodeAnalysis(address),
       getSimilarContracts(address),
       getDetectedPatterns(address),
       getFunctionSignatures(address),
       getOrFetchTxCountsByYear(contract.address),
+      mediaPromise,
     ]);
 
   return {
@@ -1131,6 +1141,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
     deployerPerson: await deployerPersonPromise,
     txCountsByYear,
     archiveNotice,
+    media,
   };
 }
 

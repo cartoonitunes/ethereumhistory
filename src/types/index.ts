@@ -299,6 +299,7 @@ export interface ContractPageData {
   deployerPerson?: Person | null;
   txCountsByYear?: { counts: Record<string, number>; truncated: boolean } | null;
   archiveNotice?: string | null;
+  media?: ContractMedia[];
 }
 
 // =============================================================================
@@ -396,6 +397,19 @@ export interface HistoricalLink {
   url: string;
   source: string | null;
   note: string | null;
+  createdAt: string;
+}
+
+export interface ContractMedia {
+  id: number;
+  contractAddress: string;
+  mediaType: string;
+  url: string;
+  caption: string | null;
+  sourceUrl: string | null;
+  sourceLabel: string | null;
+  uploadedBy: number | null;
+  sortOrder: number;
   createdAt: string;
 }
 
