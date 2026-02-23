@@ -50,7 +50,8 @@ import {
   getVerificationStatusLabel,
   getVerificationStatusColor,
 } from "@/lib/utils";
-import type { ContractHistoryData, ContractPageData, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse } from "@/types";
+import type { ContractHistoryData, ContractPageData, ContractMedia, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse } from "@/types";
+import { ContractMediaGallery } from "@/components/ContractMedia";
 
 interface ContractPageClientProps {
   address: string;
@@ -213,6 +214,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     deployerPerson,
     txCountsByYear,
     archiveNotice,
+    media,
   } = data!;
 
   const displayName = contract.tokenName || contract.ensName || contract.etherscanContractName || null;
@@ -427,12 +429,16 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               bytecodeAnalysis={bytecodeAnalysis}
               deployerPerson={deployerPerson ?? null}
               txCountsByYear={txCountsByYear ?? null}
+              media={media ?? []}
             />
           )}
           {activeTab === "history" && (
             <div className="min-w-0 space-y-6">
               <HistoricalDocsSection contract={contract} />
               <EditHistorySection contractAddress={address} />
+              {me?.active && (
+                <MediaUploadSection contractAddress={address} />
+              )}
               <SuggestEditForm contractAddress={address} />
             </div>
           )}
@@ -497,11 +503,13 @@ function OverviewTab({
   bytecodeAnalysis,
   deployerPerson,
   txCountsByYear,
+  media,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
   deployerPerson: ContractPageData["deployerPerson"];
   txCountsByYear: ContractPageData["txCountsByYear"];
+  media: ContractMedia[];
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -759,6 +767,8 @@ function OverviewTab({
             </div>
           </section>
         )}
+        {/* Contract Media */}
+        {media.length > 0 && <ContractMediaGallery items={media} />}
       </div>
 
       {/* Sidebar */}
@@ -989,6 +999,127 @@ function SimilarityTab({
         </div>
       )}
     </div>
+  );
+}
+
+function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
+  const [url, setUrl] = useState("");
+  const [caption, setCaption] = useState("");
+  const [sourceLabel, setSourceLabel] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [mediaType, setMediaType] = useState("screenshot");
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim()) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const res = await fetch(`/api/contract/${contractAddress}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url.trim(),
+          caption: caption.trim() || null,
+          sourceLabel: sourceLabel.trim() || null,
+          sourceUrl: sourceUrl.trim() || null,
+          mediaType,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || "Failed to save media.");
+      } else {
+        setSuccess(true);
+        setUrl("");
+        setCaption("");
+        setSourceLabel("");
+        setSourceUrl("");
+        setMediaType("screenshot");
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+      <h3 className="font-semibold mb-4">Add Media</h3>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block text-xs text-obsidian-500 mb-1">Image URL *</label>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+            required
+            className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-obsidian-500 mb-1">Caption</label>
+          <input
+            type="text"
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            placeholder="Describe the image…"
+            className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">Source Label</label>
+            <input
+              type="text"
+              value={sourceLabel}
+              onChange={(e) => setSourceLabel(e.target.value)}
+              placeholder="e.g. Etherscan"
+              className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">Source URL</label>
+            <input
+              type="url"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-obsidian-500 mb-1">Media Type</label>
+          <select
+            value={mediaType}
+            onChange={(e) => setMediaType(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 focus:outline-none focus:border-ether-500"
+          >
+            <option value="screenshot">Screenshot</option>
+            <option value="photo">Photo</option>
+            <option value="diagram">Diagram</option>
+            <option value="artwork">Artwork</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        {error && <p className="text-sm text-red-400">{error}</p>}
+        {success && <p className="text-sm text-green-400">Media added successfully.</p>}
+        <button
+          type="submit"
+          disabled={saving || !url.trim()}
+          className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm font-medium transition-colors"
+        >
+          {saving ? "Saving…" : "Add Media"}
+        </button>
+      </form>
+    </section>
   );
 }
 

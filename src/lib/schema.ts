@@ -473,3 +473,32 @@ export type ContractCapability = typeof contractCapabilities.$inferSelect;
 export type NewContractCapability = typeof contractCapabilities.$inferInsert;
 export type CapabilityEvidence = typeof capabilityEvidence.$inferSelect;
 export type NewCapabilityEvidence = typeof capabilityEvidence.$inferInsert;
+
+// =============================================================================
+// Contract Media
+// =============================================================================
+
+export const contractMedia = pgTable(
+  "contract_media",
+  {
+    id: serial("id").primaryKey(),
+    contractAddress: text("contract_address")
+      .notNull()
+      .references(() => contracts.address, { onDelete: "cascade" }),
+    mediaType: text("media_type").notNull().default("other"),
+    url: text("url").notNull(),
+    caption: text("caption"),
+    sourceUrl: text("source_url"),
+    sourceLabel: text("source_label"),
+    uploadedBy: integer("uploaded_by").references(() => historians.id),
+    sortOrder: integer("sort_order").default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    addressIdx: index("contract_media_address_idx").on(table.contractAddress),
+    uploadedByIdx: index("contract_media_uploaded_by_idx").on(table.uploadedBy),
+  })
+);
+
+export type ContractMediaRow = typeof contractMedia.$inferSelect;
+export type NewContractMedia = typeof contractMedia.$inferInsert;
