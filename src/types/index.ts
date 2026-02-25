@@ -140,6 +140,9 @@ export interface Contract {
     notes: string | null;
   };
 
+  // Manual editorial overrides
+  manualCategories?: string[] | null;
+
   // External data (from Etherscan, on-chain calls, ENS)
   ensName: string | null;
   deployerEnsName: string | null;

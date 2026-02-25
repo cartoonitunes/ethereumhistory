@@ -17,6 +17,7 @@ import {
   updateContractTokenLogoFromDb,
   upsertHistoricalLinkFromDb,
 } from "@/lib/db-client";
+import { normalizeContractCategories } from "@/lib/contract-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ const UNTRUSTED_ALLOWED_FIELDS = new Set([
   "etherscanContractName",
   "tokenName",
   "contractType",
+  "manualCategories",
   "shortDescription",
   "description",
   "historicalSignificance",
@@ -64,6 +66,10 @@ export async function POST(
   const normalized = address.toLowerCase();
 
   const contractPatch = body?.contract || {};
+  const normalizedCategories =
+    contractPatch.manualCategories !== undefined
+      ? normalizeContractCategories(contractPatch.manualCategories)
+      : undefined;
   const links: LinkInput[] = Array.isArray(body?.links) ? body.links : [];
   const deleteIds: number[] = Array.isArray(body?.deleteIds)
     ? body.deleteIds.filter((n: any) => Number.isFinite(n)).map((n: any) => Number(n))
@@ -104,6 +110,10 @@ export async function POST(
         { key: "etherscanContractName", currentValue: currentContract.etherscanContractName },
         { key: "tokenName", currentValue: currentContract.tokenName },
         { key: "contractType", currentValue: currentContract.heuristics?.contractType ?? null },
+        {
+          key: "manualCategories",
+          currentValue: JSON.stringify(currentContract.manualCategories || []),
+        },
         { key: "shortDescription", currentValue: currentContract.shortDescription },
         { key: "description", currentValue: currentContract.description },
         { key: "historicalSignificance", currentValue: currentContract.historicalSignificance },
@@ -115,9 +125,14 @@ export async function POST(
         if (contractPatch[key] === undefined) continue;
         if (!UNTRUSTED_ALLOWED_FIELDS.has(key)) continue;
 
-        let newValue = String(contractPatch[key] || "").trim() || null;
-        if (key === "contractType" && newValue) {
-          newValue = newValue.toLowerCase();
+        let newValue: string | null;
+        if (key === "manualCategories") {
+          newValue = JSON.stringify(normalizedCategories || []);
+        } else {
+          newValue = String(contractPatch[key] || "").trim() || null;
+          if (key === "contractType" && newValue) {
+            newValue = newValue.toLowerCase();
+          }
         }
 
         // Only queue if the value actually changed
@@ -207,6 +222,7 @@ export async function POST(
               return raw ? raw.toLowerCase() : null;
             })()
           : undefined,
+      manualCategories: normalizedCategories,
       shortDescription:
         contractPatch.shortDescription !== undefined
           ? (String(contractPatch.shortDescription || "").trim() || null)
@@ -247,6 +263,7 @@ export async function POST(
     if (contractPatch.etherscanContractName !== undefined) fieldsChanged.push("etherscanContractName");
     if (contractPatch.tokenName !== undefined) fieldsChanged.push("tokenName");
     if (contractPatch.contractType !== undefined) fieldsChanged.push("contractType");
+    if (contractPatch.manualCategories !== undefined) fieldsChanged.push("manualCategories");
     if (contractPatch.shortDescription !== undefined) fieldsChanged.push("shortDescription");
     if (contractPatch.description !== undefined) fieldsChanged.push("description");
     if (contractPatch.historicalSignificance !== undefined) fieldsChanged.push("historicalSignificance");

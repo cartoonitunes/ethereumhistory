@@ -50,6 +50,7 @@ export const contracts = pgTable(
 
     // Heuristics
     contractType: text("contract_type"),
+    manualCategories: jsonb("manual_categories").$type<string[]>(),
     confidence: real("confidence").default(0.5),
     isProxy: boolean("is_proxy").default(false),
     hasSelfDestruct: boolean("has_selfdestruct").default(false),
