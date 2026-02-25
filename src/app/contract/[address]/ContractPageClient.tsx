@@ -1318,7 +1318,45 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     () => draftLinks.filter((l) => l._deleted && l.id != null).map((l) => l.id as number),
     [draftLinks]
   );
-  const hasLinks = (historyData?.links?.length ?? 0) > 0;
+
+  const persistedLinks = useMemo(
+    () =>
+      (historyData?.links || []).map((l) => ({
+        clientId: String(l.id),
+        id: l.id,
+        contractAddress: l.contractAddress,
+        title: l.title,
+        url: l.url,
+        source: l.source,
+        note: l.note,
+        createdAt: l.createdAt,
+      })),
+    [historyData?.links]
+  );
+
+  const isRelatedContractLink = useCallback((url: string) => {
+    try {
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase();
+      return (
+        (host === "ethereumhistory.com" || host.endsWith(".ethereumhistory.com")) &&
+        u.pathname.toLowerCase().startsWith("/contract/")
+      );
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const relatedContractLinks = useMemo(
+    () => persistedLinks.filter((l) => isRelatedContractLink(l.url)),
+    [persistedLinks, isRelatedContractLink]
+  );
+  const historicalReferenceLinks = useMemo(
+    () => persistedLinks.filter((l) => !isRelatedContractLink(l.url)),
+    [persistedLinks, isRelatedContractLink]
+  );
+
+  const hasLinks = persistedLinks.length > 0;
 
   async function createNewPerson() {
     if (!newPersonName.trim() || !contract.deployerAddress) {
@@ -1769,90 +1807,88 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
 
         {historyError && <div className="text-sm text-red-400">{historyError}</div>}
 
-        {!(editMode && isTrusted) && (historyData?.links?.length || 0) === 0 ? (
-          <div className="text-sm text-obsidian-500">No links yet.</div>
-        ) : (
+        {editMode && isTrusted ? (
           <div className="space-y-3">
-            {((editMode && isTrusted) ? visibleLinks : (historyData?.links || []).map((l) => ({
-              clientId: String(l.id),
-              id: l.id,
-              contractAddress: l.contractAddress,
-              title: l.title,
-              url: l.url,
-              source: l.source,
-              note: l.note,
-              createdAt: l.createdAt,
-            }))).map((l) => (
+            {visibleLinks.map((l) => (
               <div
                 key={l.clientId}
                 className="rounded-xl border border-obsidian-800 bg-obsidian-900/20 p-4"
               >
-                {(editMode && isTrusted) ? (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <input
-                        value={l.title || ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setDraftLinks((prev) =>
-                            prev.map((x) => (x.clientId === l.clientId ? { ...x, title: v || null } : x))
-                          );
-                        }}
-                        className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
-                        placeholder="Title (optional)"
-                      />
-                      <input
-                        value={l.source || ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setDraftLinks((prev) =>
-                            prev.map((x) => (x.clientId === l.clientId ? { ...x, source: v || null } : x))
-                          );
-                        }}
-                        className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
-                        placeholder="Source (optional)"
-                      />
-                    </div>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
-                      value={l.url}
+                      value={l.title || ""}
                       onChange={(e) => {
                         const v = e.target.value;
                         setDraftLinks((prev) =>
-                          prev.map((x) => (x.clientId === l.clientId ? { ...x, url: v } : x))
+                          prev.map((x) => (x.clientId === l.clientId ? { ...x, title: v || null } : x))
                         );
                       }}
                       className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
-                      placeholder="URL"
+                      placeholder="Title (optional)"
                     />
-                    <textarea
-                      value={l.note || ""}
+                    <input
+                      value={l.source || ""}
                       onChange={(e) => {
                         const v = e.target.value;
                         setDraftLinks((prev) =>
-                          prev.map((x) => (x.clientId === l.clientId ? { ...x, note: v || null } : x))
+                          prev.map((x) => (x.clientId === l.clientId ? { ...x, source: v || null } : x))
                         );
                       }}
-                      className="w-full min-h-[70px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
-                      placeholder="Note (optional)"
+                      className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                      placeholder="Source (optional)"
                     />
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraftLinks((prev) =>
-                            prev.map((x) => (x.clientId === l.clientId ? { ...x, _deleted: true } : x))
-                          );
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/5 text-sm text-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Remove
-                      </button>
-                    </div>
                   </div>
-                ) : (
-                  <div className="flex items-start gap-4">
-                    <div className="min-w-0 flex-1">
+                  <input
+                    value={l.url}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDraftLinks((prev) =>
+                        prev.map((x) => (x.clientId === l.clientId ? { ...x, url: v } : x))
+                      );
+                    }}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                    placeholder="URL"
+                  />
+                  <textarea
+                    value={l.note || ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDraftLinks((prev) =>
+                        prev.map((x) => (x.clientId === l.clientId ? { ...x, note: v || null } : x))
+                      );
+                    }}
+                    className="w-full min-h-[70px] rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none"
+                    placeholder="Note (optional)"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraftLinks((prev) =>
+                          prev.map((x) => (x.clientId === l.clientId ? { ...x, _deleted: true } : x))
+                        );
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/5 text-sm text-red-300"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !hasLinks ? (
+          <div className="text-sm text-obsidian-500">No links yet.</div>
+        ) : (
+          <div className="space-y-6">
+            {historicalReferenceLinks.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-obsidian-300 mb-3">Historical Sources</h4>
+                <div className="space-y-3">
+                  {historicalReferenceLinks.map((l) => (
+                    <div key={l.clientId} className="rounded-xl border border-obsidian-800 bg-obsidian-900/20 p-4">
                       <a
                         href={l.url}
                         target="_blank"
@@ -1870,10 +1906,38 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {relatedContractLinks.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-obsidian-300 mb-3">Related Contracts</h4>
+                <div className="space-y-3">
+                  {relatedContractLinks.map((l) => (
+                    <div key={l.clientId} className="rounded-xl border border-obsidian-800 bg-obsidian-900/20 p-4">
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-ether-400 hover:text-ether-300 break-words"
+                      >
+                        {l.title || l.url}
+                        <ExternalLink className="w-3 h-3 inline ml-1" />
+                      </a>
+                      {(l.source || l.note) && (
+                        <div className="mt-1 text-xs text-obsidian-500">
+                          {l.source ? <span>{l.source}</span> : null}
+                          {l.source && l.note ? <span> • </span> : null}
+                          {l.note ? <span className="text-obsidian-400">{l.note}</span> : null}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
         </section>
