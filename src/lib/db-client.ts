@@ -101,6 +101,7 @@ function dbRowToContract(row: schema.Contract): AppContract {
       isErc20Like: row.isErc20Like || false,
       notes: null,
     },
+    manualCategories: Array.isArray(row.manualCategories) ? (row.manualCategories as string[]) : null,
     ensName: row.ensName ?? null,
     deployerEnsName: row.deployerEnsName ?? null,
     etherscanVerified: !!row.sourceCode,
@@ -932,6 +933,7 @@ export async function updateContractHistoryFieldsFromDb(
     etherscanContractName?: string | null;
     tokenName?: string | null;
     contractType?: string | null;
+    manualCategories?: string[] | null;
     shortDescription?: string | null;
     description?: string | null;
     historicalSignificance?: string | null;
@@ -954,6 +956,10 @@ export async function updateContractHistoryFieldsFromDb(
   }
   if (patch.contractType !== undefined) {
     updates.contractType = patch.contractType;
+    hasFieldUpdates = true;
+  }
+  if (patch.manualCategories !== undefined) {
+    updates.manualCategories = patch.manualCategories;
     hasFieldUpdates = true;
   }
   if (patch.shortDescription !== undefined) {
@@ -2247,6 +2253,7 @@ export async function applyApprovedSuggestionFromDb(params: {
     etherscanContractName: "etherscanContractName",
     tokenName: "tokenName",
     contractType: "contractType",
+    manualCategories: "manualCategories",
   };
 
   const contractField = fieldMapping[suggestion.fieldName];
@@ -2255,8 +2262,16 @@ export async function applyApprovedSuggestionFromDb(params: {
   }
 
   // Apply the change to the contract
-  const patch: Record<string, string | null> = {};
-  patch[contractField] = suggestion.suggestedValue;
+  const patch: Record<string, unknown> = {};
+  if (contractField === "manualCategories") {
+    try {
+      patch[contractField] = JSON.parse(suggestion.suggestedValue || "[]");
+    } catch {
+      patch[contractField] = [];
+    }
+  } else {
+    patch[contractField] = suggestion.suggestedValue;
+  }
   await updateContractHistoryFieldsFromDb(suggestion.contractAddress, patch as any);
 
   // Mark suggestion as approved

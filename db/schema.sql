@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS contracts (
 
   -- Heuristics
   contract_type TEXT,
+  manual_categories JSONB,
   confidence REAL DEFAULT 0.5,
   is_proxy BOOLEAN DEFAULT FALSE,
   has_selfdestruct BOOLEAN DEFAULT FALSE,

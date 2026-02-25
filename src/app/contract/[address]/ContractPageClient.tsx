@@ -35,6 +35,7 @@ import { SimilarityTable, SimilarityDetail } from "@/components/SimilarityTable"
 import { BytecodeViewer } from "@/components/BytecodeViewer";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { CONTRACT_CATEGORY_OPTIONS } from "@/lib/contract-categories";
 import {
   formatAddress,
   formatDate,
@@ -730,6 +731,26 @@ function OverviewTab({
           </section>
         )}
 
+        {/* Manual category overrides */}
+        {(contract.manualCategories || []).length > 0 && (
+          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+            <h3 className="text-sm font-medium text-obsidian-300 mb-2">Historian Categories</h3>
+            <div className="flex flex-wrap gap-2">
+              {(contract.manualCategories || []).map((key: string) => {
+                const option = CONTRACT_CATEGORY_OPTIONS.find((o) => o.key === key);
+                return (
+                  <span
+                    key={key}
+                    className="inline-flex items-center rounded-full border border-ether-500/30 bg-ether-500/10 px-2.5 py-1 text-xs text-ether-300"
+                  >
+                    {option?.label || key}
+                  </span>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Heuristics */}
         {contract.heuristics.contractType && (
           <section className="p-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
@@ -1152,6 +1173,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   );
   const [savedTokenName, setSavedTokenName] = useState(contract.tokenName || "");
   const [savedContractType, setSavedContractType] = useState(contract.heuristics.contractType || "");
+  const [savedManualCategories, setSavedManualCategories] = useState<string[]>(contract.manualCategories || []);
   const [savedShortDescription, setSavedShortDescription] = useState(contract.shortDescription || "");
   const [savedDescription, setSavedDescription] = useState(contract.description || "");
   const [savedSignificance, setSavedSignificance] = useState(contract.historicalSignificance || "");
@@ -1162,6 +1184,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   const [draftEtherscanContractName, setDraftEtherscanContractName] = useState(savedEtherscanContractName);
   const [draftTokenName, setDraftTokenName] = useState(savedTokenName);
   const [draftContractType, setDraftContractType] = useState(savedContractType);
+  const [draftManualCategories, setDraftManualCategories] = useState<string[]>(savedManualCategories);
   const [draftShortDescription, setDraftShortDescription] = useState(savedShortDescription);
   const [draftDescription, setDraftDescription] = useState(savedDescription);
   const [draftSignificance, setDraftSignificance] = useState(savedSignificance);
@@ -1182,6 +1205,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setSavedEtherscanContractName(contract.etherscanContractName || "");
     setSavedTokenName(contract.tokenName || "");
     setSavedContractType(contract.heuristics.contractType || "");
+    setSavedManualCategories(contract.manualCategories || []);
     setSavedShortDescription(contract.shortDescription || "");
     setSavedDescription(contract.description || "");
     setSavedSignificance(contract.historicalSignificance || "");
@@ -1191,6 +1215,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setDraftEtherscanContractName(contract.etherscanContractName || "");
     setDraftTokenName(contract.tokenName || "");
     setDraftContractType(contract.heuristics.contractType || "");
+    setDraftManualCategories(contract.manualCategories || []);
     setDraftShortDescription(contract.shortDescription || "");
     setDraftDescription(contract.description || "");
     setDraftSignificance(contract.historicalSignificance || "");
@@ -1351,6 +1376,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
             etherscanContractName: draftEtherscanContractName,
             tokenName: draftTokenName,
             contractType: draftContractType,
+            manualCategories: draftManualCategories,
             shortDescription: draftShortDescription,
             description: draftDescription,
             historicalSignificance: draftSignificance,
@@ -1389,6 +1415,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
       setSavedEtherscanContractName(draftEtherscanContractName.trim());
       setSavedTokenName(draftTokenName.trim());
       setSavedContractType(draftContractType.trim());
+      setSavedManualCategories(draftManualCategories);
       setSavedShortDescription(draftShortDescription.trim());
       setSavedDescription(draftDescription.trim());
       setSavedSignificance(draftSignificance.trim());
@@ -1547,6 +1574,35 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
                   className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
                   placeholder="e.g. erc20, exchange, dao, proxy…"
                 />
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-2">Category overrides (multi-select)</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CONTRACT_CATEGORY_OPTIONS.map((option) => {
+                  const checked = draftManualCategories.includes(option.key);
+                  return (
+                    <label
+                      key={option.key}
+                      className="flex items-center gap-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 px-2 py-1.5 text-xs text-obsidian-300"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setDraftManualCategories((prev) => {
+                            if (e.target.checked) return [...prev, option.key];
+                            return prev.filter((k) => k !== option.key);
+                          });
+                        }}
+                      />
+                      <span>{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="text-xs text-obsidian-500 mt-1">
+                Use these to override or augment auto-detected categories for this contract.
               </div>
             </div>
             {isTrusted && (
