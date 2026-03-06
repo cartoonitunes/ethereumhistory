@@ -135,6 +135,12 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
       "The DAO hack led directly to the Ethereum / Ethereum Classic split. This was the defining moment that tested Ethereum's governance and community values. The decision to fork and recover funds remains controversial.",
     historicalContext:
       "In early 2016, the Ethereum community was optimistic about the potential of smart contracts to create new forms of organization. The DAO represented the culmination of this vision - a venture fund governed entirely by code.",
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "verified",
   },
   "0xd1ceeeefa68a6af0a5f6046132d986066c7f9426": {
@@ -183,6 +189,12 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
       "Demonstrates early experimentation with token concepts before any standards existed. The patterns used here influenced what became ERC-20.",
     historicalContext:
       "In August 2015, Ethereum was barely a month old. Developers were still figuring out what was possible with smart contracts.",
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "decompiled",
   },
   "0xc0ee9db1a9e07ca63e4ff0d5fb6f86bf68d47b89": {
@@ -231,6 +243,12 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
       "Augur was one of the first projects to demonstrate that complex decentralized applications were possible on Ethereum.",
     historicalContext:
       "The Homestead release marked Ethereum's transition from experimental to production-ready. Augur was ready to capitalize on this stability.",
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "verified",
   },
   "0x48c80f1f4d53d5951e5d5438b54cba84f29f32a5": {
@@ -279,6 +297,12 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
       "First successful attempt to bridge physical assets (gold) with blockchain tokens.",
     historicalContext:
       "Asset tokenization was a major use case being explored in early 2016. Digix showed it was possible to represent real-world assets on Ethereum.",
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "verified",
   },
   "0xafc3cebb24f2b7a7e84052c90d0f6cd8cadd7591": {
@@ -343,6 +367,12 @@ def kill() payable:
       "Historical significance as one of the earliest contracts. Demonstrates the primitive state of smart contract development.",
     historicalContext:
       "July 30, 2015 - the Frontier release. Ethereum was live, and developers immediately began experimenting.",
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "bytecode_only",
   },
 };

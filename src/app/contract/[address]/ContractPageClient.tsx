@@ -53,6 +53,7 @@ import {
 } from "@/lib/utils";
 import type { ContractHistoryData, ContractPageData, ContractMedia, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse } from "@/types";
 import { ContractMediaGallery } from "@/components/ContractMedia";
+import { VerificationProofCard } from "@/components/VerificationProofCard";
 
 interface ContractPageClientProps {
   address: string;
@@ -730,6 +731,9 @@ function OverviewTab({
             </div>
           </section>
         )}
+
+        {/* Verification Proof Card */}
+        <VerificationProofCard contract={contract} />
 
         {/* Manual category overrides */}
         {(contract.manualCategories || []).length > 0 && (

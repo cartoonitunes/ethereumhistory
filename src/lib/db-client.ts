@@ -119,6 +119,12 @@ function dbRowToContract(row: schema.Contract): AppContract {
     historicalSummary: row.historicalSummary,
     historicalSignificance: row.historicalSignificance,
     historicalContext: row.historicalContext,
+    compilerLanguage: row.compilerLanguage ?? null,
+    compilerCommit: row.compilerCommit ?? null,
+    compilerRepo: row.compilerRepo ?? null,
+    verificationMethod: row.verificationMethod ?? null,
+    verificationProofUrl: row.verificationProofUrl ?? null,
+    verificationNotes: row.verificationNotes ?? null,
     verificationStatus: row.sourceCode
       ? "verified"
       : row.decompilationSuccess
@@ -2610,4 +2616,19 @@ export async function deleteContractMediaFromDb(params: {
     .returning({ id: schema.contractMedia.id });
 
   return result.length > 0;
+}
+
+// =============================================================================
+// Verified Contracts
+// =============================================================================
+
+export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
+  const database = getDb();
+  const results = await database
+    .select()
+    .from(schema.contracts)
+    .where(isNotNull(schema.contracts.verificationMethod))
+    .orderBy(asc(schema.contracts.deploymentTimestamp));
+
+  return results.map(dbRowToContract);
 }

@@ -83,6 +83,12 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
               Browse
             </Link>
             <Link
+              href="/verified"
+              className="text-sm text-obsidian-400 hover:text-obsidian-100 transition-colors"
+            >
+              Verified
+            </Link>
+            <Link
               href="/#for-agents"
               className="text-sm text-obsidian-400 hover:text-obsidian-100 transition-colors"
             >
@@ -117,6 +123,12 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
               className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors text-sm font-medium"
             >
               Browse
+            </Link>
+            <Link
+              href="/verified"
+              className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors text-sm font-medium"
+            >
+              Verified
             </Link>
             <Link
               href="/#for-agents"
