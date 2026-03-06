@@ -16,6 +16,7 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 const METHOD_LABELS: Record<string, string> = {
   exact_bytecode_match: "Exact bytecode match",
+  author_published_source: "Author-published source",
   etherscan_verified: "Etherscan verified",
   partial_match: "Partial match",
 };
@@ -24,6 +25,8 @@ function getMethodStyle(method: string) {
   switch (method) {
     case "exact_bytecode_match":
       return "bg-green-500/15 text-green-400 border-green-500/30";
+    case "author_published_source":
+      return "bg-blue-500/15 text-blue-400 border-blue-500/30";
     case "etherscan_verified":
       return "bg-blue-500/15 text-blue-400 border-blue-500/30";
     case "partial_match":
