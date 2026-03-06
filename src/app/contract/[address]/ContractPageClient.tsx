@@ -853,17 +853,45 @@ function OverviewTab({
               <h3 className="font-semibold text-green-400">Verified Source Available</h3>
             </div>
             <p className="text-xs text-obsidian-400 mb-3">
-              This contract has verified source code on Etherscan.
+              {contract.verificationMethod
+                ? contract.verificationMethod === "exact_bytecode_match"
+                  ? "Source verified through compiler archaeology and exact bytecode matching."
+                  : contract.verificationMethod === "author_published_source"
+                  ? "Source code published by the original contract author."
+                  : "This contract has verified source code."
+                : "This contract has verified source code on Etherscan."}
             </p>
-            <a
-              href={`https://etherscan.io/address/${contract.address}#code`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
-            >
-              View Source Code
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            {contract.verificationProofUrl ? (
+              <a
+                href={contract.verificationProofUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
+              >
+                View Verification Proof
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            ) : (
+              <a
+                href={`https://etherscan.io/address/${contract.address}#code`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
+              >
+                View Source Code
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            {contract.sourceCode && (
+              <details className="mt-4">
+                <summary className="text-xs text-obsidian-400 cursor-pointer hover:text-obsidian-300">
+                  Show source code ({contract.compilerLanguage ? contract.compilerLanguage.charAt(0).toUpperCase() + contract.compilerLanguage.slice(1) : "Solidity"})
+                </summary>
+                <pre className="mt-2 p-4 rounded-lg bg-obsidian-950 border border-obsidian-800 text-xs text-obsidian-300 overflow-x-auto max-h-96 whitespace-pre">
+                  {contract.sourceCode}
+                </pre>
+              </details>
+            )}
           </section>
         )}
 
