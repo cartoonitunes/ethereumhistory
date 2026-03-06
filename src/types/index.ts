@@ -168,6 +168,14 @@ export interface Contract {
   historicalSignificance: string | null;
   historicalContext: string | null;
 
+  // Verification proof data (compiler archaeology)
+  compilerLanguage: string | null;
+  compilerCommit: string | null;
+  compilerRepo: string | null;
+  verificationMethod: string | null;
+  verificationProofUrl: string | null;
+  verificationNotes: string | null;
+
   // Verification status
   verificationStatus: VerificationStatus;
 }

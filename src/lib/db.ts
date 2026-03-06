@@ -592,6 +592,12 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     historicalSummary: null,
     historicalSignificance: null,
     historicalContext: null,
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: "bytecode_only",
   };
 

@@ -116,6 +116,12 @@ function transformContract(raw: RawContract): Contract {
     historicalSummary: null,
     historicalSignificance: null,
     historicalContext: null,
+    compilerLanguage: null,
+    compilerCommit: null,
+    compilerRepo: null,
+    verificationMethod: null,
+    verificationProofUrl: null,
+    verificationNotes: null,
     verificationStatus: raw.decompilation_success ? "decompiled" : "bytecode_only",
   };
 }
