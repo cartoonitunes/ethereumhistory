@@ -86,7 +86,7 @@ export function VerificationProofCard({ contract }: VerificationProofCardProps) 
           <Search className={`w-5 h-5 ${accent.icon}`} />
         )}
         <h3 className="text-sm font-semibold text-obsidian-100">
-          {isExact ? "Source Verified" : "Partially Verified"}
+          Source Verified
         </h3>
       </div>
 

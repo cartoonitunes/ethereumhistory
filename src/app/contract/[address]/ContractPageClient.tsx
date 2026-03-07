@@ -331,7 +331,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                   contract.verificationStatus
                 )}`}
               >
-                {getVerificationStatusLabel(contract.verificationStatus)}
+                {getVerificationStatusLabel(contract.verificationStatus, contract.verificationMethod)}
               </span>
             </div>
           </div>
