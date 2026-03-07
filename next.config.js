@@ -16,6 +16,15 @@ const nextConfig = {
     // Avoid incorrect root inference when multiple lockfiles exist
     root: __dirname,
   },
+  async redirects() {
+    return [
+      {
+        source: "/verified",
+        destination: "/proofs",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
