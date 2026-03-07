@@ -20,13 +20,13 @@ UPDATE contracts SET
   verification_notes = 'One of the first dApps on Ethereum, deployed 9 days after Frontier launch. Users bid ETH to rank sci-fi movies. Compiled with solc v0.1.4, optimizer enabled. 219 bytes runtime.'
 WHERE address = '0xd94badbec21695b7a36abcb979efad0108319d18';
 
--- Unicorn token / Meat Calculator (avsa's published source + compiler settings)
+-- MeatConversionCalculator (avsa's published source + compiler settings)
 UPDATE contracts SET
   compiler_language = 'solidity',
   verification_method = 'author_published_source',
   verification_proof_url = 'https://gist.github.com/alexvandesande/3abc9f741471e08a6356#file-meat-calculator',
-  verification_notes = 'Source code and compiler settings published by Alex Van de Sande (avsa), the contract author. Created as an April Fool''s 2016 experiment in token mechanics.'
-WHERE address = '0x89205a3a3b2a69de6dbf7f01ed13b2108b2c43e7';
+  verification_notes = 'Source code and compiler settings published by Alex Van de Sande (avsa). Converts Unicorn tokens into Unicorn Meat through a one-way grinder mechanism.'
+WHERE address = '0x4ab274fc3a81b300a0016b3805d9b94c81fa54d2';
 
 -- Unicorn Meat Grinder Association (avsa's published source + compiler settings)
 UPDATE contracts SET
