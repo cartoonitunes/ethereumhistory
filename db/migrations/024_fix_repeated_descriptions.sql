@@ -305,3 +305,12 @@ WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
 -- Populate source_code for contracts with proofs but no source
 UPDATE contracts SET source_code = E'contract Test {\n    function go() returns (string) {\n        return "eth";\n    }\n}'
 WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
+
+-- Greeter (Hello World!) verification proof
+UPDATE contracts SET
+  compiler_language = 'solidity',
+  verification_method = 'exact_bytecode_match',
+  verification_proof_url = 'https://github.com/cartoonitunes/greeter-verification',
+  verification_notes = 'The official Ethereum Greeter tutorial contract (mortal + greeter). Compiled with soljson v0.1.1+commit.6ff4cd6, optimizer off. 692 bytes + 96 bytes constructor arg = 788 bytes. Self-destructed.',
+  source_code = E'contract mortal {\n    address owner;\n    function mortal() { owner = msg.sender; }\n    function kill() { if (msg.sender == owner) suicide(owner); }\n}\n\ncontract greeter is mortal {\n    string greeting;\n    function greeter(string _greeting) public {\n        greeting = _greeting;\n    }\n    function greet() constant returns (string) {\n        return greeting;\n    }\n}'
+WHERE address = '0xfea8c4afb88575cd89a2d7149ab366e7328b08eb';
