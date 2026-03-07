@@ -301,3 +301,7 @@ WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
 UPDATE contracts SET
   verification_proof_url = 'https://github.com/cartoonitunes/first-executable-contract-verification'
 WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
+
+-- Populate source_code for contracts with proofs but no source
+UPDATE contracts SET source_code = E'contract Test {\n    function go() returns (string) {\n        return "eth";\n    }\n}'
+WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
