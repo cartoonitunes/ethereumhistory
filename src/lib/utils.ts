@@ -240,9 +240,16 @@ export function getContractTypeLabel(type: string | null): string {
 /**
  * Get verification status label
  */
-export function getVerificationStatusLabel(status: string): string {
+export function getVerificationStatusLabel(
+  status: string,
+  verificationMethod?: string | null
+): string {
   switch (status) {
     case "verified":
+      if (verificationMethod === "exact_bytecode_match")
+        return "Exact Bytecode Match";
+      if (verificationMethod === "author_published_source")
+        return "Author-Published Source";
       return "Source Verified";
     case "decompiled":
       return "Decompiled";
