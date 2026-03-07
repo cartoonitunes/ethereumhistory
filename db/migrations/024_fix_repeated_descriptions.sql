@@ -287,3 +287,12 @@ The contract at `0x5296e8579adf7d11a7663996cd95d9dc14f4290d` represents an early
 CryptoKitties was originally developed at Axiom Zen and later operated by Dapper Labs.$desc$ WHERE address = '0x06012c8cf97bead5deae237070f9587f8e7a266d';
 
 COMMIT;
+
+-- Verification proof: earliest executable contract (0x6516...)
+-- Compiled with soljson v0.1.1+commit.6ff4cd6 (earliest available Solidity release)
+UPDATE contracts SET
+  compiler_language = 'solidity',
+  verification_method = 'exact_bytecode_match',
+  verification_notes = 'Compiled from a single-function contract: contract Test { function go() returns (string) { return "eth"; } }. Matched using soljson v0.1.1+commit.6ff4cd6, the earliest available Solidity compiler release. Optimizer off. Byte-for-byte match of all 285 bytes.',
+  short_description = 'The earliest known Ethereum contract with executable runtime code. A single function go() that returns the string "eth", compiled with the first publicly available Solidity compiler (v0.1.1).'
+WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
