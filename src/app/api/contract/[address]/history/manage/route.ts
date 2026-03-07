@@ -256,24 +256,46 @@ export async function POST(
       await updateContractEtherscanEnrichmentFromDb(normalized, {
         deployerAddress: selectedPersonAddress,
       });
-      fieldsChanged.push("deployerAddress");
+      if (selectedPersonAddress !== (currentDeployerAddress || null)) {
+        fieldsChanged.push("deployerAddress");
+      }
     }
 
-    // Track field changes
-    if (contractPatch.etherscanContractName !== undefined) fieldsChanged.push("etherscanContractName");
-    if (contractPatch.tokenName !== undefined) fieldsChanged.push("tokenName");
-    if (contractPatch.contractType !== undefined) fieldsChanged.push("contractType");
-    if (contractPatch.manualCategories !== undefined) fieldsChanged.push("manualCategories");
-    if (contractPatch.shortDescription !== undefined) fieldsChanged.push("shortDescription");
-    if (contractPatch.description !== undefined) fieldsChanged.push("description");
-    if (contractPatch.historicalSignificance !== undefined) fieldsChanged.push("historicalSignificance");
-    if (contractPatch.historicalContext !== undefined) fieldsChanged.push("historicalContext");
+    // Track field changes — only log fields whose value actually changed
+    const fieldDiffChecks: Array<{ key: string; currentValue: string | null }> = [
+      { key: "etherscanContractName", currentValue: currentContract?.etherscanContractName ?? null },
+      { key: "tokenName", currentValue: currentContract?.tokenName ?? null },
+      { key: "contractType", currentValue: currentContract?.heuristics?.contractType ?? null },
+      { key: "manualCategories", currentValue: JSON.stringify(currentContract?.manualCategories || []) },
+      { key: "shortDescription", currentValue: currentContract?.shortDescription ?? null },
+      { key: "description", currentValue: currentContract?.description ?? null },
+      { key: "historicalSignificance", currentValue: currentContract?.historicalSignificance ?? null },
+      { key: "historicalContext", currentValue: currentContract?.historicalContext ?? null },
+    ];
+
+    for (const { key, currentValue } of fieldDiffChecks) {
+      if (contractPatch[key] === undefined) continue;
+      let newValue: string | null;
+      if (key === "manualCategories") {
+        newValue = JSON.stringify(normalizedCategories || []);
+      } else if (key === "contractType") {
+        const raw = String(contractPatch[key] || "").trim();
+        newValue = raw ? raw.toLowerCase() : null;
+      } else {
+        newValue = String(contractPatch[key] || "").trim() || null;
+      }
+      if (newValue !== (currentValue || null)) {
+        fieldsChanged.push(key);
+      }
+    }
 
     if (contractPatch.tokenLogo !== undefined) {
       const next =
         String(contractPatch.tokenLogo || "").trim() || null;
       await updateContractTokenLogoFromDb(normalized, next);
-      fieldsChanged.push("tokenLogo");
+      if (next !== (currentContract?.tokenLogo || null)) {
+        fieldsChanged.push("tokenLogo");
+      }
     }
 
     // Track link additions/updates as edits
