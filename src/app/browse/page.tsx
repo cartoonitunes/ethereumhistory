@@ -52,6 +52,8 @@ function BrowseContent() {
   const q = searchParams.get("q") || "";
   const undocumented = searchParams.get("undocumented") === "1";
   const capabilities = searchParams.get("capabilities") || "";
+  const verification = searchParams.get("verification") || "";
+  const sort = searchParams.get("sort") || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +83,8 @@ function BrowseContent() {
     if (q.trim()) params.set("q", q.trim());
     if (undocumented) params.set("undocumented", "1");
     if (capabilities) params.set("capabilities", capabilities);
+    if (verification) params.set("verification", verification);
+    if (sort) params.set("sort", sort);
     params.set("page", String(page));
     try {
       const res = await fetch(`/api/browse?${params.toString()}`);
@@ -98,13 +102,13 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, year, type, q, undocumented, capabilities, page]);
+  }, [era, year, type, q, undocumented, capabilities, verification, sort, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities", value: string) => {
+  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "sort", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
@@ -197,6 +201,30 @@ function BrowseContent() {
                       {getContractTypeLabel(t)}
                     </option>
                   ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="text-obsidian-400">Verification</span>
+                <select
+                  value={verification}
+                  onChange={(e) => setFilter("verification", e.target.value)}
+                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
+                >
+                  <option value="">All</option>
+                  <option value="unverified">Unverified</option>
+                  <option value="etherscan">Etherscan only</option>
+                  <option value="proof">Has proof</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm">
+                <span className="text-obsidian-400">Sort</span>
+                <select
+                  value={sort}
+                  onChange={(e) => setFilter("sort", e.target.value)}
+                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
+                >
+                  <option value="">Oldest first</option>
+                  <option value="newest">Newest first</option>
                 </select>
               </label>
               <label className="flex flex-col gap-1.5 text-sm flex-1 min-w-0">
