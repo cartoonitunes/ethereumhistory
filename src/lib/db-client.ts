@@ -2751,7 +2751,7 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const results = await database
     .select()
     .from(schema.contracts)
-    .where(isNotNull(schema.contracts.verificationMethod))
+    .where(eq(schema.contracts.verificationMethod, "exact_bytecode_match"))
     .orderBy(asc(schema.contracts.deploymentTimestamp));
 
   return results.map(dbRowToContract);
