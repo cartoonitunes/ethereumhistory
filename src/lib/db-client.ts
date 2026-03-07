@@ -1653,6 +1653,25 @@ export async function getDocumentedContractsFromDb(params: {
   }
 
   const whereClause = and(...conditions);
+
+  if (params.sort === "most_active") {
+    // Sort by total transaction count from contract_metadata
+    const txCountSubquery = sql`COALESCE((
+      SELECT SUM(v::bigint) FROM contract_metadata cm,
+        jsonb_each_text(cm.json_value->'counts') AS t(k,v)
+      WHERE cm.contract_address = ${schema.contracts.address}
+        AND cm.key = 'tx_counts_by_year_external_to_v1'
+    ), 0)`;
+    const results = await database
+      .select()
+      .from(schema.contracts)
+      .where(whereClause)
+      .orderBy(sql`${txCountSubquery} DESC`)
+      .limit(limit)
+      .offset(offset);
+    return results.map(dbRowToContract);
+  }
+
   const orderBy = params.sort === "newest"
     ? desc(schema.contracts.deploymentTimestamp)
     : asc(schema.contracts.deploymentTimestamp);
@@ -1828,6 +1847,24 @@ export async function getUndocumentedContractsFromDb(params: {
   }
 
   const whereClause = and(...conditions);
+
+  if (params.sort === "most_active") {
+    const txCountSubquery = sql`COALESCE((
+      SELECT SUM(v::bigint) FROM contract_metadata cm,
+        jsonb_each_text(cm.json_value->'counts') AS t(k,v)
+      WHERE cm.contract_address = ${schema.contracts.address}
+        AND cm.key = 'tx_counts_by_year_external_to_v1'
+    ), 0)`;
+    const results = await database
+      .select()
+      .from(schema.contracts)
+      .where(whereClause)
+      .orderBy(sql`${txCountSubquery} DESC`)
+      .limit(limit)
+      .offset(offset);
+    return results.map(dbRowToContract);
+  }
+
   const orderBy = params.sort === "newest"
     ? desc(schema.contracts.deploymentTimestamp)
     : asc(schema.contracts.deploymentTimestamp);
