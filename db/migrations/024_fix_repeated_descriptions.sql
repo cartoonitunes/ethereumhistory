@@ -296,3 +296,8 @@ UPDATE contracts SET
   verification_notes = 'Compiled from a single-function contract: contract Test { function go() returns (string) { return "eth"; } }. Matched using soljson v0.1.1+commit.6ff4cd6, the earliest available Solidity compiler release. Optimizer off. Byte-for-byte match of all 285 bytes.',
   short_description = 'The earliest known Ethereum contract with executable runtime code. A single function go() that returns the string "eth", compiled with the first publicly available Solidity compiler (v0.1.1).'
 WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
+
+-- Add proof URL for earliest executable contract
+UPDATE contracts SET
+  verification_proof_url = 'https://github.com/cartoonitunes/first-executable-contract-verification'
+WHERE address = '0x6516298e1c94769432ef6d5f450579094e8c21fa';
