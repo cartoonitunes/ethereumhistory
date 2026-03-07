@@ -83,7 +83,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
               Browse
             </Link>
             <Link
-              href="/verified"
+              href="/proofs"
               className="text-sm text-obsidian-400 hover:text-obsidian-100 transition-colors"
             >
               Verified
@@ -125,7 +125,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
               Browse
             </Link>
             <Link
-              href="/verified"
+              href="/proofs"
               className="p-2.5 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors text-sm font-medium"
             >
               Verified

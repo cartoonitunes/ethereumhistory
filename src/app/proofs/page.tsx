@@ -65,7 +65,7 @@ function getMetadataBaseUrl(): URL {
 
 export async function generateMetadata(): Promise<Metadata> {
   const metadataBase = getMetadataBaseUrl();
-  const title = "Verified Contracts - Ethereum History";
+  const title = "Verification Proofs - Ethereum History";
   const description =
     "Source code verified through compiler archaeology and bytecode matching. Contracts whose original source has been recovered and independently compiled to match on-chain bytecode.";
 
@@ -74,7 +74,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     alternates: {
-      canonical: new URL("/verified", metadataBase).toString(),
+      canonical: new URL("/proofs", metadataBase).toString(),
     },
     openGraph: {
       title,
@@ -108,19 +108,19 @@ export default async function VerifiedPage() {
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-3">
             <ShieldCheck className="w-7 h-7 text-green-400" />
-            <h1 className="text-3xl font-bold">Verified Contracts</h1>
+            <h1 className="text-3xl font-bold">Verification Proofs</h1>
           </div>
           <p className="text-obsidian-400 max-w-2xl">
-            Source code verified through compiler archaeology and bytecode
-            matching. These contracts have had their original source recovered
-            and independently compiled to match the on-chain bytecode.
+            Source code recovered through compiler archaeology and proven to
+            match on-chain bytecode. Each proof documents the methodology,
+            compiler version, and evidence used to verify the original source.
           </p>
         </div>
 
         {/* Contract list */}
         {contracts.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-obsidian-500">No verified contracts yet.</p>
+            <p className="text-obsidian-500">No verification proofs yet.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -202,8 +202,7 @@ export default async function VerifiedPage() {
 
         {/* Count */}
         <div className="mt-8 text-center text-sm text-obsidian-500">
-          {contracts.length} verified{" "}
-          {contracts.length === 1 ? "contract" : "contracts"}
+          {contracts.length} {contracts.length === 1 ? "proof" : "proofs"}
         </div>
       </main>
     </div>
