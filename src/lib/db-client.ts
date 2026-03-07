@@ -1595,6 +1595,8 @@ export async function getDocumentedContractsFromDb(params: {
   codeQuery?: string | null;
   year?: number | null;
   capabilityKeys?: string[] | null;
+  verification?: string | null;
+  sort?: string | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1631,13 +1633,34 @@ export async function getDocumentedContractsFromDb(params: {
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
   }
+  if (params.verification === "unverified") {
+    conditions.push(
+      and(
+        or(isNull(schema.contracts.sourceCode), eq(schema.contracts.sourceCode, ""))!,
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "etherscan") {
+    conditions.push(
+      and(
+        isNotNull(schema.contracts.sourceCode),
+        ne(schema.contracts.sourceCode, ""),
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "proof") {
+    conditions.push(isNotNull(schema.contracts.verificationMethod));
+  }
 
   const whereClause = and(...conditions);
+  const orderBy = params.sort === "newest"
+    ? desc(schema.contracts.deploymentTimestamp)
+    : asc(schema.contracts.deploymentTimestamp);
   const results = await database
     .select()
     .from(schema.contracts)
     .where(whereClause)
-    .orderBy(asc(schema.contracts.deploymentTimestamp))
+    .orderBy(orderBy)
     .limit(limit)
     .offset(offset);
 
@@ -1653,6 +1676,8 @@ export async function getDocumentedContractsCountFromDb(params: {
   codeQuery?: string | null;
   year?: number | null;
   capabilityKeys?: string[] | null;
+  verification?: string | null;
+  sort?: string | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1683,6 +1708,24 @@ export async function getDocumentedContractsCountFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+  if (params.verification === "unverified") {
+    conditions.push(
+      and(
+        or(isNull(schema.contracts.sourceCode), eq(schema.contracts.sourceCode, ""))!,
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "etherscan") {
+    conditions.push(
+      and(
+        isNotNull(schema.contracts.sourceCode),
+        ne(schema.contracts.sourceCode, ""),
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "proof") {
+    conditions.push(isNotNull(schema.contracts.verificationMethod));
   }
   const whereClause = and(...conditions);
   const result = await database
@@ -1724,6 +1767,8 @@ export async function getUndocumentedContractsFromDb(params: {
   codeQuery?: string | null;
   year?: number | null;
   capabilityKeys?: string[] | null;
+  verification?: string | null;
+  sort?: string | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1763,12 +1808,34 @@ export async function getUndocumentedContractsFromDb(params: {
     );
   }
 
+  if (params.verification === "unverified") {
+    conditions.push(
+      and(
+        or(isNull(schema.contracts.sourceCode), eq(schema.contracts.sourceCode, ""))!,
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "etherscan") {
+    conditions.push(
+      and(
+        isNotNull(schema.contracts.sourceCode),
+        ne(schema.contracts.sourceCode, ""),
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "proof") {
+    conditions.push(isNotNull(schema.contracts.verificationMethod));
+  }
+
   const whereClause = and(...conditions);
+  const orderBy = params.sort === "newest"
+    ? desc(schema.contracts.deploymentTimestamp)
+    : asc(schema.contracts.deploymentTimestamp);
   const results = await database
     .select()
     .from(schema.contracts)
     .where(whereClause)
-    .orderBy(asc(schema.contracts.deploymentTimestamp))
+    .orderBy(orderBy)
     .limit(limit)
     .offset(offset);
 
@@ -1784,6 +1851,8 @@ export async function getUndocumentedContractsCountFromDb(params: {
   codeQuery?: string | null;
   year?: number | null;
   capabilityKeys?: string[] | null;
+  verification?: string | null;
+  sort?: string | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = [
@@ -1816,6 +1885,24 @@ export async function getUndocumentedContractsCountFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+  if (params.verification === "unverified") {
+    conditions.push(
+      and(
+        or(isNull(schema.contracts.sourceCode), eq(schema.contracts.sourceCode, ""))!,
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "etherscan") {
+    conditions.push(
+      and(
+        isNotNull(schema.contracts.sourceCode),
+        ne(schema.contracts.sourceCode, ""),
+        isNull(schema.contracts.verificationMethod)
+      )!
+    );
+  } else if (params.verification === "proof") {
+    conditions.push(isNotNull(schema.contracts.verificationMethod));
   }
   const whereClause = and(...conditions);
   const result = await database

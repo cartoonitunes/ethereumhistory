@@ -52,6 +52,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const capabilityKeys = capabilitiesParam
     ? capabilitiesParam.split(",").flatMap((slug) => CAPABILITY_CATEGORIES[slug]?.keys ?? [])
     : [];
+  const verification = searchParams.get("verification")?.trim() || undefined;
+  const sort = searchParams.get("sort")?.trim() || undefined;
 
   const filterParams = {
     eraId: era || null,
@@ -59,10 +61,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     codeQuery: q || null,
     year: year && year >= 2015 && year <= 2017 ? year : null,
     capabilityKeys: capabilityKeys.length > 0 ? capabilityKeys : null,
+    verification: verification || null,
+    sort: sort || null,
   };
 
   // Build a cache key from all filter params for short-lived caching
-  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${capabilitiesParam}:${page}:${limit}`;
+  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${capabilitiesParam}:${verification || ""}:${sort || ""}:${page}:${limit}`;
 
   const [contracts, total] = await cached(
     cacheKey,
