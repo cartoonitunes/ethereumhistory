@@ -35,3 +35,11 @@ UPDATE contracts SET
   verification_proof_url = 'https://gist.github.com/alexvandesande/3abc9f741471e08a6356#file-meat-grinder-association',
   verification_notes = 'DAO controlling the Unicorn Meat grinder rules. Source and compiler settings published by Alex Van de Sande (avsa). Features quadratic voting where each negative vote is worth 4 support votes.'
 WHERE address = '0xc7e9ddd5358e08417b1c88ed6f1a73149beeaa32';
+
+-- MistCoin (verified by crypt0biwan)
+UPDATE contracts SET
+  compiler_language = 'solidity',
+  verification_method = 'exact_bytecode_match',
+  verification_proof_url = 'https://github.com/crypt0biwan/mistcoin',
+  verification_notes = 'Source code verified by crypt0biwan. Fabian Vogelsteller''s token created to test the ERC-20 standard, deployed November 3, 2015.'
+WHERE address = '0xf4eced2f682ce333f96f2d8966c613ded8fc95dd';
