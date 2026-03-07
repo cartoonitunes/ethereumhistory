@@ -225,6 +225,7 @@ function BrowseContent() {
                 >
                   <option value="">Oldest first</option>
                   <option value="newest">Newest first</option>
+                  <option value="most_active">Most active</option>
                 </select>
               </label>
               <label className="flex flex-col gap-1.5 text-sm flex-1 min-w-0">
