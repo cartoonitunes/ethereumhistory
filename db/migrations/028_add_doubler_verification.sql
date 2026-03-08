@@ -12,6 +12,7 @@ INSERT INTO contracts (
   contract_type,
   code_size_bytes,
   featured,
+  source_code,
   compiler_language,
   compiler_commit,
   compiler_repo,
@@ -28,6 +29,23 @@ INSERT INTO contracts (
   'financial',
   235,
   FALSE,
+  'contract Doubler {
+    address owner;
+
+    function Doubler() {
+        owner = 0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb;
+    }
+
+    function() {
+        uint amount = msg.value * 2;
+        if (amount > this.balance) {
+            amount = this.balance;
+        }
+        owner.send(amount);
+    }
+
+    function add_funds() {}
+}',
   'solidity',
   '67c855c58304',
   'ethereum/solidity',
@@ -41,5 +59,6 @@ INSERT INTO contracts (
   verification_method = EXCLUDED.verification_method,
   verification_proof_url = EXCLUDED.verification_proof_url,
   verification_notes = EXCLUDED.verification_notes,
+  source_code = EXCLUDED.source_code,
   short_description = EXCLUDED.short_description,
   description = EXCLUDED.description;
