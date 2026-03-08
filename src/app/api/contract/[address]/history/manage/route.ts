@@ -298,6 +298,14 @@ export async function POST(
       }
     }
 
+    // Source code (trusted historians only - sets verification_status to "verified")
+    if (contractPatch.sourceCode !== undefined) {
+      await updateContractEtherscanEnrichmentFromDb(normalized, {
+        sourceCode: String(contractPatch.sourceCode || "").trim() || null,
+      });
+      fieldsChanged.push("sourceCode");
+    }
+
     // Track link additions/updates as edits
     const hasLinkChanges = links.length > 0 || deleteIds.length > 0;
     if (hasLinkChanges) {
