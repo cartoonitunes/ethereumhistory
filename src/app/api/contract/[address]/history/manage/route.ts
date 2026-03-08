@@ -298,12 +298,34 @@ export async function POST(
       }
     }
 
-    // Source code (trusted historians only - sets verification_status to "verified")
+    // Source code and verification fields (trusted historians only)
+    const verificationPatch: Record<string, string | null> = {};
     if (contractPatch.sourceCode !== undefined) {
-      await updateContractEtherscanEnrichmentFromDb(normalized, {
-        sourceCode: String(contractPatch.sourceCode || "").trim() || null,
-      });
+      verificationPatch.sourceCode = String(contractPatch.sourceCode || "").trim() || null;
       fieldsChanged.push("sourceCode");
+    }
+    if (contractPatch.compilerLanguage !== undefined) {
+      verificationPatch.compilerLanguage = String(contractPatch.compilerLanguage || "").trim() || null;
+      fieldsChanged.push("compilerLanguage");
+    }
+    if (contractPatch.compilerCommit !== undefined) {
+      verificationPatch.compilerCommit = String(contractPatch.compilerCommit || "").trim() || null;
+      fieldsChanged.push("compilerCommit");
+    }
+    if (contractPatch.verificationMethod !== undefined) {
+      verificationPatch.verificationMethod = String(contractPatch.verificationMethod || "").trim() || null;
+      fieldsChanged.push("verificationMethod");
+    }
+    if (contractPatch.verificationProofUrl !== undefined) {
+      verificationPatch.verificationProofUrl = String(contractPatch.verificationProofUrl || "").trim() || null;
+      fieldsChanged.push("verificationProofUrl");
+    }
+    if (contractPatch.verificationNotes !== undefined) {
+      verificationPatch.verificationNotes = String(contractPatch.verificationNotes || "").trim() || null;
+      fieldsChanged.push("verificationNotes");
+    }
+    if (Object.keys(verificationPatch).length > 0) {
+      await updateContractEtherscanEnrichmentFromDb(normalized, verificationPatch as any);
     }
 
     // Track link additions/updates as edits
