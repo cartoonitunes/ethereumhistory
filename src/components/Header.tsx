@@ -94,6 +94,12 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             >
               For Agents
             </Link>
+            <Link
+              href="/donate"
+              className="text-sm text-ether-400 hover:text-ether-300 transition-colors font-medium"
+            >
+              Donate
+            </Link>
             <a
               href="https://discord.gg/3KV6dt2euF"
               target="_blank"
