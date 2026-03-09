@@ -160,6 +160,16 @@ export function DonatePage() {
               Dedicated wallet for EthereumHistory. Separate from any personal funds. All transactions are publicly verifiable on-chain.
             </p>
           </div>
+
+          {/* View donors */}
+          <div className="text-center mt-6">
+            <Link
+              href="/supporters"
+              className="text-sm text-obsidian-500 hover:text-ether-400 transition-colors"
+            >
+              View donors
+            </Link>
+          </div>
         </motion.div>
       </main>
     </div>

@@ -511,3 +511,20 @@ export const contractMedia = pgTable(
 
 export type ContractMediaRow = typeof contractMedia.$inferSelect;
 export type NewContractMedia = typeof contractMedia.$inferInsert;
+
+// =============================================================================
+// Donation Claims
+// =============================================================================
+
+export const donationClaims = pgTable("donation_claims", {
+  id: serial("id").primaryKey(),
+  txHash: text("tx_hash").notNull().unique(),
+  address: text("address").notNull(),
+  displayName: text("display_name").notNull(),
+  note: text("note"),
+  signature: text("signature").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type DonationClaim = typeof donationClaims.$inferSelect;
+export type NewDonationClaim = typeof donationClaims.$inferInsert;
