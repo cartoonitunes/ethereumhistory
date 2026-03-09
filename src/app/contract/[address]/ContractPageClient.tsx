@@ -26,6 +26,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Header } from "@/components/Header";
+import { DonationBanner } from "@/components/DonationBanner";
 import { AddressSearch } from "@/components/AddressSearch";
 import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
 import { SuggestEditForm } from "@/components/SuggestEditForm";
@@ -229,6 +230,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   return (
     <div className="min-h-screen">
       <Header showHistorianLogin={!me} />
+      <DonationBanner />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
         {/* Back link */}
