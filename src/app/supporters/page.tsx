@@ -17,32 +17,51 @@ export const metadata: Metadata = {
 // Revalidate every 5 minutes
 export const revalidate = 300;
 
-type Tier = "archivist" | "historian" | "archaeologist";
+type Tier = "philanthropist" | "benefactor" | "sponsor" | "patron" | "supporter";
 
 function getTier(ethAmount: number): Tier {
-  if (ethAmount >= 0.1) return "archivist";
-  if (ethAmount >= 0.01) return "historian";
-  return "archaeologist";
+  if (ethAmount >= 1.0) return "philanthropist";
+  if (ethAmount >= 0.1) return "benefactor";
+  if (ethAmount >= 0.05) return "sponsor";
+  if (ethAmount >= 0.01) return "patron";
+  return "supporter";
 }
 
-const TIER_CONFIG: Record<Tier, { label: string; color: string; bg: string; border: string }> = {
-  archivist: {
-    label: "Archivist",
+const TIER_CONFIG: Record<Tier, { label: string; color: string; bg: string; border: string; threshold: string }> = {
+  philanthropist: {
+    label: "Philanthropist",
     color: "text-yellow-400",
     bg: "bg-yellow-400/10",
     border: "border-yellow-400/30",
+    threshold: "1.0+ ETH",
   },
-  historian: {
-    label: "Historian",
-    color: "text-obsidian-300",
+  benefactor: {
+    label: "Benefactor",
+    color: "text-ether-300",
+    bg: "bg-ether-500/10",
+    border: "border-ether-500/30",
+    threshold: "0.1+ ETH",
+  },
+  sponsor: {
+    label: "Sponsor",
+    color: "text-obsidian-200",
     bg: "bg-obsidian-700/30",
-    border: "border-obsidian-600/30",
+    border: "border-obsidian-500/30",
+    threshold: "0.05+ ETH",
   },
-  archaeologist: {
-    label: "Archaeologist",
-    color: "text-amber-700",
-    bg: "bg-amber-900/20",
-    border: "border-amber-800/30",
+  patron: {
+    label: "Patron",
+    color: "text-obsidian-400",
+    bg: "bg-obsidian-800/40",
+    border: "border-obsidian-600/30",
+    threshold: "0.01+ ETH",
+  },
+  supporter: {
+    label: "Supporter",
+    color: "text-obsidian-500",
+    bg: "bg-obsidian-900/40",
+    border: "border-obsidian-700/30",
+    threshold: "any amount",
   },
 };
 
@@ -191,7 +210,7 @@ export default async function SupportersPage() {
 
         {/* Tier legend */}
         <div className="flex flex-wrap items-center gap-3 mb-8 justify-center">
-          {(["archivist", "historian", "archaeologist"] as Tier[]).map((tier) => {
+          {(["philanthropist", "benefactor", "sponsor", "patron", "supporter"] as Tier[]).map((tier) => {
             const cfg = TIER_CONFIG[tier];
             return (
               <span
@@ -200,9 +219,7 @@ export default async function SupportersPage() {
               >
                 <TierDot tier={tier} />
                 {cfg.label}
-                <span className="text-obsidian-600 font-normal">
-                  {tier === "archivist" ? "0.1+ ETH" : tier === "historian" ? "0.01+ ETH" : "<0.01 ETH"}
-                </span>
+                <span className="text-obsidian-600 font-normal">{cfg.threshold}</span>
               </span>
             );
           })}
@@ -244,9 +261,11 @@ export default async function SupportersPage() {
 
 function TierDot({ tier }: { tier: Tier }) {
   const colors: Record<Tier, string> = {
-    archivist: "bg-yellow-400",
-    historian: "bg-obsidian-400",
-    archaeologist: "bg-amber-700",
+    philanthropist: "bg-yellow-400",
+    benefactor: "bg-ether-300",
+    sponsor: "bg-obsidian-200",
+    patron: "bg-obsidian-400",
+    supporter: "bg-obsidian-600",
   };
   return <span className={`w-1.5 h-1.5 rounded-full ${colors[tier]}`} />;
 }
