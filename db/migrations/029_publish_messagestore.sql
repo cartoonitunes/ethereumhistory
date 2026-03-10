@@ -28,18 +28,6 @@ Qwen batch triage initially misidentified this as a mapping-based contract with 
   manual_categories = '["messaging", "frontier-experiment"]'::jsonb,
   updated_at = NOW()
 WHERE address = '0xd2ec98c4459edab3df7fa28c67b40f15c42b7614';
-
--- If contract doesn't exist yet (not in ingestion pipeline), insert it
-INSERT INTO contracts (address, short_description, description, contract_type, featured, source_code, compiler_language, compiler_commit, compiler_repo, verification_method, verification_notes, manual_categories)
-VALUES ('0xd2ec98c4459edab3df7fa28c67b40f15c42b7614', 'On-chain message storage contract from day 10 of Ethereum', 'One of Ethereum''s earliest smart contracts, deployed on August 7, 2015 — just 10 days after mainnet launch (block 53,573). A minimal contract that stores a single string message on-chain, with a public getter and a set() function allowing anyone to overwrite it. Deployed by 0x8674c218, who deployed 18 contracts in August 2015 alone, making them one of the most prolific early Ethereum experimenters. The contract represents the "hello world" era of smart contract development — developers testing what was possible on this new platform.
-', 'utility', FALSE, 'contract MessageStore {
-  string public message;
-  function set(string _message) {
-    message = _message;
-  }
-}
-', 'solidity', '6ff4cd6', 'ethereum/solidity', 'exact_bytecode_match', 'Bytecode verified with native C++ solc v0.1.1 (webthree-umbrella), optimizer ON.
-Selectors identified via calldata forensics: set(string) = 0x4ed3885e, message() = 0xe21f37ce.
-Qwen batch triage initially misidentified this as a mapping-based contract with tx.origin access control — fully incorrect. Actual contract is a simple string storage with no access control.
-', '["messaging", "frontier-experiment"]'::jsonb)
-ON CONFLICT (address) DO NOTHING;
+-- NOTE: INSERT removed. This address is an EOA (wallet), not a contract.
+-- The real MessageStore is 0xd2eccde805e888ae37646544d60185b842ff3d6b.
+-- See migration 032 which cleans up the erroneous entry.
