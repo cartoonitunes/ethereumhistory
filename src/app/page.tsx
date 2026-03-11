@@ -149,7 +149,7 @@ async function getMarqueeContracts(): Promise<MarqueeContract[]> {
     });
     return contracts.map((c) => ({
       address: c.address,
-      name: c.etherscanContractName || c.tokenName || `Contract ${c.address.slice(0, 10)}...`,
+      name: c.tokenName || c.etherscanContractName || `Contract ${c.address.slice(0, 10)}...`,
       shortDescription: c.shortDescription,
       eraId: c.eraId,
       deploymentDate: c.deploymentTimestamp?.split("T")[0] ?? null,
