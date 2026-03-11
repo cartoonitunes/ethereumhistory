@@ -83,6 +83,7 @@ export async function fetchEtherscanAbi(address: string): Promise<string | null>
 
 export async function fetchEtherscanSourceCode(address: string): Promise<{
   isVerified: boolean;
+  isSimilarMatch: boolean;
   contractName: string | null;
   compilerVersion: string | null;
   sourceCode: string | null;
@@ -109,8 +110,11 @@ export async function fetchEtherscanSourceCode(address: string): Promise<{
   const contractName = first.ContractName?.trim() ? first.ContractName : null;
   const compilerVersion = first.CompilerVersion?.trim() ? first.CompilerVersion : null;
   const isVerified = !!abi;
+  // SimilarMatch is set when Etherscan matched this contract by bytecode to another verified
+  // contract — the ContractName is the original verifier's name, not this deployment's.
+  const isSimilarMatch = !!first.SimilarMatch?.trim();
 
-  return { isVerified, contractName, compilerVersion, sourceCode, abi };
+  return { isVerified, isSimilarMatch, contractName, compilerVersion, sourceCode, abi };
 }
 
 export async function fetchEtherscanContractCreation(

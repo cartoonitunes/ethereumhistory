@@ -43,8 +43,8 @@ export async function generateMetadata({ searchParams }: ComparePageProps): Prom
     isValidAddress(b) ? getContract(b.toLowerCase()) : null,
   ]);
 
-  const nameA = contractA?.etherscanContractName || contractA?.tokenName || contractA?.ensName || formatAddress(a, 8);
-  const nameB = contractB?.etherscanContractName || contractB?.tokenName || contractB?.ensName || formatAddress(b, 8);
+  const nameA = contractA?.tokenName || contractA?.etherscanContractName || contractA?.ensName || formatAddress(a, 8);
+  const nameB = contractB?.tokenName || contractB?.etherscanContractName || contractB?.ensName || formatAddress(b, 8);
 
   const descParts: string[] = [];
   if (contractA?.shortDescription) descParts.push(`${nameA}: ${contractA.shortDescription}`);
@@ -177,8 +177,8 @@ export default async function ComparePage({ searchParams }: ComparePageProps) {
     );
   }
 
-  const nameA = contractA.etherscanContractName || contractA.tokenName || contractA.ensName || formatAddress(a, 10);
-  const nameB = contractB.etherscanContractName || contractB.tokenName || contractB.ensName || formatAddress(b, 10);
+  const nameA = contractA.tokenName || contractA.etherscanContractName || contractA.ensName || formatAddress(a, 10);
+  const nameB = contractB.tokenName || contractB.etherscanContractName || contractB.ensName || formatAddress(b, 10);
 
   return (
     <div className="min-h-screen">

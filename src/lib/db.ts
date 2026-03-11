@@ -165,6 +165,20 @@ const FEATURED_ADDRESSES = [
   "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
 ] as const;
 
+/**
+ * Substitute the contract name inside Solidity source code.
+ * Replaces `contract OldName` and `function OldName(` (constructor in pre-0.4 style)
+ * with the curated canonical name. Used for SimilarMatch sources where Etherscan's
+ * ContractName reflects the original verifier's name, not this deployment's.
+ */
+function replaceContractName(source: string, oldName: string, newName: string): string {
+  // Escape any regex special chars in the name
+  const escaped = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return source
+    .replace(new RegExp(`\\bcontract\\s+${escaped}\\b`, "g"), `contract ${newName}`)
+    .replace(new RegExp(`\\bfunction\\s+${escaped}\\s*\\(`, "g"), `function ${newName}(`);
+}
+
 function shuffle<T>(items: readonly T[]): T[] {
   const arr = [...items];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -333,13 +347,24 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
       try {
         const source = await fetchEtherscanSourceCode(contract.address);
         if (source?.isVerified) {
-          if (!contract.etherscanContractName && source.contractName) {
+          // For SimilarMatch contracts, Etherscan's ContractName belongs to the original
+          // verifier — not this deployment. Only write the name when it's a direct
+          // verification. Source code and ABI are still accurate (same bytecode).
+          if (!source.isSimilarMatch && !contract.etherscanContractName && source.contractName) {
             merged.etherscanContractName = source.contractName;
             patch.etherscanContractName = source.contractName;
           }
           if (!contract.sourceCode && source.sourceCode) {
-            merged.sourceCode = source.sourceCode;
-            patch.sourceCode = source.sourceCode;
+            // If we have a curated contract name that differs from Etherscan's, substitute
+            // the contract name in the source so it reflects the canonical name.
+            const curatedName = merged.etherscanContractName ?? contract.etherscanContractName;
+            const etherscanName = source.contractName;
+            const sourceToStore =
+              source.isSimilarMatch && curatedName && etherscanName && curatedName !== etherscanName
+                ? replaceContractName(source.sourceCode, etherscanName, curatedName)
+                : source.sourceCode;
+            merged.sourceCode = sourceToStore;
+            patch.sourceCode = sourceToStore;
           }
           // ABI is also returned here; fill if still missing.
           if (!contract.abi && source.abi) {
@@ -660,13 +685,23 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     try {
       const source = await fetchEtherscanSourceCode(contract.address);
       if (source?.isVerified) {
-        if (source.contractName) {
+        // SimilarMatch: Etherscan matched by bytecode — ContractName belongs to the original
+        // verifier, not this deployment. Skip the name; source/ABI are still accurate.
+        if (!source.isSimilarMatch && source.contractName) {
           contract.etherscanContractName = source.contractName;
           patch.etherscanContractName = source.contractName;
         }
         if (source.sourceCode) {
-          contract.sourceCode = source.sourceCode;
-          patch.sourceCode = source.sourceCode;
+          // If we have a curated name that differs from Etherscan's, substitute it in the
+          // source so the displayed code reflects the canonical contract name.
+          const curatedName = contract.etherscanContractName;
+          const etherscanName = source.contractName;
+          const sourceToStore =
+            source.isSimilarMatch && curatedName && etherscanName && curatedName !== etherscanName
+              ? replaceContractName(source.sourceCode, etherscanName, curatedName)
+              : source.sourceCode;
+          contract.sourceCode = sourceToStore;
+          patch.sourceCode = sourceToStore;
         }
         if (source.abi) {
           contract.abi = source.abi;
