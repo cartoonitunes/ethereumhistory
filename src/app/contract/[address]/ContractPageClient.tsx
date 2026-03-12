@@ -28,7 +28,7 @@ import {
 import { Header } from "@/components/Header";
 import { DonationBanner } from "@/components/DonationBanner";
 import { AddressSearch } from "@/components/AddressSearch";
-import { getFrontierRegistrarEntry } from "@/lib/frontier-registrar";
+import { getFrontierRegistrarEntry, REGISTRAR_INFO } from "@/lib/frontier-registrar";
 import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
 import { SuggestEditForm } from "@/components/SuggestEditForm";
 import ShareOnX from "@/components/ShareOnX";
@@ -292,14 +292,30 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                     {getContractTypeLabel(contract.heuristics.contractType)}
                   </span>
                 )}
-                {frontierEntry && (
-                  <span
-                    className="text-sm px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-700/40"
-                    title={`Registered on the Frontier ${frontierEntry.registrar}`}
-                  >
-                    Frontier Registered Name
-                  </span>
-                )}
+                {frontierEntry && (() => {
+                  const info = REGISTRAR_INFO[frontierEntry.registrar];
+                  return (
+                    <div className="relative group/namereg">
+                      <span className="text-sm px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-700/40 cursor-help">
+                        {info.label}
+                      </span>
+                      {/* Hover tooltip */}
+                      <div className="absolute left-0 top-full mt-1 z-50 hidden group-hover/namereg:block w-72 rounded-lg border border-amber-700/40 bg-obsidian-900 p-3 shadow-xl text-sm">
+                        <div className="font-semibold text-amber-400 mb-1">{info.label}</div>
+                        <div className="text-obsidian-300 leading-relaxed mb-2">{info.description}</div>
+                        <a
+                          href={info.etherscanUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-obsidian-400 hover:text-amber-400 font-mono break-all transition-colors"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {info.address}
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Address */}

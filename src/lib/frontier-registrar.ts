@@ -1,29 +1,66 @@
 /**
  * Frontier Name Registrar lookup table.
  *
- * Decoded from on-chain calldata for two Frontier-era registrars:
+ * Priority: GlobalRegistrar > LinageeRegistrar > NameRegistry > contract fields.
  *
- *   - Frontier GlobalRegistrar: 0x33990122638b9132ca29c723bdf037f1a891a70c (block 282,880)
- *     The official GlobalRegistrar hardcoded in go-ethereum for mainnet.
- *     Referenced in the ethereum.org "Register a name for your coin" tutorial.
- *     340 unique address->name mappings decoded from 10,000 setAddress() calls.
+ * Sources (all address->name mappings decoded from on-chain setAddress() calldata):
  *
- *   - NameRegistry: 0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00 (block 52,426)
- *     A separate on-chain Solidity contract. Used by exchanges (Kraken, Bittrex, etc.)
- *     for ticker-style name registration.
+ *   1. Frontier GlobalRegistrar — 0x33990122638b9132ca29c723bdf037f1a891a70c (block 282,880)
+ *      The official name registry hardcoded in go-ethereum for Frontier mainnet.
+ *      Referenced in the ethereum.org "Register a name for your coin" tutorial.
+ *      go-ethereum source: common/registrar/registrar.go, GlobalRegistrarAddr = "0x3399..."
+ *      ~340 unique address->name mappings.
  *
- * Note: 0xc6d9d2cd449a754c494264e1809c50e34d64562b was the OLYMPIC (testnet) registrar,
- * not the Frontier one. linagee squatted names there on mainnet by mistake.
+ *   2. Linagee Name Registrar — 0x5564886ca2C518d1964E5FCea4f423b41Db9F561 (block 51,807)
+ *      Identical bytecode to the GlobalRegistrar, deployed by linagee two days earlier.
+ *      First registered name: "MyFirstCoin" (literally the ethereum.org tutorial example).
+ *      37 address->name mappings.
  *
- * All addresses are lowercase.
+ *   3. NameRegistry — 0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00 (block 52,426)
+ *      A separate on-chain contract used by exchanges (Kraken, Bittrex, etc.)
+ *      for ticker-style registration.
+ *
+ * Note: 0xc6d9d2cd449a754c494264e1809c50e34d64562b was the Olympic (testnet) registrar.
+ * linagee used it on mainnet by mistake. Not included here.
+ *
+ * All addresses lowercase.
  */
+
+export type RegistrarType = 'GlobalRegistrar' | 'LinageeRegistrar' | 'NameRegistry';
+
 export interface FrontierRegistrarEntry {
   name: string;
-  registrar: "GlobalRegistrar" | "NameRegistry";
+  registrar: RegistrarType;
 }
 
+export const REGISTRAR_INFO: Record<RegistrarType, {
+  label: string;
+  address: string;
+  description: string;
+  etherscanUrl: string;
+}> = {
+  GlobalRegistrar: {
+    label: 'Frontier GlobalRegistrar',
+    address: '0x33990122638b9132ca29c723bdf037f1a891a70c',
+    description: 'The official Ethereum name registry hardcoded in go-ethereum for Frontier mainnet. Referenced in the original ethereum.org \'Register a name for your coin\' tutorial (2015).',
+    etherscanUrl: 'https://etherscan.io/address/0x33990122638b9132ca29c723bdf037f1a891a70c',
+  },
+  LinageeRegistrar: {
+    label: 'Linagee Name Registrar',
+    address: '0x5564886ca2C518d1964E5FCea4f423b41Db9F561',
+    description: 'An early name registry deployed by linagee on August 8, 2015 — two days before the official GlobalRegistrar. Identical bytecode. First name registered: \'MyFirstCoin\' (the ethereum.org tutorial example).',
+    etherscanUrl: 'https://etherscan.io/address/0x5564886ca2C518d1964E5FCea4f423b41Db9F561',
+  },
+  NameRegistry: {
+    label: 'Frontier NameRegistry',
+    address: '0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00',
+    description: 'A separate on-chain name registry used by early exchanges (Kraken, Bittrex, YunBi) for ticker-style name registration.',
+    etherscanUrl: 'https://etherscan.io/address/0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00',
+  },
+};
+
 export const FRONTIER_REGISTRAR_NAMES: Record<string, FrontierRegistrarEntry> = {
-  // Frontier GlobalRegistrar (0x33990122...) — 340 mappings, sorted by registration block
+  // GlobalRegistrar
   "0x23bf622b5a65f6060d855fca401133ded3520620": { name: "HashReg", registrar: "GlobalRegistrar" },
   "0x73ed5ef6c010727dfd2671dbb70faac19ec18626": { name: "UrlHint", registrar: "GlobalRegistrar" },
   "0x8394a052eb6c32fb9defcaabc12fcbd8fea0b8a8": { name: "Planethereum", registrar: "GlobalRegistrar" },
@@ -364,8 +401,35 @@ export const FRONTIER_REGISTRAR_NAMES: Record<string, FrontierRegistrarEntry> = 
   "0x21641fa7efc05e776da24d7e1046e68b2dd09adf": { name: "alec", registrar: "GlobalRegistrar" },
   "0x9d8c149025c26d84da38f4ff27d506c23a12e7b7": { name: "FipsNotary", registrar: "GlobalRegistrar" },
   "0x05b71e90d9f3da4d8b61484560df89063f398fc9": { name: "coin86.org", registrar: "GlobalRegistrar" },
-
-  // NameRegistry (0xa1a111bc...) — exchange tickers
+  // LinageeRegistrar
+  "0x3d0768da09ce77d25e2d998e6a7b6ed4b9116c2d": { name: "MyFirstCoin", registrar: "LinageeRegistrar" },
+  "0x7710e593d30872095c7c7b0d962abf935c63a195": { name: "HashReg", registrar: "LinageeRegistrar" },
+  "0x56019161b5fec9830c3c6c31bf261b84b2807971": { name: "UrlHint", registrar: "LinageeRegistrar" },
+  "0xfeee3a42551fa765d8d1e6a87575b71c60d1d0b2": { name: "HashReg", registrar: "LinageeRegistrar" },
+  "0xe76f218ed471ac32b041fbe02b0025016c16e944": { name: "UrlHint", registrar: "LinageeRegistrar" },
+  "0x3dab6e047d342c7ab68febd12751abbee1780485": { name: "☃", registrar: "LinageeRegistrar" },
+  "0xa090f450f0f211a962a13e4181e710e0472264f8": { name: "linagee2", registrar: "LinageeRegistrar" },
+  "0xc8ebccc5f5689fa8659d83713341e5ad19349448": { name: "eth", registrar: "LinageeRegistrar" },
+  "0xaf078ae030266ad29c156ed6e57fee912f90745c": { name: "realmgame", registrar: "LinageeRegistrar" },
+  "0x6923f88fcdc5d737237ba10c2d830aa40f4634de": { name: "ethcoinbase", registrar: "LinageeRegistrar" },
+  "0x4efe40091aff32dabe4e1097dbaa9c69cb6463db": { name: "ethaccounts", registrar: "LinageeRegistrar" },
+  "0x88a1ac6e8b6e2e50401c6b269f2180764b7471a9": { name: "paramaribo", registrar: "LinageeRegistrar" },
+  "0x1fdb174686981ce2f4bb3d911547480403f11fd3": { name: "money", registrar: "LinageeRegistrar" },
+  "0xe68d3f1c9d7325d45706aab95a67f7ac6f373509": { name: "account", registrar: "LinageeRegistrar" },
+  "0x388febfe4ef0d442aa000beb4b4ee05cbdb5388b": { name: "kennyrowe", registrar: "LinageeRegistrar" },
+  "0x4efe5f4f25d8fb1242f6c0283b57435d89a780ab": { name: "sex", registrar: "LinageeRegistrar" },
+  "0x092a5172f796d4c3cd0e03520134317fc25b74f6": { name: "taoteh1221", registrar: "LinageeRegistrar" },
+  "0x1b341f7a7732c33c8140b1c11161c6d274979818": { name: "Batman", registrar: "LinageeRegistrar" },
+  "0xb8008885dfcda70aba2ff7058b5e12cb9024dc91": { name: "admin", registrar: "LinageeRegistrar" },
+  "0x866b0b654f14420013ed069d979214787ba98ee7": { name: "MyFirstCoin", registrar: "LinageeRegistrar" },
+  "0x8d0b69cc5de9cbb2d565c3ec9ff0cf5adc1a2016": { name: "roshan", registrar: "LinageeRegistrar" },
+  "0xb1e631555a53f130e2ccf6465ac8dda396cba0db": { name: "RoshContract1", registrar: "LinageeRegistrar" },
+  "0x77133e4a18035ba191d9c3cb2b0f507c3333e480": { name: "EtherRewards", registrar: "LinageeRegistrar" },
+  "0x672aec1d618f3087fb5e7141364f7871c95b8cc9": { name: "UnitedMileage", registrar: "LinageeRegistrar" },
+  "0x881e7e1da51f1c5c39f6df7f5cae5ae681e51593": { name: "VisaLoyalty", registrar: "LinageeRegistrar" },
+  "0xa0cfb03e43b80dbd00674c9711b461e726ede46a": { name: "ethcrow", registrar: "LinageeRegistrar" },
+  "0x7e1877d6ed0574181e5508952cfcd057b5ac5832": { name: "test", registrar: "LinageeRegistrar" },
+  // NameRegistry
   "0x1c523996cb7cb5b0a4a48d8097e45093626b23f0": { name: "HHKB", registrar: "NameRegistry" },
   "0xad8d3a5d2d92eb14bb56ca9f380be35b8efe0c04": { name: "YUNB", registrar: "NameRegistry" },
   "0x1ff21eca1c3ba96ed53783ab9c92ffbf77862584": { name: "AMBI", registrar: "NameRegistry" },
