@@ -54,8 +54,8 @@ export const REGISTRAR_INFO: Record<RegistrarType, {
   NameRegistry: {
     label: 'Frontier NameRegistry',
     address: '0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00',
-    description: 'A separate on-chain name registry used by early exchanges (Kraken, Bittrex, YunBi) for ticker-style name registration.',
-    etherscanUrl: 'https://etherscan.io/address/0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00',
+    description: 'An on-chain name registry (block 52,426) used primarily by early exchanges — Kraken (KRAK), Bittrex (BTRX), YunBi (YUNB) — for ticker-style registration. Bytecode has been fully reconstructed and verified.',
+    etherscanUrl: 'https://www.ethereumhistory.com/contract/0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00',
   },
 };
 

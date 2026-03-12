@@ -309,8 +309,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                           rel="noopener noreferrer"
                           className="text-xs text-obsidian-400 hover:text-amber-400 font-mono break-all transition-colors"
                           onClick={e => e.stopPropagation()}
+                          title="View registrar contract"
                         >
-                          {info.address}
+                          {info.address} ↗
                         </a>
                       </div>
                     </div>
