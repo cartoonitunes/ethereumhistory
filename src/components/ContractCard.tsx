@@ -12,6 +12,7 @@ import {
   etherscanUrl,
   getContractTypeLabel,
 } from "@/lib/utils";
+import { getFrontierRegistrarEntry, REGISTRAR_INFO } from "@/lib/frontier-registrar";
 import type { Contract, FeaturedContract } from "@/types";
 
 interface ContractCardProps {
@@ -64,6 +65,8 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
 
   if (variant === "featured") {
     const featured = contract as FeaturedContract;
+    const registrarEntry = getFrontierRegistrarEntry(address);
+    const registrarInfo = registrarEntry ? REGISTRAR_INFO[registrarEntry.registrar] : null;
     return (
       <Link href={`/contract/${address}`}>
         <motion.div
@@ -84,6 +87,15 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
             <code className="text-sm text-obsidian-500 font-mono block">
               {formatAddress(address, 8)}
             </code>
+
+            {registrarEntry && registrarInfo && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+                  {registrarEntry.name}
+                </span>
+                <span className="text-xs text-obsidian-600">{registrarInfo.label}</span>
+              </div>
+            )}
 
             <p className="text-obsidian-400 text-sm line-clamp-2">
               {featured.shortDescription}
