@@ -53,6 +53,7 @@ function BrowseContent() {
   const undocumented = searchParams.get("undocumented") === "1";
   const capabilities = searchParams.get("capabilities") || "";
   const verification = searchParams.get("verification") || "";
+  const registrar = searchParams.get("registrar") || "";
   const sort = searchParams.get("sort") || "";
 
   useEffect(() => {
@@ -82,6 +83,7 @@ function BrowseContent() {
     if (type) params.set("type", type);
     if (q.trim()) params.set("q", q.trim());
     if (undocumented) params.set("undocumented", "1");
+    if (registrar) params.set("registrar", registrar);
     if (capabilities) params.set("capabilities", capabilities);
     if (verification) params.set("verification", verification);
     if (sort) params.set("sort", sort);
@@ -102,13 +104,13 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, year, type, q, undocumented, capabilities, verification, sort, page]);
+  }, [era, year, type, q, undocumented, capabilities, verification, registrar, sort, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "sort", value: string) => {
+  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "registrar" | "sort", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
@@ -254,6 +256,29 @@ function BrowseContent() {
                 {undocumented ? "✓ Undocumented only" : "Show undocumented"}
               </button>
             </div>
+          </motion.div>
+
+          {/* Frontier Registrar filter */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-obsidian-500 font-medium uppercase tracking-wider">Named in</span>
+            {([
+              { value: "any", label: "Any Registrar" },
+              { value: "GlobalRegistrar", label: "Frontier GlobalRegistrar" },
+              { value: "LinageeRegistrar", label: "Linagee Registrar" },
+              { value: "NameRegistry", label: "NameRegistry" },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setFilter("registrar", registrar === value ? "" : value)}
+                className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                  registrar === value
+                    ? "bg-amber-900/40 border-amber-700/40 text-amber-400"
+                    : "border-obsidian-700 bg-obsidian-900/50 text-obsidian-400 hover:text-amber-400 hover:border-amber-700/40"
+                }`}
+              >
+                {registrar === value ? "✓ " : ""}{label}
+              </button>
+            ))}
           </motion.div>
 
           {/* Capability Pills — grouped by Type / Standard / Token / Feature */}
