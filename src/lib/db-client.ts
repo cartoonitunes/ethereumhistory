@@ -1616,7 +1616,9 @@ export async function getDocumentedContractsFromDb(params: {
   const limit = Math.min(Math.max(params.limit ?? 24, 1), 100);
   const offset = Math.max(params.offset ?? 0, 0);
 
-  const conditions: SQL[] = [
+  // When a registrar filter is active, show ALL contracts with that name regardless of
+  // documentation state (most registrar contracts aren't documented yet).
+  const conditions: SQL[] = params.registrar != null ? [] : [
     isNotNull(schema.contracts.shortDescription),
     ne(schema.contracts.shortDescription, ""),
   ];
@@ -1718,7 +1720,7 @@ export async function getDocumentedContractsCountFromDb(params: {
   sort?: string | null;
 }): Promise<number> {
   const database = getDb();
-  const conditions: SQL[] = [
+  const conditions: SQL[] = params.registrar != null ? [] : [
     isNotNull(schema.contracts.shortDescription),
     ne(schema.contracts.shortDescription, ""),
   ];
@@ -1812,6 +1814,7 @@ export async function getUndocumentedContractsFromDb(params: {
   year?: number | null;
   capabilityKeys?: string[] | null;
   verification?: string | null;
+  registrar?: RegistrarType | "any" | null;
   sort?: string | null;
   limit?: number;
   offset?: number;
@@ -1850,6 +1853,12 @@ export async function getUndocumentedContractsFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+  if (params.registrar != null) {
+    const addrs = Object.entries(FRONTIER_REGISTRAR_NAMES)
+      .filter(([, v]) => params.registrar === "any" || v.registrar === params.registrar)
+      .map(([addr]) => addr);
+    if (addrs.length > 0) conditions.push(inArray(schema.contracts.address, addrs));
   }
 
   if (params.verification === "unverified") {
@@ -1914,6 +1923,7 @@ export async function getUndocumentedContractsCountFromDb(params: {
   year?: number | null;
   capabilityKeys?: string[] | null;
   verification?: string | null;
+  registrar?: RegistrarType | "any" | null;
   sort?: string | null;
 }): Promise<number> {
   const database = getDb();
@@ -1947,6 +1957,12 @@ export async function getUndocumentedContractsCountFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+  if (params.registrar != null) {
+    const addrs = Object.entries(FRONTIER_REGISTRAR_NAMES)
+      .filter(([, v]) => params.registrar === "any" || v.registrar === params.registrar)
+      .map(([addr]) => addr);
+    if (addrs.length > 0) conditions.push(inArray(schema.contracts.address, addrs));
   }
   if (params.verification === "unverified") {
     conditions.push(
