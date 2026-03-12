@@ -16,6 +16,7 @@ import {
   Users,
   Coins,
   Code,
+  Database,
   LogIn,
   Save,
   X,
@@ -549,6 +550,12 @@ function OverviewTab({
   const tokenSupply = contract.tokenTotalSupply;
   const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply || contract.tokenLogo;
 
+  const frontierEntryForSection = getFrontierRegistrarEntry(contract.address);
+  const balanceDisplay = contract.currentBalanceWei && contract.currentBalanceWei !== "0"
+    ? `${(Number(BigInt(contract.currentBalanceWei)) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH`
+    : null;
+  const hasContractInfo = frontierEntryForSection || balanceDisplay || contract.codeSizeBytes || contract.transactionCount || contract.deploymentTxHash || contract.gasUsed;
+
   return (
     <div className="grid lg:grid-cols-3 gap-6 min-w-0">
       {/* Main info */}
@@ -596,6 +603,67 @@ function OverviewTab({
                   label="Total Supply"
                   value={formatTokenSupplyDisplay(tokenSupply, tokenDecimals ?? 0)}
                 />
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Contract Information */}
+        {hasContractInfo && (
+          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+            <div className="flex items-center gap-2 mb-4">
+              <Database className="w-5 h-5 text-obsidian-400" />
+              <h2 className="text-lg font-semibold">Contract Information</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {frontierEntryForSection && (() => {
+                const regInfo = REGISTRAR_INFO[frontierEntryForSection.registrar];
+                return (
+                  <FactItem
+                    label="Registered Name"
+                    value={
+                      <div className="space-y-1">
+                        <div className="font-medium">{frontierEntryForSection.name}</div>
+                        <a
+                          href={regInfo.etherscanUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                        >
+                          {regInfo.label} ↗
+                        </a>
+                        <div className="text-xs text-obsidian-500 leading-relaxed">{regInfo.description}</div>
+                      </div>
+                    }
+                  />
+                );
+              })()}
+              {balanceDisplay && (
+                <FactItem label="ETH Balance" value={balanceDisplay} />
+              )}
+              {contract.codeSizeBytes != null && (
+                <FactItem label="Bytecode Size" value={`${contract.codeSizeBytes.toLocaleString()} bytes`} />
+              )}
+              {contract.transactionCount != null && (
+                <FactItem label="Transactions" value={contract.transactionCount.toLocaleString()} />
+              )}
+              {contract.deploymentTxHash && (
+                <FactItem
+                  label="Creation Tx"
+                  value={
+                    <a
+                      href={`https://etherscan.io/tx/${contract.deploymentTxHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs text-ether-400 hover:text-ether-300 transition-colors break-all"
+                    >
+                      {contract.deploymentTxHash.slice(0, 18)}…{contract.deploymentTxHash.slice(-6)}
+                    </a>
+                  }
+                />
+              )}
+              {contract.gasUsed != null && (
+                <FactItem label="Gas at Deploy" value={contract.gasUsed.toLocaleString()} />
               )}
             </div>
           </section>
