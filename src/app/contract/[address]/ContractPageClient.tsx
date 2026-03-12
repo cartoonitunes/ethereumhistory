@@ -554,7 +554,7 @@ function OverviewTab({
   const balanceDisplay = contract.currentBalanceWei && contract.currentBalanceWei !== "0"
     ? `${(Number(BigInt(contract.currentBalanceWei)) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH`
     : null;
-  const hasContractInfo = frontierEntryForSection || balanceDisplay || contract.codeSizeBytes || contract.transactionCount || contract.deploymentTxHash || contract.gasUsed;
+  const hasContractInfo = frontierEntryForSection || balanceDisplay || contract.gasUsed;
 
   return (
     <div className="grid lg:grid-cols-3 gap-6 min-w-0">
@@ -640,27 +640,6 @@ function OverviewTab({
               })()}
               {balanceDisplay && (
                 <FactItem label="ETH Balance" value={balanceDisplay} />
-              )}
-              {contract.codeSizeBytes != null && (
-                <FactItem label="Bytecode Size" value={`${contract.codeSizeBytes.toLocaleString()} bytes`} />
-              )}
-              {contract.transactionCount != null && (
-                <FactItem label="Transactions" value={contract.transactionCount.toLocaleString()} />
-              )}
-              {contract.deploymentTxHash && (
-                <FactItem
-                  label="Creation Tx"
-                  value={
-                    <a
-                      href={`https://etherscan.io/tx/${contract.deploymentTxHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs text-ether-400 hover:text-ether-300 transition-colors break-all"
-                    >
-                      {contract.deploymentTxHash.slice(0, 18)}…{contract.deploymentTxHash.slice(-6)}
-                    </a>
-                  }
-                />
               )}
               {contract.gasUsed != null && (
                 <FactItem label="Gas at Deploy" value={contract.gasUsed.toLocaleString()} />
