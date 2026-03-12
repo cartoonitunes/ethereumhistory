@@ -299,8 +299,23 @@ export async function POST(
     }
 
     // Source code and verification fields (trusted historians only)
+    // Source code may only be set when the contract is being verified in this same
+    // request, or is already marked as verified. Prevents unverified code from being
+    // added to contracts that haven't been proven.
     const verificationPatch: Record<string, string | null> = {};
     if (contractPatch.sourceCode !== undefined) {
+      const isBeingVerified = contractPatch.verificationStatus === "verified";
+      const alreadyVerified = currentContract?.verificationStatus === "verified";
+      if (!isBeingVerified && !alreadyVerified) {
+        return NextResponse.json(
+          {
+            data: null,
+            error:
+              "Source code can only be added to verified contracts. Set verification_status to 'verified' in the same request, or verify the contract first.",
+          },
+          { status: 403 }
+        );
+      }
       verificationPatch.sourceCode = String(contractPatch.sourceCode || "").trim() || null;
       fieldsChanged.push("sourceCode");
     }
