@@ -64,9 +64,11 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
   }
 
   if (variant === "featured") {
-    const featured = contract as FeaturedContract;
+    const featured = contract as FeaturedContract & { tokenName?: string | null };
     const registrarEntry = getFrontierRegistrarEntry(address);
     const registrarInfo = registrarEntry ? REGISTRAR_INFO[registrarEntry.registrar] : null;
+    // On-chain name() takes priority over registrar name (it's immutable on the contract)
+    const displayName = featured.tokenName || registrarEntry?.name || featured.name || "Unknown Contract";
     return (
       <Link href={`/contract/${address}`}>
         <motion.div
@@ -81,7 +83,7 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
           {/* Content */}
           <div className="space-y-3">
             <h3 className="font-semibold text-lg text-obsidian-100 group-hover:text-ether-400 transition-colors pr-20">
-              {registrarEntry?.name || featured.name || "Unknown Contract"}
+              {displayName}
             </h3>
 
             <code className="text-sm text-obsidian-500 font-mono block">

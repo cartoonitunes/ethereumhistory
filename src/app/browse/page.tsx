@@ -25,7 +25,7 @@ interface BrowseContract {
   tokenSymbol: string | null;
 }
 
-function toFeaturedContract(c: BrowseContract): FeaturedContract {
+function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: string | null } {
   return {
     address: c.address,
     name: c.name,
@@ -33,6 +33,7 @@ function toFeaturedContract(c: BrowseContract): FeaturedContract {
     eraId: c.eraId || "frontier",
     deploymentDate: c.deploymentDate || "Unknown",
     significance: "",
+    tokenName: c.tokenName,
   };
 }
 
