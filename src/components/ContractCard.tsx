@@ -81,7 +81,7 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
           {/* Content */}
           <div className="space-y-3">
             <h3 className="font-semibold text-lg text-obsidian-100 group-hover:text-ether-400 transition-colors pr-20">
-              {featured.name || "Unknown Contract"}
+              {registrarEntry?.name || featured.name || "Unknown Contract"}
             </h3>
 
             <code className="text-sm text-obsidian-500 font-mono block">
@@ -91,9 +91,8 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
             {registrarEntry && registrarInfo && (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
-                  {registrarEntry.name}
+                  {registrarInfo.label}
                 </span>
-                <span className="text-xs text-obsidian-600">{registrarInfo.label}</span>
               </div>
             )}
 
