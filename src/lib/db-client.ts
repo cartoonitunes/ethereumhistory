@@ -9,6 +9,7 @@ import postgres from "postgres";
 import { eq, like, ilike, desc, asc, and, or, SQL, sql, inArray, isNotNull, ne, isNull, lt, gte, lte } from "drizzle-orm";
 import * as schema from "./schema";
 import crypto from "crypto";
+import { FRONTIER_REGISTRAR_NAMES, type RegistrarType } from "./frontier-registrar";
 import type {
   Contract as AppContract,
   ContractSimilarity,
@@ -1606,6 +1607,7 @@ export async function getDocumentedContractsFromDb(params: {
   year?: number | null;
   capabilityKeys?: string[] | null;
   verification?: string | null;
+  registrar?: RegistrarType | "any" | null;
   sort?: string | null;
   limit?: number;
   offset?: number;
@@ -1642,6 +1644,12 @@ export async function getDocumentedContractsFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+  if (params.registrar != null) {
+    const addrs = Object.entries(FRONTIER_REGISTRAR_NAMES)
+      .filter(([, v]) => params.registrar === "any" || v.registrar === params.registrar)
+      .map(([addr]) => addr);
+    if (addrs.length > 0) conditions.push(inArray(schema.contracts.address, addrs));
   }
   if (params.verification === "unverified") {
     conditions.push(
@@ -1706,6 +1714,7 @@ export async function getDocumentedContractsCountFromDb(params: {
   year?: number | null;
   capabilityKeys?: string[] | null;
   verification?: string | null;
+  registrar?: RegistrarType | "any" | null;
   sort?: string | null;
 }): Promise<number> {
   const database = getDb();
@@ -1737,6 +1746,12 @@ export async function getDocumentedContractsCountFromDb(params: {
     conditions.push(
       (() => { const keys = params.capabilityKeys!; const keyList = sql.join(keys.map((k) => sql`${k}`), sql`, `); return sql`${schema.contracts.address} IN (SELECT contract_address FROM contract_capabilities WHERE capability_key IN (${keyList}) AND status IN ('present', 'probable') GROUP BY contract_address HAVING COUNT(DISTINCT capability_key) = ${keys.length})`; })()
     );
+  }
+    if (params.registrar != null) {
+    const addrs = Object.entries(FRONTIER_REGISTRAR_NAMES)
+      .filter(([, v]) => params.registrar === "any" || v.registrar === params.registrar)
+      .map(([addr]) => addr);
+    if (addrs.length > 0) conditions.push(inArray(schema.contracts.address, addrs));
   }
   if (params.verification === "unverified") {
     conditions.push(
