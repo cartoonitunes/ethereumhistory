@@ -2,10 +2,18 @@
  * Frontier Name Registrar lookup table.
  *
  * Decoded from on-chain calldata for two Frontier-era registrars:
- *   - GlobalRegistrar: 0xc6d9d2cd449a754c494264e1809c50e34d64562b (block 51,844)
- *     The registrar referenced in the original ethereum.org "Register a name for your coin" tutorial.
- *   - NameRegistry:    0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00 (block 52,426)
- *     A parallel registrar used by exchanges (Kraken, Bittrex, etc.)
+ *
+ *   - "GlobalRegistrar": 0xc6d9d2cd449a754c494264e1809c50e34d64562b
+ *     linagee's personal EOA (0x3d0768da09ce77d25e2d998e6a7b6ed4b9116c2d), used as a
+ *     trusted off-chain name registry. Referenced in the original ethereum.org
+ *     "Register a name for your coin" tutorial. People sent structured calldata
+ *     (reserve/setAddress selectors) to this address; linagee's server maintained
+ *     state off-chain. Classic Frontier "virtual contract" pattern. linagee later
+ *     created the LINAGEE Name Registrar (LNR), one of the earliest ERC-20 tokens.
+ *
+ *   - NameRegistry: 0xa1a111bc074c9cfa781f0c38e63bd51c91b8af00 (block 52,426)
+ *     An actual on-chain Solidity contract. Used by exchanges (Kraken, Bittrex, etc.)
+ *     for ticker-style name registration.
  *
  * Maps the last-resolved address for each registered name.
  * All addresses are lowercase.
