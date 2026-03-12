@@ -28,6 +28,7 @@ import {
 import { Header } from "@/components/Header";
 import { DonationBanner } from "@/components/DonationBanner";
 import { AddressSearch } from "@/components/AddressSearch";
+import { getFrontierRegistrarEntry } from "@/lib/frontier-registrar";
 import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
 import { SuggestEditForm } from "@/components/SuggestEditForm";
 import ShareOnX from "@/components/ShareOnX";
@@ -220,7 +221,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     media,
   } = data!;
 
-  const displayName = contract.tokenName || contract.ensName || contract.etherscanContractName || null;
+  const frontierEntry = getFrontierRegistrarEntry(address);
+  const displayName = frontierEntry?.name || contract.tokenName || contract.ensName || contract.etherscanContractName || null;
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
   const shortDescriptionText = contract.shortDescription?.trim();
   const shortDescriptionDisplay = shortDescriptionText
@@ -288,6 +290,14 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                 {contract.heuristics.contractType && (
                   <span className="text-sm px-2 py-0.5 rounded-full bg-obsidian-800 text-obsidian-400 heuristic-badge">
                     {getContractTypeLabel(contract.heuristics.contractType)}
+                  </span>
+                )}
+                {frontierEntry && (
+                  <span
+                    className="text-sm px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-700/40"
+                    title={`Registered on the Frontier ${frontierEntry.registrar}`}
+                  >
+                    Frontier Registered Name
                   </span>
                 )}
               </div>
