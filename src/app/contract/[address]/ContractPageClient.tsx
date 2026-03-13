@@ -603,8 +603,11 @@ function SiblingBytecodeTab({
     <div className="space-y-4">
       <div className="p-4 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
         <p className="text-sm text-obsidian-400">
-          These {siblings.count} contract{siblings.count !== 1 ? "s" : ""} share identical runtime
+          {siblings.count.toLocaleString()} other contract{siblings.count !== 1 ? "s" : ""} share identical runtime
           bytecode — compiled from the same source with the same compiler settings.
+          {siblings.contracts.length < siblings.count && (
+            <span className="text-obsidian-500"> Showing first {siblings.contracts.length.toLocaleString()}.</span>
+          )}
         </p>
         {siblings.hash && (
           <p className="mt-1 text-xs text-obsidian-600 font-mono">

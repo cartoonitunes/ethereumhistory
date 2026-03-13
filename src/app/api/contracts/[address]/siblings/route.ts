@@ -29,7 +29,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const hash = target.runtimeBytecodeHash;
 
-    // Fetch all siblings (same hash, different address)
+    // Get true total count of siblings
+    const [{ totalCount }] = await db
+      .select({ totalCount: sql<number>`count(*)::int` })
+      .from(contracts)
+      .where(
+        and(
+          eq(contracts.runtimeBytecodeHash, hash),
+          ne(contracts.address, normalizedAddress)
+        )
+      );
+
+    // Fetch up to 100 siblings for display
     const siblings = await db
       .select({
         address: contracts.address,
@@ -53,8 +64,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       hash,
-      count: siblings.length,
-      contracts: siblings,
+      count: totalCount,      // true sibling count
+      contracts: siblings,    // up to 100 for display
     });
   } catch (error) {
     console.error("Siblings API error:", error);
