@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ShieldCheck, ExternalLink } from "lucide-react";
-import { isDatabaseConfigured, getVerifiedContractsFromDb } from "@/lib/db-client";
+import { isDatabaseConfigured, getVerifiedContractsFromDb, getSiblingCountsForAddresses } from "@/lib/db-client";
 import { formatAddress, formatDate } from "@/lib/utils";
 import { Header } from "@/components/Header";
 
@@ -98,6 +98,7 @@ export default async function VerifiedPage() {
   }
 
   const contracts = await getVerifiedContractsFromDb();
+  const siblingCounts = await getSiblingCountsForAddresses(contracts.map((c) => c.address));
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
@@ -154,6 +155,11 @@ export default async function VerifiedPage() {
                         <h2 className="text-base font-semibold text-obsidian-100 truncate">
                           {name}
                         </h2>
+                        {(siblingCounts[contract.address] ?? 0) > 0 && (
+                          <span className="flex-none rounded-full border border-obsidian-700 bg-obsidian-800 px-2 py-0.5 text-xs font-mono text-obsidian-400">
+                            ×{(siblingCounts[contract.address] ?? 0) + 1}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-obsidian-500 font-mono mb-2">
                         {contract.address}
