@@ -82,21 +82,24 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     return "overview";
   });
 
+  type SiblingContract = {
+    address: string;
+    etherscanContractName: string | null;
+    tokenName: string | null;
+    ensName: string | null;
+    deploymentBlock: number | null;
+    deploymentTimestamp: string | null;
+    verificationMethod: string | null;
+    codeSizeBytes: number | null;
+  };
   // Siblings (same bytecode) state
   const [siblings, setSiblings] = useState<{
     hash: string | null;
     count: number;
-    contracts: Array<{
-      address: string;
-      etherscanContractName: string | null;
-      tokenName: string | null;
-      ensName: string | null;
-      deploymentBlock: number | null;
-      deploymentTimestamp: string | null;
-      verificationMethod: string | null;
-      codeSizeBytes: number | null;
-    }>;
+    contracts: SiblingContract[];
+    hasMore: boolean;
   } | null>(null);
+  const [siblingsLoading, setSiblingsLoading] = useState(false);
 
   const setActiveTab = useCallback((tab: TabId) => {
     setActiveTabRaw(tab);
@@ -160,6 +163,25 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     loadSiblings();
     return () => { cancelled = true; };
   }, [address]);
+
+  const loadMoreSiblings = useCallback(async () => {
+    if (!siblings || siblingsLoading) return;
+    setSiblingsLoading(true);
+    try {
+      const offset = siblings.contracts.length;
+      const res = await fetch(`/api/contracts/${address}/siblings?offset=${offset}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      setSiblings(prev => prev ? {
+        ...json,
+        contracts: [...prev.contracts, ...json.contracts],
+      } : json);
+    } catch {
+      // non-fatal
+    } finally {
+      setSiblingsLoading(false);
+    }
+  }, [address, siblings, siblingsLoading]);
 
   const handleCopy = async () => {
     const success = await copyToClipboard(address);
@@ -533,7 +555,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             />
           )}
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
-            <SiblingBytecodeTab siblings={siblings} currentAddress={address} />
+            <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
           )}
         </motion.div>
       </div>
@@ -582,6 +604,8 @@ function TabButton({
 function SiblingBytecodeTab({
   siblings,
   currentAddress,
+  onLoadMore,
+  loadingMore,
 }: {
   siblings: {
     hash: string | null;
@@ -596,8 +620,11 @@ function SiblingBytecodeTab({
       verificationMethod: string | null;
       codeSizeBytes: number | null;
     }>;
+    hasMore: boolean;
   };
   currentAddress: string;
+  onLoadMore: () => void;
+  loadingMore: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -672,6 +699,30 @@ function SiblingBytecodeTab({
           </tbody>
         </table>
       </div>
+
+      {/* Load more */}
+      {siblings.hasMore && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-obsidian-500">
+            Showing {siblings.contracts.length.toLocaleString()} of {siblings.count.toLocaleString()}
+          </p>
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 rounded-lg border border-obsidian-700 bg-obsidian-900 px-4 py-2 text-sm text-obsidian-300 hover:border-obsidian-600 hover:text-obsidian-100 disabled:opacity-50 transition-colors"
+          >
+            {loadingMore ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : null}
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
+      {!siblings.hasMore && siblings.contracts.length > 0 && (
+        <p className="pt-2 text-xs text-obsidian-600 text-center">
+          All {siblings.count.toLocaleString()} contracts shown
+        </p>
+      )}
     </div>
   );
 }

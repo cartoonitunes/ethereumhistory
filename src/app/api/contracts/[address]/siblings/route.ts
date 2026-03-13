@@ -9,10 +9,13 @@ interface RouteParams {
   params: Promise<{ address: string }>;
 }
 
+const PAGE_SIZE = 100;
+
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const { address } = await params;
     const normalizedAddress = address.toLowerCase();
+    const offset = Math.max(0, parseInt(request.nextUrl.searchParams.get("offset") ?? "0", 10) || 0);
 
     const db = getDb();
 
@@ -60,12 +63,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
       )
       .orderBy(contracts.deploymentBlock)
-      .limit(100);
+      .limit(PAGE_SIZE)
+      .offset(offset);
 
     return NextResponse.json({
       hash,
-      count: totalCount,      // true sibling count
-      contracts: siblings,    // up to 100 for display
+      count: totalCount,
+      contracts: siblings,
+      offset,
+      hasMore: offset + siblings.length < totalCount,
     });
   } catch (error) {
     console.error("Siblings API error:", error);
