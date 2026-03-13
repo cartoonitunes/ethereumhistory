@@ -200,7 +200,15 @@ export async function updateContractRuntimeBytecodeFromDb(
     updatedAt: new Date(),
   };
 
-  if (patch.runtimeBytecode !== undefined) updates.runtimeBytecode = patch.runtimeBytecode;
+  if (patch.runtimeBytecode !== undefined) {
+    updates.runtimeBytecode = patch.runtimeBytecode;
+    // Compute bytecode hash for fast family lookups
+    if (patch.runtimeBytecode) {
+      updates.runtimeBytecodeHash = crypto.createHash("md5").update(patch.runtimeBytecode).digest("hex");
+    } else {
+      updates.runtimeBytecodeHash = null;
+    }
+  }
   if (patch.codeSizeBytes !== undefined) updates.codeSizeBytes = patch.codeSizeBytes;
 
   if (Object.keys(updates).length <= 1) return;
@@ -2786,6 +2794,64 @@ export async function deleteContractMediaFromDb(params: {
 // =============================================================================
 // Verified Contracts
 // =============================================================================
+
+/**
+ * Returns a map of address -> sibling count for contracts that share the same runtime_bytecode_hash.
+ * Used by the /proofs page to show "×N" badges.
+ */
+export async function getSiblingCountsForAddresses(
+  addresses: string[]
+): Promise<Record<string, number>> {
+  if (addresses.length === 0) return {};
+  const database = getDb();
+
+  // Get bytecode hashes for the given addresses
+  const hashRows = await database
+    .select({
+      address: schema.contracts.address,
+      runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash,
+    })
+    .from(schema.contracts)
+    .where(inArray(schema.contracts.address, addresses));
+
+  const hashToAddresses: Record<string, string[]> = {};
+  for (const row of hashRows) {
+    if (!row.runtimeBytecodeHash) continue;
+    if (!hashToAddresses[row.runtimeBytecodeHash]) {
+      hashToAddresses[row.runtimeBytecodeHash] = [];
+    }
+    hashToAddresses[row.runtimeBytecodeHash].push(row.address);
+  }
+
+  const uniqueHashes = Object.keys(hashToAddresses);
+  if (uniqueHashes.length === 0) return {};
+
+  // Count contracts per hash (all contracts, not just verified ones)
+  const countRows = await database
+    .select({
+      runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(schema.contracts)
+    .where(inArray(schema.contracts.runtimeBytecodeHash, uniqueHashes))
+    .groupBy(schema.contracts.runtimeBytecodeHash);
+
+  const hashToTotal: Record<string, number> = {};
+  for (const row of countRows) {
+    if (row.runtimeBytecodeHash) {
+      hashToTotal[row.runtimeBytecodeHash] = row.count;
+    }
+  }
+
+  // Build address -> sibling count (total minus 1 = siblings)
+  const result: Record<string, number> = {};
+  for (const row of hashRows) {
+    if (!row.runtimeBytecodeHash) continue;
+    const total = hashToTotal[row.runtimeBytecodeHash] ?? 1;
+    result[row.address] = total - 1; // siblings = total minus self
+  }
+  return result;
+}
 
 export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const database = getDb();

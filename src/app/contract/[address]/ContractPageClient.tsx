@@ -72,8 +72,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
-  const validTabs = useMemo(() => new Set(["overview", "history", "code"] as const), []);
-  type TabId = "overview" | "history" | "code";
+  const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings"] as const), []);
+  type TabId = "overview" | "history" | "code" | "siblings";
   const [activeTab, setActiveTabRaw] = useState<TabId>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace("#", "") as TabId;
@@ -81,6 +81,22 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     }
     return "overview";
   });
+
+  // Siblings (same bytecode) state
+  const [siblings, setSiblings] = useState<{
+    hash: string | null;
+    count: number;
+    contracts: Array<{
+      address: string;
+      etherscanContractName: string | null;
+      tokenName: string | null;
+      ensName: string | null;
+      deploymentBlock: number | null;
+      deploymentTimestamp: string | null;
+      verificationMethod: string | null;
+      codeSizeBytes: number | null;
+    }>;
+  } | null>(null);
 
   const setActiveTab = useCallback((tab: TabId) => {
     setActiveTabRaw(tab);
@@ -126,6 +142,24 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
       cancelled = true;
     };
   }, []);
+
+  // Load siblings (same bytecode contracts)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSiblings() {
+      try {
+        const res = await fetch(`/api/contracts/${address}/siblings`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        setSiblings(json);
+      } catch {
+        // non-fatal
+      }
+    }
+    loadSiblings();
+    return () => { cancelled = true; };
+  }, [address]);
 
   const handleCopy = async () => {
     const success = await copyToClipboard(address);
@@ -445,6 +479,18 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             >
               Code
             </TabButton>
+            {siblings && siblings.count > 0 && (
+              <TabButton
+                active={activeTab === "siblings"}
+                onClick={() => { setActiveTab("siblings"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "siblings" } }); }}
+                icon={<Copy className="w-4 h-4" />}
+              >
+                Same Bytecode{" "}
+                <span className="ml-1 rounded-full bg-obsidian-700 px-1.5 py-0.5 text-xs font-mono text-obsidian-300">
+                  {siblings.count}
+                </span>
+              </TabButton>
+            )}
           </div>
         </div>
 
@@ -485,6 +531,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               sourceCode={contract.sourceCode}
               abi={contract.abi}
             />
+          )}
+          {activeTab === "siblings" && siblings && siblings.count > 0 && (
+            <SiblingBytecodeTab siblings={siblings} currentAddress={address} />
           )}
         </motion.div>
       </div>
@@ -527,6 +576,100 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+function SiblingBytecodeTab({
+  siblings,
+  currentAddress,
+}: {
+  siblings: {
+    hash: string | null;
+    count: number;
+    contracts: Array<{
+      address: string;
+      etherscanContractName: string | null;
+      tokenName: string | null;
+      ensName: string | null;
+      deploymentBlock: number | null;
+      deploymentTimestamp: string | null;
+      verificationMethod: string | null;
+      codeSizeBytes: number | null;
+    }>;
+  };
+  currentAddress: string;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="p-4 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
+        <p className="text-sm text-obsidian-400">
+          These {siblings.count} contract{siblings.count !== 1 ? "s" : ""} share identical runtime
+          bytecode — compiled from the same source with the same compiler settings.
+        </p>
+        {siblings.hash && (
+          <p className="mt-1 text-xs text-obsidian-600 font-mono">
+            bytecode md5: {siblings.hash}
+          </p>
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-obsidian-800">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-obsidian-800 bg-obsidian-900/50">
+              <th className="text-left px-4 py-3 text-xs font-medium text-obsidian-400 uppercase tracking-wide">Address</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-obsidian-400 uppercase tracking-wide">Name</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-obsidian-400 uppercase tracking-wide">Deployed</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-obsidian-400 uppercase tracking-wide">Verification</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-obsidian-800">
+            {siblings.contracts.map((c) => {
+              const name = c.etherscanContractName || c.tokenName || c.ensName || null;
+              const date = c.deploymentTimestamp
+                ? new Date(c.deploymentTimestamp).toLocaleDateString("en-US", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : c.deploymentBlock
+                  ? `Block ${c.deploymentBlock.toLocaleString()}`
+                  : "Unknown";
+              const isVerified = c.verificationMethod === "exact_bytecode_match" ||
+                c.verificationMethod === "author_published_source" ||
+                c.verificationMethod === "etherscan_verified";
+
+              return (
+                <tr key={c.address} className="hover:bg-obsidian-900/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/contract/${c.address}`}
+                      className="font-mono text-xs text-ether-400 hover:text-ether-300 transition-colors"
+                    >
+                      {formatAddress(c.address)}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-obsidian-300 text-xs">
+                    {name || <span className="text-obsidian-600">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-obsidian-400 text-xs whitespace-nowrap">{date}</td>
+                  <td className="px-4 py-3">
+                    {isVerified ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
+                        <Check className="w-3 h-3" />
+                        Verified
+                      </span>
+                    ) : (
+                      <span className="text-xs text-obsidian-600">Unverified</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

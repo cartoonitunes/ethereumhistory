@@ -81,6 +81,7 @@ export const contracts = pgTable(
     trigramHash: text("trigram_hash"),
     controlFlowSignature: text("control_flow_signature"),
     shapeSignature: text("shape_signature"),
+    runtimeBytecodeHash: text("runtime_bytecode_hash"),
 
     // Verification proof data (compiler archaeology)
     compilerLanguage: text("compiler_language"),
