@@ -11,6 +11,7 @@ const DONATION_WALLET_LOWER = DONATION_WALLET.toLowerCase();
 const ETHERSCAN_API_KEY = "AHMV3WAI75TQVJI2XEFUUKFKK1KJTFY1BD";
 const USDC_CONTRACT_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const USDC_CONTRACT_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+const BASE_RPC_URL = process.env.BASE_RPC_URL ?? "";
 
 export interface OnChainDonation {
   txHash: string;
@@ -33,18 +34,19 @@ export async function fetchDonations(): Promise<OnChainDonation[]> {
     return cache.data;
   }
 
-  const [ethTxs, ethInternalTxs, usdcTxs, baseEthTxs, baseUsdcTxs] = await Promise.all([
+  const [ethTxs, ethInternalTxs, usdcTxs, baseEthTxs, baseUsdcTxs, baseAlchemyTxs] = await Promise.all([
     fetchEthTransactions(),
     fetchEthInternalTransactions(),
     fetchUsdcTransfers(),
     fetchBaseEthTransactions(),
     fetchBaseUsdcTransfers(),
+    fetchBaseAlchemyTransfers(),
   ]);
 
   // Deduplicate by txHash (a tx could appear in both lists in edge cases)
   const seen = new Set<string>();
   const all: OnChainDonation[] = [];
-  for (const tx of [...ethTxs, ...ethInternalTxs, ...usdcTxs, ...baseEthTxs, ...baseUsdcTxs]) {
+  for (const tx of [...ethTxs, ...ethInternalTxs, ...usdcTxs, ...baseEthTxs, ...baseUsdcTxs, ...baseAlchemyTxs]) {
     if (!seen.has(tx.txHash)) {
       seen.add(tx.txHash);
       all.push(tx);
@@ -238,6 +240,61 @@ async function fetchBaseUsdcTransfers(): Promise<OnChainDonation[]> {
       });
   } catch (err) {
     console.warn("[donations] Failed to fetch Base USDC transfers:", err);
+    return [];
+  }
+}
+
+async function fetchBaseAlchemyTransfers(): Promise<OnChainDonation[]> {
+  if (!BASE_RPC_URL) return [];
+  try {
+    const res = await fetch(BASE_RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "alchemy_getAssetTransfers",
+        params: [{
+          toAddress: DONATION_WALLET,
+          category: ["external", "erc20"],
+          withMetadata: true,
+          excludeZeroValue: true,
+          maxCount: "0x64",
+          order: "desc",
+        }],
+        id: 1,
+      }),
+      cache: "no-store",
+    });
+    const json = await res.json();
+    const transfers = json?.result?.transfers ?? [];
+
+    return transfers
+      .filter((t: Record<string, unknown>) => {
+        const asset = t.asset as string;
+        // Include ETH and WETH (fees come in as WETH on Base)
+        return asset === "ETH" || asset === "WETH";
+      })
+      .map((t: Record<string, unknown>) => {
+        const value = parseFloat(String((t.value as number | null) ?? 0));
+        const valueWei = BigInt(Math.round(value * 1e18)).toString();
+        const metadata = t.metadata as Record<string, string> | undefined;
+        const timestamp = metadata?.blockTimestamp
+          ? Math.floor(new Date(metadata.blockTimestamp).getTime() / 1000)
+          : 0;
+        return {
+          txHash: t.hash as string,
+          from: t.from as string,
+          valueWei,
+          ethAmount: value.toFixed(6),
+          tokenSymbol: "ETH" as const,
+          tokenAmount: value.toFixed(6),
+          timestamp,
+          blockNumber: 0,
+          chain: "base" as const,
+        };
+      });
+  } catch (err) {
+    console.warn("[donations] Failed to fetch Base Alchemy transfers:", err);
     return [];
   }
 }
