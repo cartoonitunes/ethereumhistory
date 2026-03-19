@@ -2861,7 +2861,8 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
     .where(
       or(
         eq(schema.contracts.verificationMethod, "exact_bytecode_match"),
-        eq(schema.contracts.verificationMethod, "author_published_source")
+        eq(schema.contracts.verificationMethod, "author_published_source"),
+        eq(schema.contracts.verificationMethod, "partial_match")
       )
     )
     .orderBy(asc(schema.contracts.deploymentTimestamp));
