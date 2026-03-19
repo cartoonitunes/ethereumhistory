@@ -119,12 +119,12 @@ export function DonatePage() {
             <AddressBox
               label="Send ETH"
               value={DONATION_ADDRESS}
-              note="Open your wallet, paste this address, and send any amount of ETH on Ethereum mainnet."
+              note="Open your wallet, paste this address, and send any amount of ETH on Ethereum mainnet or Base."
             />
             <AddressBox
               label="Send USDC"
               value={DONATION_ADDRESS}
-              note="Same address. In your wallet, select USDC as the token, paste this address, and send on Ethereum mainnet."
+              note="Same address. In your wallet, select USDC as the token, paste this address, and send on Ethereum mainnet or Base."
             />
             <div className="bg-obsidian-900/40 border border-obsidian-800 rounded-2xl p-5">
               <p className="text-xs text-obsidian-500 uppercase tracking-widest mb-3">USDC contract (for reference)</p>
