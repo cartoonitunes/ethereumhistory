@@ -33,8 +33,9 @@ export async function fetchDonations(): Promise<OnChainDonation[]> {
     return cache.data;
   }
 
-  const [ethTxs, usdcTxs, baseEthTxs, baseUsdcTxs] = await Promise.all([
+  const [ethTxs, ethInternalTxs, usdcTxs, baseEthTxs, baseUsdcTxs] = await Promise.all([
     fetchEthTransactions(),
+    fetchEthInternalTransactions(),
     fetchUsdcTransfers(),
     fetchBaseEthTransactions(),
     fetchBaseUsdcTransfers(),
@@ -43,7 +44,7 @@ export async function fetchDonations(): Promise<OnChainDonation[]> {
   // Deduplicate by txHash (a tx could appear in both lists in edge cases)
   const seen = new Set<string>();
   const all: OnChainDonation[] = [];
-  for (const tx of [...ethTxs, ...usdcTxs, ...baseEthTxs, ...baseUsdcTxs]) {
+  for (const tx of [...ethTxs, ...ethInternalTxs, ...usdcTxs, ...baseEthTxs, ...baseUsdcTxs]) {
     if (!seen.has(tx.txHash)) {
       seen.add(tx.txHash);
       all.push(tx);
@@ -89,6 +90,42 @@ async function fetchEthTransactions(): Promise<OnChainDonation[]> {
       }));
   } catch (err) {
     console.warn("[donations] Failed to fetch ETH transactions:", err);
+    return [];
+  }
+}
+
+async function fetchEthInternalTransactions(): Promise<OnChainDonation[]> {
+  try {
+    const url =
+      `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal` +
+      `&address=${DONATION_WALLET}&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+
+    if (json.status !== "1" || !Array.isArray(json.result)) {
+      return [];
+    }
+
+    return json.result
+      .filter(
+        (tx: Record<string, string>) =>
+          tx.to?.toLowerCase() === DONATION_WALLET_LOWER &&
+          tx.value !== "0" &&
+          tx.isError === "0"
+      )
+      .map((tx: Record<string, string>) => ({
+        txHash: tx.hash,
+        from: tx.from,
+        valueWei: tx.value,
+        ethAmount: formatEther(BigInt(tx.value)),
+        tokenSymbol: "ETH" as const,
+        tokenAmount: formatEther(BigInt(tx.value)),
+        timestamp: parseInt(tx.timeStamp),
+        blockNumber: parseInt(tx.blockNumber),
+        chain: "ethereum" as const,
+      }));
+  } catch (err) {
+    console.warn("[donations] Failed to fetch internal ETH transactions:", err);
     return [];
   }
 }
