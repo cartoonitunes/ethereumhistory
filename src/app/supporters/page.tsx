@@ -147,50 +147,82 @@ async function getDonationData(): Promise<{
     })
   );
 
-  // Determine founding supporters: first 10 unique donor addresses by timestamp
-  const seenAddresses = new Set<string>();
-  const foundingAddresses = new Set<string>();
-  const sorted = [...txs].sort((a, b) => a.timestamp - b.timestamp);
-  for (const tx of sorted) {
-    const addrLower = tx.from.toLowerCase();
-    if (!seenAddresses.has(addrLower)) {
-      seenAddresses.add(addrLower);
-      if (seenAddresses.size <= 10) {
-        foundingAddresses.add(addrLower);
-      }
+  // Aggregate by donor address
+  const byAddress = new Map<string, {
+    from: string;
+    totalEthWei: bigint;
+    totalUsdc: number;
+    firstTimestamp: number;
+    latestTxHash: string;
+    isClaimed: boolean;
+    chain: "ethereum" | "base";
+  }>();
+
+  for (const tx of txs) {
+    const key = tx.from.toLowerCase();
+    const existing = byAddress.get(key);
+    const ethWei = tx.tokenSymbol === "ETH" ? BigInt(tx.valueWei) : BigInt(0);
+    const usdc = tx.tokenSymbol === "USDC" ? parseFloat(tx.tokenAmount) : 0;
+    const claimed = !!claimsMap[tx.txHash];
+    if (!existing) {
+      byAddress.set(key, {
+        from: tx.from,
+        totalEthWei: ethWei,
+        totalUsdc: usdc,
+        firstTimestamp: tx.timestamp,
+        latestTxHash: tx.txHash,
+        isClaimed: claimed,
+        chain: tx.chain,
+      });
+    } else {
+      existing.totalEthWei += ethWei;
+      existing.totalUsdc += usdc;
+      if (tx.timestamp < existing.firstTimestamp) existing.firstTimestamp = tx.timestamp;
+      if (claimed) existing.isClaimed = true;
     }
   }
 
-  // Build rows
-  const rows: DonationRow[] = txs.map((tx) => {
-    const claim = claimsMap[tx.txHash];
-    const ens = ensMap[tx.from] ?? null;
-    const ethAmount = tx.tokenSymbol === "ETH" ? parseFloat(tx.ethAmount) : 0;
+  // Determine founding supporters: first 10 unique donor addresses by first tx
+  const sortedByFirst = [...byAddress.values()].sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+  const foundingAddresses = new Set(sortedByFirst.slice(0, 10).map((d) => d.from.toLowerCase()));
+
+  // Build rows (one per address)
+  const rows: DonationRow[] = [...byAddress.values()].map((d) => {
+    const claim = Object.values(claimsMap).find((_, i) =>
+      Object.keys(claimsMap)[i] && txs.find((t) => t.from.toLowerCase() === d.from.toLowerCase() && claimsMap[t.txHash])
+    );
+    // Find any claim for this address
+    const addressClaim = txs
+      .filter((t) => t.from.toLowerCase() === d.from.toLowerCase() && claimsMap[t.txHash])
+      .map((t) => claimsMap[t.txHash])[0];
+
+    const ens = ensMap[d.from] ?? null;
+    const ethAmount = parseFloat(formatEther(d.totalEthWei));
     return {
-      txHash: tx.txHash,
-      from: tx.from,
+      txHash: d.latestTxHash,
+      from: d.from,
       ethAmount,
-      tokenSymbol: tx.tokenSymbol,
-      tokenAmount: tx.tokenAmount,
-      timestamp: tx.timestamp,
-      displayName: claim?.displayName ?? ens ?? shortAddress(tx.from),
-      note: claim?.note ?? null,
-      isClaimed: !!claim,
+      tokenSymbol: ethAmount > 0 ? "ETH" : "USDC",
+      tokenAmount: ethAmount > 0 ? ethAmount.toFixed(4) : d.totalUsdc.toFixed(2),
+      timestamp: d.firstTimestamp,
+      displayName: addressClaim?.displayName ?? ens ?? shortAddress(d.from),
+      note: addressClaim?.note ?? null,
+      isClaimed: d.isClaimed,
       tier: getTier(ethAmount),
-      isFounding: foundingAddresses.has(tx.from.toLowerCase()),
-      chain: tx.chain,
+      isFounding: foundingAddresses.has(d.from.toLowerCase()),
+      chain: d.chain,
     };
   });
 
-  // Sort by ETH amount descending (leaderboard order)
+  // Sort by ETH amount descending
   rows.sort((a, b) => b.ethAmount - a.ethAmount || a.timestamp - b.timestamp);
 
-  // Total ETH
+  // Total ETH across all txs
   const totalEthWei = txs
     .filter((t) => t.tokenSymbol === "ETH")
     .reduce((sum, t) => sum + BigInt(t.valueWei), BigInt(0));
 
-  const uniqueDonors = new Set(txs.map((t) => t.from.toLowerCase())).size;
+  const uniqueDonors = byAddress.size;
 
   return {
     donations: rows,
