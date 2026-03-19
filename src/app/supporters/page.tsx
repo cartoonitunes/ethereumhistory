@@ -17,6 +17,83 @@ export const metadata: Metadata = {
 // Revalidate every 5 minutes
 export const revalidate = 300;
 
+const HISTORY_TOKEN = "0xD67A9266D0ae84839f62197713B2D2A9f3a62Ba3";
+const AIRLOCK = "0x660eaaedebc968f8f3694354fa8ec0b4c5ba8d12";
+const INTEGRATOR = "0x123bf3b32fB3986C9251C81430d2542D5054F0d2";
+const WETH_BASE = "0x4200000000000000000000000000000000000006";
+
+interface HistoryTokenStats {
+  priceUsd: string;
+  fdv: number;
+  volume24h: number;
+  liquidity: number;
+  claimableEth: number;
+  graduated: boolean;
+}
+
+async function fetchHistoryTokenStats(): Promise<HistoryTokenStats | null> {
+  try {
+    const [dexRes, claimableRes, migratedRes] = await Promise.all([
+      fetch(`https://api.dexscreener.com/latest/dex/tokens/${HISTORY_TOKEN}`, { cache: "no-store" }),
+      // getIntegratorFees(integrator, WETH)
+      fetch("https://base-rpc.publicnode.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", method: "eth_call",
+          params: [{
+            to: AIRLOCK,
+            data: "0xe7f0d8f1" +
+              "000000000000000000000000" + INTEGRATOR.slice(2) +
+              "000000000000000000000000" + WETH_BASE.slice(2),
+          }, "latest"],
+          id: 1,
+        }),
+        cache: "no-store",
+      }),
+      // getAssetData to check migrationPool != 0xdead
+      fetch("https://base-rpc.publicnode.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", method: "eth_call",
+          params: [{ to: AIRLOCK, data: "0x1652e7b7" + "000000000000000000000000" + HISTORY_TOKEN.slice(2) }, "latest"],
+          id: 2,
+        }),
+        cache: "no-store",
+      }),
+    ]);
+
+    const dex = await dexRes.json();
+    const pair = dex?.pairs?.[0];
+    if (!pair) return null;
+
+    const claimJson = await claimableRes.json();
+    const claimRaw = claimJson?.result ?? "0x0";
+    const claimableEth = parseInt(claimRaw, 16) / 1e18;
+
+    const migratedJson = await migratedRes.json();
+    const migratedData = migratedJson?.result ?? "";
+    // migrationPool is chunk index 6 (0-indexed) in AssetData
+    const chunks = (migratedData.slice(2).match(/.{64}/g) ?? []);
+    const migrationPool = chunks[6] ? "0x" + chunks[6].slice(24) : "0x";
+    const graduated = migrationPool !== "0x" &&
+      !migrationPool.toLowerCase().startsWith("0xdead") &&
+      migrationPool !== "0x0000000000000000000000000000000000000000";
+
+    return {
+      priceUsd: parseFloat(pair.priceUsd ?? "0").toFixed(10).replace(/\.?0+$/, ""),
+      fdv: pair.fdv ?? 0,
+      volume24h: pair.volume?.h24 ?? 0,
+      liquidity: pair.liquidity?.usd ?? 0,
+      claimableEth,
+      graduated,
+    };
+  } catch {
+    return null;
+  }
+}
+
 type Tier = "philanthropist" | "benefactor" | "sponsor" | "patron" | "supporter";
 
 function getTier(ethAmount: number): Tier {
@@ -181,7 +258,10 @@ function formatDate(timestamp: number): string {
 }
 
 export default async function SupportersPage() {
-  const { donations, totalEth, donorCount } = await getDonationData();
+  const [{ donations, totalEth, donorCount }, historyStats] = await Promise.all([
+    getDonationData(),
+    fetchHistoryTokenStats(),
+  ]);
 
   return (
     <div className="min-h-screen bg-obsidian-950">
@@ -209,6 +289,55 @@ export default async function SupportersPage() {
             </div>
           </div>
         </div>
+
+        {/* HISTORY token banner */}
+        {historyStats && (
+          <div className="mb-10 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
+                  <a
+                    href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-obsidian-500 hover:text-ether-400 transition-colors"
+                  >
+                    Base ↗
+                  </a>
+                </div>
+                <p className="text-xs text-obsidian-500 mt-0.5">
+                  {historyStats.graduated
+                    ? "Trading fees claimable by ethereumhistory.eth"
+                    : "1% of trading fees accrue to ethereumhistory.eth at graduation"}
+                </p>
+              </div>
+              {historyStats.claimableEth > 0 && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-ether-500/15 text-ether-300 border border-ether-500/30">
+                  {historyStats.claimableEth.toFixed(4)} ETH claimable
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
+                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">Price</p>
+                <p className="text-sm font-semibold text-obsidian-100">${historyStats.priceUsd}</p>
+              </div>
+              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
+                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">FDV</p>
+                <p className="text-sm font-semibold text-obsidian-100">${historyStats.fdv.toLocaleString()}</p>
+              </div>
+              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
+                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">24h Volume</p>
+                <p className="text-sm font-semibold text-obsidian-100">${historyStats.volume24h.toLocaleString()}</p>
+              </div>
+              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
+                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">Liquidity</p>
+                <p className="text-sm font-semibold text-obsidian-100">${historyStats.liquidity.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tier legend */}
         <div className="flex flex-wrap items-center gap-3 mb-8 justify-center">
