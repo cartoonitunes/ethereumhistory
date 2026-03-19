@@ -60,62 +60,76 @@ async function fetchAlchemyEthTransfers(
   chain: "ethereum" | "base"
 ): Promise<OnChainDonation[]> {
   if (!rpcUrl) return [];
+  const category = chain === "ethereum"
+    ? ["external", "internal", "erc20"]
+    : ["external", "erc20"];
+
+  const all: OnChainDonation[] = [];
+  let pageKey: string | undefined;
+
   try {
-    // L1 supports internal; Base does not
-    const category = chain === "ethereum"
-      ? ["external", "internal", "erc20"]
-      : ["external", "erc20"];
+    do {
+      const params: Record<string, unknown> = {
+        toAddress: DONATION_WALLET,
+        category,
+        withMetadata: true,
+        excludeZeroValue: true,
+        maxCount: "0x64",
+        order: "desc",
+      };
+      if (pageKey) params.pageKey = pageKey;
 
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "alchemy_getAssetTransfers",
-        params: [{
-          toAddress: DONATION_WALLET,
-          category,
-          withMetadata: true,
-          excludeZeroValue: true,
-          maxCount: "0x64",
-          order: "desc",
-        }],
-        id: 1,
-      }),
-      cache: "no-store",
-    });
+      const res = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "alchemy_getAssetTransfers",
+          params: [params],
+          id: 1,
+        }),
+        cache: "no-store",
+      });
 
-    const json = await res.json();
-    const transfers: Record<string, unknown>[] = json?.result?.transfers ?? [];
+      const json = await res.json();
+      const result = json?.result ?? {};
+      const transfers: Record<string, unknown>[] = result.transfers ?? [];
+      pageKey = result.pageKey;
 
-    return transfers
-      .filter((t) => {
+      for (const t of transfers) {
         const asset = t.asset as string;
-        // ETH (native), WETH (fees on Base come in as WETH)
-        return asset === "ETH" || asset === "WETH";
-      })
-      .map((t) => {
-        const value = parseFloat(String(t.value ?? 0));
-        const valueWei = BigInt(Math.round(value * 1e18)).toString();
+        if (asset !== "ETH" && asset !== "WETH") continue;
+
+        // Use rawContract.value for precise wei; fall back to float math
+        const raw = (t.rawContract as Record<string, string> | undefined)?.value;
+        const valueWei = raw && raw !== "0x"
+          ? BigInt(raw).toString()
+          : BigInt(Math.round(parseFloat(String(t.value ?? 0)) * 1e18)).toString();
+
         const meta = t.metadata as Record<string, string> | undefined;
         const timestamp = meta?.blockTimestamp
           ? Math.floor(new Date(meta.blockTimestamp).getTime() / 1000)
           : 0;
-        return {
-          txHash: t.hash as string,
+        const ethAmount = (Number(BigInt(valueWei)) / 1e18).toFixed(6);
+
+        all.push({
+          txHash: (t.uniqueId as string) ?? (t.hash as string),
           from: t.from as string,
           valueWei,
-          ethAmount: value.toFixed(6),
+          ethAmount,
           tokenSymbol: "ETH" as const,
-          tokenAmount: value.toFixed(6),
+          tokenAmount: ethAmount,
           timestamp,
           blockNumber: 0,
           chain,
-        };
-      });
+        });
+      }
+    } while (pageKey);
+
+    return all;
   } catch (err) {
     console.warn(`[donations] Failed to fetch Alchemy ${chain} transfers:`, err);
-    return [];
+    return all;
   }
 }
 
