@@ -77,6 +77,7 @@ interface DonationRow {
   isClaimed: boolean;
   tier: Tier;
   isFounding: boolean;
+  chain: "ethereum" | "base";
 }
 
 async function getDonationData(): Promise<{
@@ -150,6 +151,7 @@ async function getDonationData(): Promise<{
       isClaimed: !!claim,
       tier: getTier(ethAmount),
       isFounding: foundingAddresses.has(tx.from.toLowerCase()),
+      chain: tx.chain,
     };
   });
 
@@ -273,7 +275,9 @@ function TierDot({ tier }: { tier: Tier }) {
 function DonationCard({ donation: d, rank }: { donation: DonationRow; rank: number }) {
   const cfg = TIER_CONFIG[d.tier];
   const date = formatDate(d.timestamp);
-  const etherscanUrl = `https://etherscan.io/tx/${d.txHash}`;
+  const explorerUrl = d.chain === "base"
+    ? `https://basescan.org/tx/${d.txHash}`
+    : `https://etherscan.io/tx/${d.txHash}`;
 
   return (
     <div className="flex items-start gap-4 p-4 sm:p-5 rounded-2xl bg-obsidian-900/50 border border-obsidian-800 hover:border-obsidian-700 transition-colors">
@@ -299,6 +303,11 @@ function DonationCard({ donation: d, rank }: { donation: DonationRow; rank: numb
               Founding Supporter
             </span>
           )}
+          {d.chain === "base" && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30">
+              Base
+            </span>
+          )}
         </div>
 
         {d.note && (
@@ -308,7 +317,7 @@ function DonationCard({ donation: d, rank }: { donation: DonationRow; rank: numb
         <div className="flex flex-wrap items-center gap-3 mt-2">
           <span className="text-xs text-obsidian-600">{date}</span>
           <a
-            href={etherscanUrl}
+            href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-obsidian-700 hover:text-ether-400 transition-colors font-mono"
