@@ -18,79 +18,29 @@ export const metadata: Metadata = {
 export const revalidate = 300;
 
 const HISTORY_TOKEN = "0xD67A9266D0ae84839f62197713B2D2A9f3a62Ba3";
-const AIRLOCK = "0x660eaaedebc968f8f3694354fa8ec0b4c5ba8d12";
-const INTEGRATOR = "0x123bf3b32fB3986C9251C81430d2542D5054F0d2";
-const WETH_BASE = "0x4200000000000000000000000000000000000006";
+const HISTORY_FEE_SENDER = "0xdbd69cb441354d98843ed45de60e4cce500cff86";
+const DONATION_WALLET_ADDRESS = "0x123bf3b32fB3986C9251C81430d2542D5054F0d2";
+const ETHERSCAN_API_KEY = "AHMV3WAI75TQVJI2XEFUUKFKK1KJTFY1BD";
 
-interface HistoryTokenStats {
-  priceUsd: string;
-  fdv: number;
-  volume24h: number;
-  liquidity: number;
-  claimableEth: number;
-  graduated: boolean;
-}
-
-async function fetchHistoryTokenStats(): Promise<HistoryTokenStats | null> {
+async function fetchHistoryFeesEth(): Promise<number> {
   try {
-    const [dexRes, claimableRes, migratedRes] = await Promise.all([
-      fetch(`https://api.dexscreener.com/latest/dex/tokens/${HISTORY_TOKEN}`, { cache: "no-store" }),
-      // getIntegratorFees(integrator, WETH)
-      fetch("https://base-rpc.publicnode.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0", method: "eth_call",
-          params: [{
-            to: AIRLOCK,
-            data: "0xe7f0d8f1" +
-              "000000000000000000000000" + INTEGRATOR.slice(2) +
-              "000000000000000000000000" + WETH_BASE.slice(2),
-          }, "latest"],
-          id: 1,
-        }),
-        cache: "no-store",
-      }),
-      // getAssetData to check migrationPool != 0xdead
-      fetch("https://base-rpc.publicnode.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0", method: "eth_call",
-          params: [{ to: AIRLOCK, data: "0x1652e7b7" + "000000000000000000000000" + HISTORY_TOKEN.slice(2) }, "latest"],
-          id: 2,
-        }),
-        cache: "no-store",
-      }),
-    ]);
-
-    const dex = await dexRes.json();
-    const pair = dex?.pairs?.[0];
-    if (!pair) return null;
-
-    const claimJson = await claimableRes.json();
-    const claimRaw = claimJson?.result ?? "0x0";
-    const claimableEth = parseInt(claimRaw, 16) / 1e18;
-
-    const migratedJson = await migratedRes.json();
-    const migratedData = migratedJson?.result ?? "";
-    // migrationPool is chunk index 6 (0-indexed) in AssetData
-    const chunks = (migratedData.slice(2).match(/.{64}/g) ?? []);
-    const migrationPool = chunks[6] ? "0x" + chunks[6].slice(24) : "0x";
-    const graduated = migrationPool !== "0x" &&
-      !migrationPool.toLowerCase().startsWith("0xdead") &&
-      migrationPool !== "0x0000000000000000000000000000000000000000";
-
-    return {
-      priceUsd: parseFloat(pair.priceUsd ?? "0").toFixed(10).replace(/\.?0+$/, ""),
-      fdv: pair.fdv ?? 0,
-      volume24h: pair.volume?.h24 ?? 0,
-      liquidity: pair.liquidity?.usd ?? 0,
-      claimableEth,
-      graduated,
-    };
+    const url =
+      `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal` +
+      `&address=${DONATION_WALLET_ADDRESS}&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+    if (json.status !== "1" || !Array.isArray(json.result)) return 0;
+    const total = json.result
+      .filter((tx: Record<string, string>) =>
+        tx.to?.toLowerCase() === DONATION_WALLET_ADDRESS.toLowerCase() &&
+        tx.from?.toLowerCase() === HISTORY_FEE_SENDER.toLowerCase() &&
+        tx.value !== "0" &&
+        tx.isError === "0"
+      )
+      .reduce((sum: bigint, tx: Record<string, string>) => sum + BigInt(tx.value), BigInt(0));
+    return Number(formatEther(total));
   } catch {
-    return null;
+    return 0;
   }
 }
 
@@ -258,9 +208,9 @@ function formatDate(timestamp: number): string {
 }
 
 export default async function SupportersPage() {
-  const [{ donations, totalEth, donorCount }, historyStats] = await Promise.all([
+  const [{ donations, totalEth, donorCount }, historyFeesEth] = await Promise.all([
     getDonationData(),
-    fetchHistoryTokenStats(),
+    fetchHistoryFeesEth(),
   ]);
 
   return (
@@ -290,52 +240,26 @@ export default async function SupportersPage() {
           </div>
         </div>
 
-        {/* HISTORY token banner */}
-        {historyStats && (
-          <div className="mb-10 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
-                  <a
-                    href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-obsidian-500 hover:text-ether-400 transition-colors"
-                  >
-                    Base ↗
-                  </a>
-                </div>
-                <p className="text-xs text-obsidian-500 mt-0.5">
-                  {historyStats.graduated
-                    ? "Trading fees claimable by ethereumhistory.eth"
-                    : "1% of trading fees accrue to ethereumhistory.eth at graduation"}
-                </p>
-              </div>
-              {historyStats.claimableEth > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-ether-500/15 text-ether-300 border border-ether-500/30">
-                  {historyStats.claimableEth.toFixed(4)} ETH claimable
-                </span>
-              )}
+        {/* HISTORY token fee tracker */}
+        {historyFeesEth > 0 && (
+          <div className="mb-10 flex items-center justify-between gap-4 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
+            <div>
+              <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
+              <p className="text-xs text-obsidian-500 mt-0.5">
+                1% trading fees donated via{" "}
+                <a
+                  href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-ether-400 transition-colors"
+                >
+                  Base ↗
+                </a>
+              </p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
-                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">Price</p>
-                <p className="text-sm font-semibold text-obsidian-100">${historyStats.priceUsd}</p>
-              </div>
-              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
-                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">FDV</p>
-                <p className="text-sm font-semibold text-obsidian-100">${historyStats.fdv.toLocaleString()}</p>
-              </div>
-              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
-                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">24h Volume</p>
-                <p className="text-sm font-semibold text-obsidian-100">${historyStats.volume24h.toLocaleString()}</p>
-              </div>
-              <div className="bg-obsidian-950/60 rounded-xl px-4 py-3">
-                <p className="text-xs text-obsidian-600 uppercase tracking-widest mb-1">Liquidity</p>
-                <p className="text-sm font-semibold text-obsidian-100">${historyStats.liquidity.toLocaleString()}</p>
-              </div>
-            </div>
+            <span className="text-sm font-semibold text-ether-300 shrink-0">
+              {historyFeesEth.toFixed(4)} ETH
+            </span>
           </div>
         )}
 
