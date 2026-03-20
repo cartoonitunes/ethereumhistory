@@ -2881,13 +2881,14 @@ export async function getSiblingCountsForAddresses(
 
 export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const database = getDb();
-  // Use DISTINCT ON (runtime_bytecode_hash) to show only the earliest deployment per unique
-  // bytecode. Contracts with no hash (null) are each shown individually.
-  // This ensures duplicate deployments (e.g. SimpleStorage x4, Greeter x8) appear once on /proofs.
+  // First filter to only verified contracts, then deduplicate by runtime_bytecode_hash,
+  // keeping the one with the earliest deployment_timestamp.
+  // Contracts with no hash are shown individually (no deduplication needed).
   const results = await database.execute(sql`
     SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) *
     FROM contracts
     WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'partial_match')
+      AND source_code IS NOT NULL
     ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
   `);
 
