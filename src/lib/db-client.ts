@@ -1134,13 +1134,39 @@ export async function isFirstContractDocumentation(
   const database = getDb();
   const normalized = contractAddress.toLowerCase();
   
+  // Check if this specific contract has been documented before
   const result = await database
     .select({ count: sql<number>`COUNT(*)::int` })
     .from(schema.contractEdits)
     .where(eq(schema.contractEdits.contractAddress, normalized))
     .limit(1);
   
-  return (result[0]?.count ?? 0) === 0;
+  if ((result[0]?.count ?? 0) > 0) return false;
+
+  // Also check if any other contract with the same runtime bytecode hash has already
+  // been documented. If so, this is a duplicate deployment and the bot already fired.
+  const contractRow = await database
+    .select({ runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, normalized))
+    .limit(1);
+
+  const hash = contractRow[0]?.runtimeBytecodeHash;
+  if (!hash) return true; // no bytecode hash — treat as first
+
+  // Find all contracts with the same bytecode hash that have been edited (documented)
+  const siblings = await database
+    .select({ contractAddress: schema.contractEdits.contractAddress })
+    .from(schema.contractEdits)
+    .innerJoin(
+      schema.contracts,
+      eq(schema.contractEdits.contractAddress, schema.contracts.address)
+    )
+    .where(eq(schema.contracts.runtimeBytecodeHash, hash))
+    .limit(1);
+
+  // If any sibling has been documented, this is not the first — skip the bot
+  return siblings.length === 0;
 }
 
 /**
