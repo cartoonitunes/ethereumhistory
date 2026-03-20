@@ -2881,16 +2881,26 @@ export async function getSiblingCountsForAddresses(
 
 export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const database = getDb();
-  // First filter to only verified contracts, then deduplicate by runtime_bytecode_hash,
-  // keeping the one with the earliest deployment_timestamp.
-  // Contracts with no hash are shown individually (no deduplication needed).
-  const results = await database.execute(sql`
-    SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) *
+
+  // Step 1: Get one address per unique bytecode (earliest documented+verified deployment).
+  // Using a subquery so we can join back through Drizzle ORM and get properly typed rows.
+  const dedupedAddresses = await database.execute(sql`
+    SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address
     FROM contracts
     WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'partial_match')
       AND source_code IS NOT NULL
     ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
   `);
 
-  return (results as Array<any>).map((row) => dbRowToContract(row as any));
+  const addresses = (dedupedAddresses as unknown as Array<{ address: string }>).map((r) => r.address);
+  if (addresses.length === 0) return [];
+
+  // Step 2: Fetch full rows via Drizzle ORM so dbRowToContract gets properly mapped fields.
+  const results = await database
+    .select()
+    .from(schema.contracts)
+    .where(inArray(schema.contracts.address, addresses))
+    .orderBy(asc(schema.contracts.deploymentTimestamp));
+
+  return results.map(dbRowToContract);
 }
