@@ -23,25 +23,62 @@ const DONATION_WALLET_ADDRESS = "0x123bf3b32fB3986C9251C81430d2542D5054F0d2";
 const ETHERSCAN_API_KEY = "AHMV3WAI75TQVJI2XEFUUKFKK1KJTFY1BD";
 
 async function fetchHistoryFeesEth(): Promise<number> {
-  try {
-    const url =
-      `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal` +
-      `&address=${DONATION_WALLET_ADDRESS}&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
-    const res = await fetch(url, { cache: "no-store" });
-    const json = await res.json();
-    if (json.status !== "1" || !Array.isArray(json.result)) return 0;
-    const total = json.result
-      .filter((tx: Record<string, string>) =>
-        tx.to?.toLowerCase() === DONATION_WALLET_ADDRESS.toLowerCase() &&
-        tx.from?.toLowerCase() === HISTORY_FEE_SENDER.toLowerCase() &&
-        tx.value !== "0" &&
-        tx.isError === "0"
-      )
-      .reduce((sum: bigint, tx: Record<string, string>) => sum + BigInt(tx.value), BigInt(0));
-    return Number(formatEther(total));
-  } catch {
-    return 0;
-  }
+  // L1: internal txs from the HISTORY fee distributor contract
+  const l1Promise = (async () => {
+    try {
+      const url =
+        `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal` +
+        `&address=${DONATION_WALLET_ADDRESS}&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const json = await res.json();
+      if (json.status !== "1" || !Array.isArray(json.result)) return 0;
+      const total = json.result
+        .filter((tx: Record<string, string>) =>
+          tx.to?.toLowerCase() === DONATION_WALLET_ADDRESS.toLowerCase() &&
+          tx.from?.toLowerCase() === HISTORY_FEE_SENDER.toLowerCase() &&
+          tx.value !== "0" &&
+          tx.isError === "0"
+        )
+        .reduce((sum: bigint, tx: Record<string, string>) => sum + BigInt(tx.value), BigInt(0));
+      return Number(formatEther(total));
+    } catch { return 0; }
+  })();
+
+  // Base: WETH transfers from the Doppler pool contract (fee claims)
+  const DOPPLER_POOL = "0xd59ce43e53d69f190e15d9822fb4540dccc91178";
+  const basePromise = (async () => {
+    const baseRpcUrl = process.env.BASE_RPC_URL;
+    if (!baseRpcUrl) return 0;
+    try {
+      const res = await fetch(baseRpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "alchemy_getAssetTransfers",
+          params: [{
+            toAddress: DONATION_WALLET_ADDRESS,
+            fromAddress: DOPPLER_POOL,
+            category: ["erc20"],
+            withMetadata: false,
+            excludeZeroValue: true,
+            maxCount: "0x64",
+            order: "desc",
+          }],
+          id: 1,
+        }),
+        cache: "no-store",
+      });
+      const json = await res.json();
+      const transfers: Record<string, unknown>[] = json?.result?.transfers ?? [];
+      return transfers
+        .filter((t) => t.asset === "WETH")
+        .reduce((sum, t) => sum + parseFloat(String(t.value ?? 0)), 0);
+    } catch { return 0; }
+  })();
+
+  const [l1, base] = await Promise.all([l1Promise, basePromise]);
+  return l1 + base;
 }
 
 type Tier = "philanthropist" | "benefactor" | "sponsor" | "patron" | "supporter";
