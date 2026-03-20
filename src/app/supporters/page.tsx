@@ -274,24 +274,27 @@ export default async function SupportersPage() {
 
         {/* HISTORY token fee tracker */}
         {historyFeesEth > 0 && (
-          <div className="mb-10 flex items-center justify-between gap-4 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
-            <div>
-              <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
-              <p className="text-xs text-obsidian-500 mt-0.5">
-                1% trading fees donated via{" "}
-                <a
-                  href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-ether-400 transition-colors"
-                >
-                  Base ↗
-                </a>
-              </p>
+          <div className="mb-10 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
+                <p className="text-xs text-obsidian-500 mt-0.5">
+                  Created by a supporter on{" "}
+                  <a
+                    href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-ether-400 transition-colors"
+                  >
+                    Base ↗
+                  </a>
+                  {" "}— 1% of trading fees support this archive
+                </p>
+              </div>
+              <span className="text-sm font-semibold text-ether-300 shrink-0">
+                {historyFeesEth.toFixed(4)} ETH
+              </span>
             </div>
-            <span className="text-sm font-semibold text-ether-300 shrink-0">
-              {historyFeesEth.toFixed(4)} ETH
-            </span>
           </div>
         )}
 
