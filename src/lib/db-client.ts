@@ -2902,5 +2902,17 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
     .where(inArray(schema.contracts.address, addresses))
     .orderBy(asc(schema.contracts.deploymentTimestamp));
 
-  return results.map(dbRowToContract);
+  // Deduplicate by bytecode hash: only keep the earliest deploy per bytecode family.
+  // Results are already ordered by deploymentTimestamp asc, so the first seen is the earliest.
+  // Contracts without a hash are always included individually.
+  const seenHashes = new Set<string>();
+  const deduped = results.filter((row) => {
+    const hash = row.runtimeBytecodeHash;
+    if (!hash) return true;
+    if (seenHashes.has(hash)) return false;
+    seenHashes.add(hash);
+    return true;
+  });
+
+  return deduped.map(dbRowToContract);
 }
