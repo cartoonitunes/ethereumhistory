@@ -98,7 +98,7 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
               </div>
             )}
 
-            <p className="text-obsidian-400 text-sm line-clamp-2">
+            <p className="text-obsidian-400 text-sm">
               {featured.shortDescription}
             </p>
 
