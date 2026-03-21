@@ -918,7 +918,7 @@ export async function getFirstDocumentationCountFromDb(historianId: number): Pro
     ) first_docs
   `);
 
-  return (result as Array<{ count: number }>)[0]?.count || 0;
+  return (result as unknown as Array<{ count: number }>)[0]?.count || 0;
 }
 
 /**
