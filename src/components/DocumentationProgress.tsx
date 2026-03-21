@@ -140,7 +140,7 @@ function HomepageProgress({ stats }: { stats: ProgressStats }) {
                     <span className="text-obsidian-300 text-xs">{year}</span>
                   </div>
                   <span className="text-obsidian-500 text-xs">
-                    {yearStats.documented}/{yearStats.total.toLocaleString()} ({yPct}%)
+                    {yearStats.documented.toLocaleString()}/{yearStats.total.toLocaleString()} ({yPct}%)
                   </span>
                 </div>
                 <div className="bg-obsidian-800 rounded-full h-1.5 overflow-hidden">
@@ -171,7 +171,7 @@ function HomepageProgress({ stats }: { stats: ProgressStats }) {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-obsidian-400">
             <FileText className="w-3.5 h-3.5 text-ether-400" />
-            <span>{documented} documented</span>
+            <span>{documented.toLocaleString()} documented</span>
           </div>
         </div>
       )}
@@ -263,7 +263,7 @@ function BrowseProgress({
                       <span className="text-obsidian-200 text-sm">{year}</span>
                     </div>
                     <span className="text-obsidian-400 text-sm">
-                      {yearStats.documented}/{yearStats.total.toLocaleString()} ({pct}%)
+                      {yearStats.documented.toLocaleString()}/{yearStats.total.toLocaleString()} ({pct}%)
                     </span>
                   </div>
                   <div className="bg-obsidian-800 rounded-full h-2 overflow-hidden">
@@ -308,7 +308,7 @@ function BrowseProgress({
                       </span>
                     </div>
                     <span className="text-obsidian-400 text-sm">
-                      {eraStats.documented}/{eraStats.total.toLocaleString()} ({pct}%)
+                      {eraStats.documented.toLocaleString()}/{eraStats.total.toLocaleString()} ({pct}%)
                     </span>
                   </div>
                   <div className="bg-obsidian-800 rounded-full h-2 overflow-hidden">
