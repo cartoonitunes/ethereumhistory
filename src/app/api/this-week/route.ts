@@ -84,44 +84,48 @@ export async function GET(): Promise<NextResponse> {
 
     const dateCondition = buildDateRangeConditions(start, end);
 
-    const rows = await db
-      .select({
-        address: schema.contracts.address,
-        tokenName: schema.contracts.tokenName,
-        etherscanContractName: schema.contracts.etherscanContractName,
-        shortDescription: schema.contracts.shortDescription,
-        eraId: schema.contracts.eraId,
-        deploymentTimestamp: schema.contracts.deploymentTimestamp,
-      })
-      .from(schema.contracts)
-      .where(
-        and(
-          isNotNull(schema.contracts.deploymentTimestamp),
-          dateCondition,
-          // Restrict to years 2015-2017
-          sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 2015 AND 2017`
-        )
-      )
-      .orderBy(sql`${schema.contracts.deploymentTimestamp} ASC`)
-      .limit(20);
+    const rows = await db.execute(sql`
+      SELECT
+        c.address,
+        c.token_name,
+        c.etherscan_contract_name,
+        c.short_description,
+        c.era_id,
+        c.deployment_timestamp,
+        c.canonical_address,
+        canon.etherscan_contract_name AS canonical_name,
+        canon.token_name AS canonical_token_name,
+        canon.short_description AS canonical_description
+      FROM contracts c
+      LEFT JOIN contracts canon ON canon.address = c.canonical_address
+      WHERE
+        c.deployment_timestamp IS NOT NULL
+        AND EXTRACT(YEAR FROM c.deployment_timestamp) BETWEEN 2015 AND 2017
+        AND ${dateCondition}
+      ORDER BY c.deployment_timestamp ASC
+      LIMIT 20
+    `) as any[];
 
-    const contracts = rows.map((row) => {
+    const contracts = rows.map((row: any) => {
       const name =
-        row.tokenName ||
-        row.etherscanContractName ||
-        `Contract ${row.address.slice(0, 10)}...`;
+        row.token_name ||
+        row.etherscan_contract_name ||
+        row.canonical_token_name ||
+        row.canonical_name ||
+        null;
 
-      const ts = row.deploymentTimestamp;
+      const ts = row.deployment_timestamp ? new Date(row.deployment_timestamp) : null;
       const deploymentDate = ts ? ts.toISOString().split("T")[0] : null;
       const deploymentYear = ts ? ts.getFullYear() : null;
 
       return {
         address: row.address,
         name,
-        shortDescription: row.shortDescription || null,
-        eraId: row.eraId || null,
+        shortDescription: row.short_description || row.canonical_description || null,
+        eraId: row.era_id || null,
         deploymentDate,
         deploymentYear,
+        canonicalAddress: row.canonical_address || null,
       };
     });
 
