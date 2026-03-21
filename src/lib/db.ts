@@ -1109,6 +1109,25 @@ export async function getContractPageData(address: string): Promise<ContractPage
   // Ensure bytecode exists (some seed sources only have decompiled code).
   contract = await getContractWithRuntimeBytecode(contract);
 
+  if (contract.canonicalAddress) {
+    const canonical = await dbGetContract(contract.canonicalAddress);
+    if (canonical) {
+      contract = {
+        ...contract,
+        etherscanVerified: !!canonical.sourceCode,
+        verificationMethod: canonical.verificationMethod,
+        sourceCode: canonical.sourceCode,
+        compilerCommit: canonical.compilerCommit,
+        compilerLanguage: canonical.compilerLanguage,
+        verificationProofUrl: canonical.verificationProofUrl,
+        verificationNotes: canonical.verificationNotes,
+        verificationStatus: canonical.sourceCode ? "verified" : contract.verificationStatus,
+        isInheritedVerification: true,
+        canonicalContractName: canonical.etherscanContractName || canonical.tokenName,
+      };
+    }
+  }
+
   // On-the-fly decompilation when no source and no decompiled code
   if (
     contract.runtimeBytecode &&

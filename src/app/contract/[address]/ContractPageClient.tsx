@@ -25,6 +25,7 @@ import {
   CodeXml,
   Search,
   Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { DonationBanner } from "@/components/DonationBanner";
@@ -422,6 +423,22 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             </div>
           </div>
 
+          {contract.isInheritedVerification && contract.canonicalAddress && (
+            <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/10 flex items-start gap-3 mt-3">
+              <ShieldCheck className="w-5 h-5 text-blue-400 flex-none mt-0.5" />
+              <div>
+                <p className="text-sm text-blue-300 font-medium">Bytecode verified via sibling</p>
+                <p className="text-xs text-obsidian-400 mt-1">
+                  This contract shares identical runtime bytecode with{" "}
+                  <Link href={`/contract/${contract.canonicalAddress}`} className="text-blue-400 hover:underline">
+                    {contract.canonicalContractName || "a verified contract"} ({contract.canonicalAddress.slice(0,10)}...)
+                  </Link>
+                  {" "}which has been verified through compiler archaeology.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Quick stats */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-obsidian-500">
             {contract.deploymentTimestamp && (
@@ -552,6 +569,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               decompilationSuccess={contract.decompilationSuccess}
               sourceCode={contract.sourceCode}
               abi={contract.abi}
+              isInheritedVerification={contract.isInheritedVerification}
             />
           )}
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
@@ -1249,6 +1267,7 @@ function CodeTab({
   decompilationSuccess,
   sourceCode,
   abi,
+  isInheritedVerification,
 }: {
   bytecode: string | null;
   analysis: ContractPageData["bytecodeAnalysis"];
@@ -1258,9 +1277,15 @@ function CodeTab({
   decompilationSuccess?: boolean;
   sourceCode?: string | null;
   abi?: string | null;
+  isInheritedVerification?: boolean;
 }) {
   return (
     <div className="space-y-6">
+      {sourceCode && isInheritedVerification && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
+          Source code inherited from verified sibling contract.
+        </div>
+      )}
       <BytecodeViewer
         bytecode={bytecode}
         analysis={analysis}

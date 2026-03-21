@@ -82,6 +82,7 @@ export const contracts = pgTable(
     controlFlowSignature: text("control_flow_signature"),
     shapeSignature: text("shape_signature"),
     runtimeBytecodeHash: text("runtime_bytecode_hash"),
+    canonicalAddress: text("canonical_address"),
 
     // Verification proof data (compiler archaeology)
     compilerLanguage: text("compiler_language"),
