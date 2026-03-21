@@ -93,9 +93,8 @@ export function BytecodeViewer({
       {/* Content */}
       <div className="p-4">
         {activeTab === "source" && (
-          <TextBlobView
-            title="Verified Source Code"
-            content={sourceCode || null}
+          <SourceCodeView
+            sourceCode={sourceCode || null}
             expanded={expanded}
             onToggleExpand={() => setExpanded(!expanded)}
           />
@@ -181,6 +180,123 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+/**
+ * Parse Etherscan Standard JSON Input format and extract individual Solidity files.
+ * Returns null if the source is not in that format (plain Solidity string).
+ */
+function parseStandardJson(source: string): Record<string, string> | null {
+  // Etherscan wraps Standard JSON in double braces: {{ ... }}
+  const trimmed = source.trim();
+  const unwrapped = trimmed.startsWith("{{") ? trimmed.slice(1, -1).trim() : trimmed;
+  try {
+    const parsed = JSON.parse(unwrapped);
+    if (parsed?.sources && typeof parsed.sources === "object") {
+      const files: Record<string, string> = {};
+      for (const [path, val] of Object.entries(parsed.sources as Record<string, { content?: string }>)) {
+        if (val?.content) files[path] = val.content;
+      }
+      return Object.keys(files).length > 0 ? files : null;
+    }
+  } catch {
+    // Not JSON — plain Solidity
+  }
+  return null;
+}
+
+function SourceCodeView({
+  sourceCode,
+  expanded,
+  onToggleExpand,
+}: {
+  sourceCode: string | null;
+  expanded: boolean;
+  onToggleExpand: () => void;
+}) {
+  const files = useMemo(() => (sourceCode ? parseStandardJson(sourceCode) : null), [sourceCode]);
+  const fileNames = files ? Object.keys(files) : [];
+  const defaultFile = fileNames.find((f) => !f.startsWith("@")) || fileNames[fileNames.length - 1] || null;
+
+  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const selectedFile = activeFile && fileNames.includes(activeFile) ? activeFile : defaultFile;
+  const content = selectedFile && files ? files[selectedFile] : null;
+
+  const handleCopy = async () => {
+    const toCopy = content || sourceCode;
+    if (!toCopy) return;
+    const ok = await copyToClipboard(toCopy);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
+
+  if (!sourceCode) {
+    return (
+      <div className="text-center py-8 text-obsidian-500">
+        <p>No source code available for this contract.</p>
+      </div>
+    );
+  }
+
+  // Multi-file Standard JSON
+  if (files && fileNames.length > 0) {
+    return (
+      <div className="space-y-3">
+        {/* File tabs */}
+        <div className="flex flex-wrap gap-1.5">
+          {fileNames.map((name) => {
+            const short = name.split("/").pop() || name;
+            const isActive = name === selectedFile;
+            return (
+              <button
+                key={name}
+                onClick={() => setActiveFile(name)}
+                title={name}
+                className={`px-2.5 py-1 rounded-md text-xs font-mono transition-colors truncate max-w-[200px] ${
+                  isActive
+                    ? "bg-ether-600/30 text-ether-300 border border-ether-600/40"
+                    : "bg-obsidian-800 text-obsidian-400 border border-obsidian-700 hover:text-obsidian-200"
+                }`}
+              >
+                {short}
+              </button>
+            );
+          })}
+        </div>
+        {selectedFile && (
+          <div className="text-xs text-obsidian-600 font-mono">{selectedFile}</div>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-obsidian-400">
+            Verified Source Code
+            <span className="ml-2 text-xs text-obsidian-600">
+              ({fileNames.length} {fileNames.length === 1 ? "file" : "files"})
+            </span>
+          </span>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 text-sm text-obsidian-300 transition-colors"
+          >
+            {copied ? <><Check className="w-4 h-4 text-green-400" />Copied</> : <><Copy className="w-4 h-4" />Copy</>}
+          </button>
+        </div>
+        <pre className="text-xs font-mono bg-obsidian-950/50 rounded-lg p-4 overflow-x-auto text-obsidian-300 leading-relaxed whitespace-pre-wrap break-words max-h-[600px] overflow-y-auto">
+          {content || ""}
+        </pre>
+      </div>
+    );
+  }
+
+  // Plain Solidity string fallback
+  return (
+    <TextBlobView
+      title="Verified Source Code"
+      content={sourceCode}
+      expanded={expanded}
+      onToggleExpand={onToggleExpand}
+    />
   );
 }
 
