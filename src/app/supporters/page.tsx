@@ -454,7 +454,6 @@ export default async function SupportersPage() {
                 </div>
               </div>
             </div>
-          </div>
         </div>
 
         {/* Tier legend */}
