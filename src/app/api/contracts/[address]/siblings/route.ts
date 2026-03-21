@@ -53,6 +53,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         deploymentBlock: contracts.deploymentBlock,
         deploymentTimestamp: contracts.deploymentTimestamp,
         verificationMethod: contracts.verificationMethod,
+        canonicalAddress: contracts.canonicalAddress,
         codeSizeBytes: contracts.codeSizeBytes,
       })
       .from(contracts)
