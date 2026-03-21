@@ -10,11 +10,15 @@ import { formatDate, formatAddress } from "@/lib/utils";
 
 interface ThisWeekContract {
   address: string;
-  name: string;
+  name: string | null;
   shortDescription: string | null;
   eraId: string | null;
   deploymentDate: string | null;
   deploymentYear: number | null;
+  canonicalAddress: string | null;
+  verificationMethod: string | null;
+  isVerified: boolean;
+  isSibling: boolean;
 }
 
 interface ThisWeekData {
@@ -139,16 +143,23 @@ export default function ThisWeekPage() {
                       href={`/contract/${contract.address}`}
                       className="block rounded-xl border border-obsidian-800 bg-obsidian-900/50 hover:border-ether-500/30 p-5 transition-colors group"
                     >
-                      {/* Top row: name + year badge */}
+                      {/* Top row: name + badges */}
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors leading-tight line-clamp-2">
-                          {contract.name}
+                          {contract.name || formatAddress(contract.address)}
                         </h3>
-                        {contract.deploymentYear && (
-                          <span className="text-xs px-2 py-1 rounded bg-ether-500/10 text-ether-400 font-medium shrink-0">
-                            {contract.deploymentYear}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {contract.isVerified && (
+                            <span className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400 font-medium border border-green-500/20">
+                              {contract.verificationMethod === "exact_bytecode_match" ? "Cracked" : "Verified"}
+                            </span>
+                          )}
+                          {contract.deploymentYear && (
+                            <span className="text-xs px-2 py-1 rounded bg-ether-500/10 text-ether-400 font-medium">
+                              {contract.deploymentYear}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Era badge */}

@@ -93,6 +93,8 @@ export async function GET(): Promise<NextResponse> {
         eraId: schema.contracts.eraId,
         deploymentTimestamp: schema.contracts.deploymentTimestamp,
         canonicalAddress: schema.contracts.canonicalAddress,
+        verificationMethod: schema.contracts.verificationMethod,
+        sourceCode: sql<boolean>`(${schema.contracts.sourceCode} IS NOT NULL AND length(${schema.contracts.sourceCode}) > 0)`,
       })
       .from(schema.contracts)
       .where(
@@ -107,16 +109,19 @@ export async function GET(): Promise<NextResponse> {
 
     // Fetch canonical names for siblings in a second pass
     const canonicalAddresses = [...new Set(rows.map((r: any) => r.canonicalAddress).filter(Boolean))];
-    const canonicalMap: Record<string, { name: string | null; description: string | null }> = {};
+    const canonicalMap: Record<string, { name: string | null; description: string | null; verificationMethod: string | null; hasSource: boolean }> = {};
     if (canonicalAddresses.length > 0) {
       const canonRows = await db.execute(sql`
-        SELECT address, etherscan_contract_name, token_name, short_description
-        FROM contracts WHERE address = ANY(${sql`ARRAY[${sql.join(canonicalAddresses.map((a) => sql`${a}`), sql`, `)}]::text[]`})
+        SELECT address, etherscan_contract_name, token_name, short_description, verification_method,
+               (source_code IS NOT NULL AND length(source_code) > 0) as has_source
+        FROM contracts WHERE address = ANY(ARRAY[${sql.join(canonicalAddresses.map((a: string) => sql`${a}`), sql`, `)}]::text[])
       `) as any[];
       for (const canon of canonRows) {
         canonicalMap[canon.address] = {
           name: canon.token_name || canon.etherscan_contract_name || null,
           description: canon.short_description || null,
+          verificationMethod: canon.verification_method || null,
+          hasSource: !!canon.has_source,
         };
       }
     }
@@ -133,6 +138,9 @@ export async function GET(): Promise<NextResponse> {
       const deploymentDate = ts ? ts.toISOString().split("T")[0] : null;
       const deploymentYear = ts ? ts.getFullYear() : null;
 
+      const verificationMethod = row.verificationMethod || canon?.verificationMethod || null;
+      const hasSource = !!row.sourceCode || !!canon?.hasSource;
+
       return {
         address: row.address,
         name,
@@ -141,6 +149,9 @@ export async function GET(): Promise<NextResponse> {
         deploymentDate,
         deploymentYear,
         canonicalAddress: row.canonicalAddress || null,
+        verificationMethod,
+        isVerified: !!verificationMethod || hasSource,
+        isSibling: !!row.canonicalAddress,
       };
     });
 
