@@ -45,6 +45,7 @@ let contractsList: Contract[] | null =
 interface RawContract {
   address: string;
   runtime_bytecode?: string;
+  runtime_bytecode_hash?: string;
   deployment_timestamp?: string;
   block_number?: number;
   deployment_block?: number;
@@ -74,6 +75,7 @@ function transformContract(raw: RawContract): Contract {
   return {
     address: raw.address.toLowerCase(),
     runtimeBytecode: raw.runtime_bytecode || null,
+    runtimeBytecodeHash: raw.runtime_bytecode_hash || null,
     creationBytecode: null,
     deployerAddress: raw.creator || raw.deployer_address || null,
     deploymentTxHash: raw.transaction_hash || raw.deployment_tx_hash || null,

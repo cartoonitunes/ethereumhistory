@@ -577,6 +577,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
   const contract: Contract = {
     address: address.toLowerCase(),
     runtimeBytecode,
+    runtimeBytecodeHash: null,
     creationBytecode: null,
     deployerAddress: null,
     deploymentTxHash: null,
