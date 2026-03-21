@@ -8,3 +8,6 @@ UPDATE historians SET role = 'admin' WHERE email = 'neo@openclaw.ai';
 
 -- Add index for role lookups
 CREATE INDEX IF NOT EXISTS historians_role_idx ON historians(role);
+
+-- Set historian ID 1 (Julian) as admin
+UPDATE historians SET role = 'admin', trusted = true WHERE id = 1;
