@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/types";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
-import { getDb } from "@/lib/db";
+import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { updateContractEtherscanEnrichmentFromDb, updateContractHistoryFieldsFromDb } from "@/lib/db-client";
