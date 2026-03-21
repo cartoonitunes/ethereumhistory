@@ -79,6 +79,7 @@ function dbRowToContract(row: schema.Contract): AppContract {
   return {
     address: row.address,
     runtimeBytecode: row.runtimeBytecode,
+    runtimeBytecodeHash: row.runtimeBytecodeHash ?? null,
     creationBytecode: null,
     deployerAddress: row.deployerAddress,
     deploymentTxHash: row.deploymentTxHash,
