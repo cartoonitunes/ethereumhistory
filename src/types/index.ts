@@ -172,9 +172,12 @@ export interface Contract {
   compilerLanguage: string | null;
   compilerCommit: string | null;
   compilerRepo: string | null;
+  canonicalAddress?: string | null;
   verificationMethod: string | null;
   verificationProofUrl: string | null;
   verificationNotes: string | null;
+  isInheritedVerification?: boolean;
+  canonicalContractName?: string | null;
 
   // Verification status
   verificationStatus: VerificationStatus;

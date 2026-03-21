@@ -123,6 +123,7 @@ function dbRowToContract(row: schema.Contract): AppContract {
     compilerLanguage: row.compilerLanguage ?? null,
     compilerCommit: row.compilerCommit ?? null,
     compilerRepo: row.compilerRepo ?? null,
+    canonicalAddress: row.canonicalAddress ?? null,
     verificationMethod: row.verificationMethod ?? null,
     verificationProofUrl: row.verificationProofUrl ?? null,
     verificationNotes: row.verificationNotes ?? null,
