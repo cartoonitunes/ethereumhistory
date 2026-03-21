@@ -368,7 +368,7 @@ export default async function SupportersPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-obsidian-100">
-                      Wrapped Unicorn Meat (w🥖)
+                      Wrapped Unicorn Meat (w🍖)
                     </span>
                     <a
                       href={`https://ethereumhistory.com/contract/${WMEAT_ADDRESS}`}
