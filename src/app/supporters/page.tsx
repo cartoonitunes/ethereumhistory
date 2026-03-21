@@ -19,6 +19,9 @@ export const revalidate = 300;
 
 const HISTORY_TOKEN = "0xD67A9266D0ae84839f62197713B2D2A9f3a62Ba3";
 const HISTORY_FEE_SENDER = "0xdbd69cb44135a96474de7d28a6e4cbfc2aacef7f";
+const WMEAT_ADDRESS = "0xDFA208bb0b811cFbb5fA3ea98EC37AA86180E668";
+const WMEAT_POOL_MAINNET = "0xC3b9903F07c7B7614B9b5B490c7cE89bd688282E";
+const WMEAT_POOL_BASE = "0xb9Ce62Df766fFC0BB0d5D530e2DDe32eC3Baa578";
 const DONATION_WALLET_ADDRESS = "0x123bf3b32fB3986C9251C81430d2542D5054F0d2";
 const ETHERSCAN_API_KEY = "AHMV3WAI75TQVJI2XEFUUKFKK1KJTFY1BD";
 
@@ -79,6 +82,30 @@ async function fetchHistoryFeesEth(): Promise<number> {
 
   const [l1, base] = await Promise.all([l1Promise, basePromise]);
   return l1 + base;
+}
+
+async function fetchWmeatFeesEth(): Promise<number> {
+  // Tracks ETH sent from the w🍖 pool fee wallet to the donation address.
+  // Fees accrue in the Uniswap V3 pools and are periodically sent manually.
+  try {
+    const url =
+      `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlist` +
+      `&address=${DONATION_WALLET_ADDRESS}&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+    if (json.status !== "1" || !Array.isArray(json.result)) return 0;
+    // Filter for txs from the mainnet pool owner address
+    const total = json.result
+      .filter((tx: Record<string, string>) =>
+        tx.to?.toLowerCase() === DONATION_WALLET_ADDRESS.toLowerCase() &&
+        (tx.from?.toLowerCase() === WMEAT_POOL_MAINNET.toLowerCase() ||
+         tx.from?.toLowerCase() === WMEAT_POOL_BASE.toLowerCase()) &&
+        tx.value !== "0" &&
+        tx.isError === "0"
+      )
+      .reduce((sum: bigint, tx: Record<string, string>) => sum + BigInt(tx.value), BigInt(0));
+    return Number(formatEther(total));
+  } catch { return 0; }
 }
 
 type Tier = "philanthropist" | "benefactor" | "sponsor" | "patron" | "supporter";
@@ -277,9 +304,10 @@ function formatDate(timestamp: number): string {
 }
 
 export default async function SupportersPage() {
-  const [{ donations, totalEth, donorCount }, historyFeesEth] = await Promise.all([
+  const [{ donations, totalEth, donorCount }, historyFeesEth, wmeatFeesEth] = await Promise.all([
     getDonationData(),
     fetchHistoryFeesEth(),
+    fetchWmeatFeesEth(),
   ]);
 
   return (
@@ -309,31 +337,99 @@ export default async function SupportersPage() {
           </div>
         </div>
 
-        {/* HISTORY token fee tracker */}
-        {historyFeesEth > 0 && (
-          <div className="mb-10 rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
-                <p className="text-xs text-obsidian-500 mt-0.5">
-                  Created by a supporter on{" "}
-                  <a
-                    href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-ether-400 transition-colors"
-                  >
-                    Base ↗
-                  </a>
-                  {" "}— 1% of trading fees support this archive
-                </p>
+        {/* Token fee trackers */}
+        <div className="mb-10 space-y-3">
+            {historyFeesEth > 0 && (
+              <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
+                    <p className="text-xs text-obsidian-500 mt-0.5">
+                      Created by a supporter on{" "}
+                      <a
+                        href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-ether-400 transition-colors"
+                      >
+                        Base ↗
+                      </a>
+                      {" "}- 1% of trading fees support this archive
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-ether-300 shrink-0">
+                    {historyFeesEth.toFixed(4)} ETH
+                  </span>
+                </div>
               </div>
-              <span className="text-sm font-semibold text-ether-300 shrink-0">
-                {historyFeesEth.toFixed(4)} ETH
-              </span>
+            )}
+            <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-obsidian-100">
+                      Wrapped Unicorn Meat (w🍖)
+                    </span>
+                    <a
+                      href={`https://ethereumhistory.com/contract/${WMEAT_ADDRESS}`}
+                      className="text-xs text-obsidian-600 hover:text-ether-400 transition-colors font-mono"
+                    >
+                      {WMEAT_ADDRESS.slice(0, 10)}...
+                    </a>
+                  </div>
+                  <p className="text-xs text-obsidian-500 mt-1 leading-relaxed">
+                    A historic ERC-20 token tracing back to 2016 - created by grinding Unicorns through{" "}
+                    <a
+                      href="https://unicornmeateth.com/grinder-association"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-ether-400 transition-colors"
+                    >
+                      avsa&apos;s grinder contract ↗
+                    </a>
+                    . 1% of trading fees from both pools supports this archive.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    <a
+                      href={`https://app.uniswap.org/explore/pools/ethereum/${WMEAT_POOL_MAINNET}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-obsidian-600 hover:text-ether-400 transition-colors"
+                    >
+                      Uniswap Mainnet ↗
+                    </a>
+                    <span className="text-obsidian-800 text-xs">|</span>
+                    <a
+                      href={`https://app.uniswap.org/explore/pools/base/${WMEAT_POOL_BASE}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-obsidian-600 hover:text-ether-400 transition-colors"
+                    >
+                      Uniswap Base ↗
+                    </a>
+                    <span className="text-obsidian-800 text-xs">|</span>
+                    <a
+                      href="https://unicornmeateth.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-obsidian-600 hover:text-ether-400 transition-colors"
+                    >
+                      unicornmeateth.com ↗
+                    </a>
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="text-sm font-semibold text-ether-300">
+                    {wmeatFeesEth > 0 ? `${wmeatFeesEth.toFixed(4)} ETH` : "pending"}
+                  </span>
+                  {wmeatFeesEth === 0 && (
+                    <p className="text-xs text-obsidian-700 mt-0.5">fees accumulating</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Tier legend */}
         <div className="flex flex-wrap items-center gap-3 mb-8 justify-center">
