@@ -1,13 +1,10 @@
--- Trust tiers via role field
--- NULL or "historian": standard (review queue)
--- "trusted": established contributor (publishes immediately)
--- "admin": full access
+-- Trust tiers via role field on historians table
+-- NULL or 'historian': standard contributor (new accounts, edits go through review queue)
+-- 'trusted': established contributor (edits publish immediately)
+-- 'admin': full access (can approve/revert/suspend, override proof locks)
 
--- Add role column
-ALTER TABLE historians ADD COLUMN IF NOT EXISTS role text;
-
--- Ensure Neo historian is admin
+-- Ensure Neo historian account is admin
 UPDATE historians SET role = 'admin' WHERE email = 'neo@openclaw.ai';
 
--- Add index
+-- Add index for role lookups
 CREATE INDEX IF NOT EXISTS historians_role_idx ON historians(role);
