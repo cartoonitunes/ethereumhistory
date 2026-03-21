@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart } from "lucide-react";
+import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart, Search } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
@@ -14,11 +14,15 @@ interface HeaderProps {
 
 export function Header({ showHistorianLogin = false, historianMe: propHistorianMe }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const loginUrl = `/historian/login?next=${encodeURIComponent(pathname || "/")}`;
 
   const [me, setMe] = useState<HistorianMe | null>(propHistorianMe ?? null);
   const [loadingMe, setLoadingMe] = useState(propHistorianMe === undefined);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (propHistorianMe !== undefined) {
@@ -44,7 +48,31 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
   }, [propHistorianMe]);
 
   // Close menu on route change
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setSearchOpen(false); }, [pathname]);
+
+  // Focus input when search opens
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    } else {
+      setSearchQuery("");
+    }
+  }, [searchOpen]);
+
+  // Escape closes search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSearchOpen(false); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/browse?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchOpen(false);
+    }
+  };
 
   const shouldShowLogin = showHistorianLogin && !loadingMe && !me;
 
@@ -80,7 +108,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             </Link>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-6">
+            <nav className="hidden md:flex items-center gap-4">
               {navLinks.map(({ href, label, highlight }) => (
                 <Link
                   key={href}
@@ -115,6 +143,15 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 <Github className="w-5 h-5" />
               </a>
             </nav>
+
+            {/* Search icon — desktop */}
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="hidden md:flex p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+              aria-label="Search"
+            >
+              <Search className="w-5 h-5" />
+            </button>
 
             {/* Desktop auth */}
             <div className="hidden md:flex items-center gap-3">
@@ -159,17 +196,70 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
               )}
             </div>
 
-            {/* Mobile: hamburger only */}
-            <button
-              className="md:hidden p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label={menuOpen ? "Close menu" : "Open menu"}
-            >
-              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {/* Mobile: search + hamburger */}
+            <div className="md:hidden flex items-center gap-1">
+              <button
+                onClick={() => setSearchOpen(true)}
+                className="p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                aria-label="Search"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+              <button
+                className="p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                onClick={() => setMenuOpen((v) => !v)}
+                aria-label={menuOpen ? "Close menu" : "Open menu"}
+              >
+                {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </div>
       </motion.header>
+
+      {/* Search overlay */}
+      <AnimatePresence>
+        {searchOpen && (
+          <motion.div
+            key="search-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[60] bg-obsidian-950/90 backdrop-blur-md flex items-start justify-center pt-20 px-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setSearchOpen(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: -8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: -8 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-2xl"
+            >
+              <form onSubmit={handleSearchSubmit} className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-obsidian-400" />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search contracts, addresses, names..."
+                  className="w-full rounded-xl border border-obsidian-700 bg-obsidian-900 text-obsidian-100 text-lg pl-12 pr-14 py-4 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50 placeholder:text-obsidian-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(false)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-1 rounded-lg text-obsidian-400 hover:text-obsidian-100 transition-colors"
+                  aria-label="Close search"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </form>
+              <p className="text-center text-xs text-obsidian-500 mt-3">Press Enter to search · Esc to close</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mobile drawer */}
       <AnimatePresence>

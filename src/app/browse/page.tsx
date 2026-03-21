@@ -3,11 +3,11 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
 import { ContractCard } from "@/components/ContractCard";
 import { DocumentationProgress } from "@/components/DocumentationProgress";
-import { Search, ArrowLeft, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { Search, ArrowLeft, ChevronLeft, ChevronRight, Check, Filter, X } from "lucide-react";
 import { ERAS, CAPABILITY_CATEGORIES } from "@/types";
 import { getContractTypeLabel } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
@@ -45,6 +45,7 @@ function BrowseContent() {
   const [loading, setLoading] = useState(true);
   const [typeOptions, setTypeOptions] = useState<string[]>([]);
   const [availableCapabilities, setAvailableCapabilities] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const era = searchParams.get("era") || "";
@@ -56,6 +57,7 @@ function BrowseContent() {
   const verification = searchParams.get("verification") || "";
   const registrar = searchParams.get("registrar") || "";
   const sort = searchParams.get("sort") || "";
+  const selfDestructed = searchParams.get("self_destructed") || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +90,7 @@ function BrowseContent() {
     if (capabilities) params.set("capabilities", capabilities);
     if (verification) params.set("verification", verification);
     if (sort) params.set("sort", sort);
+    if (selfDestructed) params.set("self_destructed", selfDestructed);
     params.set("page", String(page));
     try {
       const res = await fetch(`/api/browse?${params.toString()}`);
@@ -105,13 +108,13 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, year, type, q, undocumented, capabilities, verification, registrar, sort, page]);
+  }, [era, year, type, q, undocumented, capabilities, verification, registrar, sort, selfDestructed, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "registrar" | "sort", value: string) => {
+  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "registrar" | "sort" | "self_destructed", value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
@@ -155,181 +158,179 @@ function BrowseContent() {
             </p>
           </motion.div>
 
-          {/* Filters */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="flex flex-col sm:flex-row gap-4 mb-8"
-          >
-            <div className="flex flex-col sm:flex-row gap-3 flex-1">
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="text-obsidian-400">Year</span>
-                <select
-                  value={year}
-                  onChange={(e) => setFilter("year", e.target.value)}
-                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
-                >
-                  <option value="">All years</option>
-                  <option value="2015">2015</option>
-                  <option value="2016">2016</option>
-                  <option value="2017">2017</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="text-obsidian-400">Era</span>
-                <select
-                  value={era}
-                  onChange={(e) => setFilter("era", e.target.value)}
-                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
-                >
-                  <option value="">All eras</option>
-                  {ERA_IDS.map((id) => (
-                    <option key={id} value={id}>
-                      {ERAS[id]?.name ?? id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="text-obsidian-400">Type</span>
-                <select
-                  value={type}
-                  onChange={(e) => setFilter("type", e.target.value)}
-                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
-                >
-                  <option value="">All types</option>
-                  {typeOptions.map((t) => (
-                    <option key={t} value={t}>
-                      {getContractTypeLabel(t)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="text-obsidian-400">Verification</span>
-                <select
-                  value={verification}
-                  onChange={(e) => setFilter("verification", e.target.value)}
-                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
-                >
-                  <option value="">All</option>
-                  <option value="unverified">Unverified</option>
-                  <option value="etherscan">Etherscan only</option>
-                  <option value="proof">Has proof</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm">
-                <span className="text-obsidian-400">Sort</span>
-                <select
-                  value={sort}
-                  onChange={(e) => setFilter("sort", e.target.value)}
-                  className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50"
-                >
-                  <option value="">Oldest first</option>
-                  <option value="newest">Newest first</option>
-                  <option value="most_active">Most active</option>
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm flex-1 min-w-0">
-                <span className="text-obsidian-400">Search in code</span>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-obsidian-500" />
-                  <input
-                    type="search"
-                    value={q}
-                    onChange={(e) => setFilter("q", e.target.value)}
-                    placeholder="e.g. transfer, balanceOf"
-                    className="w-full rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50 placeholder:text-obsidian-500"
-                  />
-                </div>
-              </label>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => setFilter("undocumented", undocumented ? "" : "1")}
-                className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors border ${
-                  undocumented
-                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
-                    : "border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100"
-                }`}
-              >
-                {undocumented ? "✓ Undocumented only" : "Show undocumented"}
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Frontier Registrar filter */}
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-wrap gap-2 items-center">
-            <span className="text-xs text-obsidian-500 font-medium uppercase tracking-wider">Named in</span>
-            {([
-              { value: "any", label: "Any Registrar" },
-              { value: "GlobalRegistrar", label: "Frontier GlobalRegistrar" },
-              { value: "LinageeRegistrar", label: "Linagee Registrar" },
-              { value: "NameRegistry", label: "NameRegistry" },
-            ] as const).map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setFilter("registrar", registrar === value ? "" : value)}
-                className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
-                  registrar === value
-                    ? "bg-amber-900/40 border-amber-700/40 text-amber-400"
-                    : "border-obsidian-700 bg-obsidian-900/50 text-obsidian-400 hover:text-amber-400 hover:border-amber-700/40"
-                }`}
-              >
-                {registrar === value ? "✓ " : ""}{label}
-              </button>
-            ))}
-          </motion.div>
-
-          {/* Capability Pills — grouped by Type / Standard / Token / Feature */}
-          {availableCapabilities.length > 0 && (() => {
-            const groups: Record<string, string[]> = {};
-            for (const slug of availableCapabilities) {
-              const cat = CAPABILITY_CATEGORIES[slug];
-              if (!cat) continue;
-              const g = cat.group;
-              if (!groups[g]) groups[g] = [];
-              groups[g].push(slug);
-            }
-            const groupOrder = ["Type", "Standard", "Token", "Feature"];
-            const visibleGroups = groupOrder.filter((g) => groups[g]?.length);
-            if (!visibleGroups.length) return null;
+          {/* Search bar + Filters toggle */}
+          {(() => {
+            const activeFilterCount = [
+              era, year, type, verification, sort, selfDestructed, registrar,
+              undocumented ? "1" : "",
+              capabilities ? "1" : "",
+            ].filter(Boolean).length;
 
             return (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="flex flex-col gap-3 mb-8"
+                transition={{ delay: 0.05 }}
+                className="mb-4"
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm font-medium text-obsidian-300">Filter by capability</span>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25">Beta</span>
-                </div>
-                {visibleGroups.map((group) => (
-                  <div key={group} className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-obsidian-500 uppercase tracking-wider w-20 shrink-0">{group}</span>
-                    {groups[group].map((slug) => {
-                      const cat = CAPABILITY_CATEGORIES[slug]!;
-                      const active = capabilities.split(",").includes(slug);
-                      return (
-                        <button
-                          key={slug}
-                          onClick={() => toggleCapability(slug)}
-                          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                            active
-                              ? "bg-ether-500/20 border border-ether-500/40 text-ether-300"
-                              : "bg-obsidian-900/80 border border-obsidian-700 text-obsidian-400 hover:text-obsidian-200 hover:border-obsidian-600"
-                          }`}
-                        >
-                          {active && <Check className="w-3 h-3" />}
-                          {cat.label}
-                        </button>
-                      );
-                    })}
+                {/* Always-visible: search + filters button */}
+                <div className="flex gap-3 mb-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-obsidian-500" />
+                    <input
+                      type="search"
+                      value={q}
+                      onChange={(e) => setFilter("q", e.target.value)}
+                      placeholder="Search contracts, names, code..."
+                      className="w-full rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ether-500/50 focus:border-ether-500/50 placeholder:text-obsidian-500"
+                    />
                   </div>
-                ))}
+                  <button
+                    onClick={() => setFiltersOpen((v) => !v)}
+                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border transition-colors shrink-0 ${
+                      filtersOpen || activeFilterCount > 0
+                        ? "bg-ether-500/10 border-ether-500/30 text-ether-300 hover:bg-ether-500/20"
+                        : "border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100"
+                    }`}
+                  >
+                    <Filter className="w-4 h-4" />
+                    Filters
+                    {activeFilterCount > 0 && (
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-ether-500 text-white text-xs font-bold">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Collapsible filter panel */}
+                <AnimatePresence>
+                  {filtersOpen && (
+                    <motion.div
+                      key="filter-panel"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-5 mb-3 flex flex-col gap-5">
+                        {/* Row 1: dropdowns */}
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Year</span>
+                            <select value={year} onChange={(e) => setFilter("year", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">All years</option>
+                              <option value="2015">2015</option>
+                              <option value="2016">2016</option>
+                              <option value="2017">2017</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Era</span>
+                            <select value={era} onChange={(e) => setFilter("era", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">All eras</option>
+                              {ERA_IDS.map((id) => (<option key={id} value={id}>{ERAS[id]?.name ?? id}</option>))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Type</span>
+                            <select value={type} onChange={(e) => setFilter("type", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">All types</option>
+                              {typeOptions.map((t) => (<option key={t} value={t}>{getContractTypeLabel(t)}</option>))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Verification</span>
+                            <select value={verification} onChange={(e) => setFilter("verification", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">All</option>
+                              <option value="unverified">Unverified</option>
+                              <option value="etherscan">Etherscan only</option>
+                              <option value="proof">Has proof</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Status</span>
+                            <select value={selfDestructed} onChange={(e) => setFilter("self_destructed", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">All contracts</option>
+                              <option value="0">Live only</option>
+                              <option value="1">Self-destructed only</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1.5 text-sm">
+                            <span className="text-obsidian-400">Sort</span>
+                            <select value={sort} onChange={(e) => setFilter("sort", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                              <option value="">Oldest first</option>
+                              <option value="newest">Newest first</option>
+                              <option value="most_active">Most active</option>
+                            </select>
+                          </label>
+                          <div className="flex items-end">
+                            <button
+                              onClick={() => setFilter("undocumented", undocumented ? "" : "1")}
+                              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors border ${undocumented ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20" : "border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100"}`}
+                            >
+                              {undocumented ? "✓ Undocumented only" : "Show undocumented"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Registrar pills */}
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <span className="text-xs text-obsidian-500 font-medium uppercase tracking-wider">Named in</span>
+                          {([
+                            { value: "any", label: "Any Registrar" },
+                            { value: "GlobalRegistrar", label: "Frontier GlobalRegistrar" },
+                            { value: "LinageeRegistrar", label: "Linagee Registrar" },
+                            { value: "NameRegistry", label: "NameRegistry" },
+                          ] as const).map(({ value, label }) => (
+                            <button key={value} onClick={() => setFilter("registrar", registrar === value ? "" : value)}
+                              className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${registrar === value ? "bg-amber-900/40 border-amber-700/40 text-amber-400" : "border-obsidian-700 bg-obsidian-900/50 text-obsidian-400 hover:text-amber-400 hover:border-amber-700/40"}`}>
+                              {registrar === value ? "✓ " : ""}{label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Capability pills */}
+                        {availableCapabilities.length > 0 && (() => {
+                          const groups: Record<string, string[]> = {};
+                          for (const slug of availableCapabilities) {
+                            const cat = CAPABILITY_CATEGORIES[slug];
+                            if (!cat) continue;
+                            if (!groups[cat.group]) groups[cat.group] = [];
+                            groups[cat.group].push(slug);
+                          }
+                          const visibleGroups = ["Type", "Standard", "Token", "Feature"].filter((g) => groups[g]?.length);
+                          if (!visibleGroups.length) return null;
+                          return (
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-obsidian-300">Capabilities</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25">Beta</span>
+                              </div>
+                              {visibleGroups.map((group) => (
+                                <div key={group} className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs text-obsidian-500 uppercase tracking-wider w-20 shrink-0">{group}</span>
+                                  {groups[group].map((slug) => {
+                                    const cat = CAPABILITY_CATEGORIES[slug]!;
+                                    const active = capabilities.split(",").includes(slug);
+                                    return (
+                                      <button key={slug} onClick={() => toggleCapability(slug)}
+                                        className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? "bg-ether-500/20 border border-ether-500/40 text-ether-300" : "bg-obsidian-900/80 border border-obsidian-700 text-obsidian-400 hover:text-obsidian-200 hover:border-obsidian-600"}`}>
+                                        {active && <Check className="w-3 h-3" />}
+                                        {cat.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             );
           })()}
