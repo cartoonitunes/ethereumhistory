@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { ArrowLeft, Users, GitBranch, FileText, Calendar, Globe, ExternalLink } from "lucide-react";
+import { ArrowLeft, Users, GitBranch, FileText, Calendar, Globe, ExternalLink, BadgeCheck, ShieldCheck } from "lucide-react";
 import { Header } from "@/components/Header";
 import { formatAddress, formatDate, formatRelativeTime } from "@/lib/utils";
 
@@ -17,6 +17,8 @@ interface HistorianProfile {
   joinedAt: string | null;
   totalEdits: number;
   uniqueContracts: number;
+  trusted: boolean;
+  role: string | null;
   recentEdits: Array<{
     contractAddress: string;
     contractName: string | null;
@@ -150,9 +152,26 @@ export default function HistorianProfilePage({
                 </div>
               )}
               <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-obsidian-100">
-                  {profile.name}
-                </h1>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl md:text-3xl font-bold text-obsidian-100">
+                    {profile.name}
+                  </h1>
+                  {profile.role === "admin" && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      <ShieldCheck className="w-3 h-3" />
+                      Admin
+                    </span>
+                  )}
+                  {profile.trusted && profile.role !== "admin" && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                      title="Trusted contributor — edits publish immediately"
+                    >
+                      <BadgeCheck className="w-3 h-3" />
+                      Trusted
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                   {profile.githubUsername && (
                     <a
