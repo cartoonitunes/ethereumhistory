@@ -85,7 +85,7 @@ async function fetchHistoryFeesEth(): Promise<number> {
 }
 
 async function fetchWmeatFeesEth(): Promise<number> {
-  // Tracks ETH sent from the w🍖 pool fee wallet to the donation address.
+  // Tracks ETH sent from the w\U0001F956 pool fee wallet to the donation address.
   // Fees accrue in the Uniswap V3 pools and are periodically sent manually.
   try {
     const url =
@@ -368,7 +368,7 @@ export default async function SupportersPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-obsidian-100">
-                      Wrapped Unicorn Meat (w🍖)
+                      Wrapped Unicorn Meat (w🥖)
                     </span>
                     <a
                       href={`https://ethereumhistory.com/contract/${WMEAT_ADDRESS}`}
@@ -420,7 +420,7 @@ export default async function SupportersPage() {
                 </div>
                 <div className="shrink-0 text-right">
                   <span className="text-sm font-semibold text-ether-300">
-                    {wmeatFeesEth > 0 ? `${wmeatFeesEth.toFixed(4)} ETH` : "pending"}
+                    {wmeatFeesEth > 0 ? (wmeatFeesEth.toFixed(4) + " ETH") : "pending"}
                   </span>
                   {wmeatFeesEth === 0 && (
                     <p className="text-xs text-obsidian-700 mt-0.5">fees accumulating</p>
