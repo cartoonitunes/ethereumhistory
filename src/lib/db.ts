@@ -1112,8 +1112,11 @@ export async function getContractPageData(address: string): Promise<ContractPage
   if (contract.canonicalAddress) {
     const canonical = await dbGetContract(contract.canonicalAddress);
     if (canonical) {
+      const canonicalName = canonical.etherscanContractName || canonical.tokenName || null;
       contract = {
         ...contract,
+        // Inherit name only if this contract has no name of its own
+        etherscanContractName: contract.etherscanContractName || canonicalName,
         etherscanVerified: !!canonical.sourceCode,
         verificationMethod: canonical.verificationMethod,
         sourceCode: canonical.sourceCode,
@@ -1123,7 +1126,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
         verificationNotes: canonical.verificationNotes,
         verificationStatus: canonical.sourceCode ? "verified" : contract.verificationStatus,
         isInheritedVerification: true,
-        canonicalContractName: canonical.etherscanContractName || canonical.tokenName,
+        canonicalContractName: canonicalName,
       };
     }
   }
