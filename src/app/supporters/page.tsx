@@ -109,7 +109,7 @@ async function fetchWmeatFeesEth(): Promise<number> {
         if (data.length >= 64) {
           let a0 = BigInt("0x" + data.slice(0, 64));
           if (a0 >= BigInt(2) ** BigInt(255)) a0 -= BigInt(2) ** BigInt(256);
-          totalWeth += a0 < 0n ? -a0 : a0;
+          totalWeth += a0 < BigInt(0) ? -a0 : a0;
         }
       }
       return Number(formatEther(totalWeth)) * FEE_TIER;
