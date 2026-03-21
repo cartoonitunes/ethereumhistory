@@ -91,6 +91,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     deploymentBlock: number | null;
     deploymentTimestamp: string | null;
     verificationMethod: string | null;
+    canonicalAddress: string | null;
     codeSizeBytes: number | null;
   };
   // Siblings (same bytecode) state
@@ -636,6 +637,7 @@ function SiblingBytecodeTab({
       deploymentBlock: number | null;
       deploymentTimestamp: string | null;
       verificationMethod: string | null;
+      canonicalAddress: string | null;
       codeSizeBytes: number | null;
     }>;
     hasMore: boolean;
@@ -685,7 +687,8 @@ function SiblingBytecodeTab({
                   : "Unknown";
               const isVerified = c.verificationMethod === "exact_bytecode_match" ||
                 c.verificationMethod === "author_published_source" ||
-                c.verificationMethod === "etherscan_verified";
+                c.verificationMethod === "etherscan_verified" ||
+                !!c.canonicalAddress;
 
               return (
                 <tr key={c.address} className="hover:bg-obsidian-900/30 transition-colors">
