@@ -84,48 +84,63 @@ export async function GET(): Promise<NextResponse> {
 
     const dateCondition = buildDateRangeConditions(start, end);
 
-    const rows = await db.execute(sql`
-      SELECT
-        c.address,
-        c.token_name,
-        c.etherscan_contract_name,
-        c.short_description,
-        c.era_id,
-        c.deployment_timestamp,
-        c.canonical_address,
-        canon.etherscan_contract_name AS canonical_name,
-        canon.token_name AS canonical_token_name,
-        canon.short_description AS canonical_description
-      FROM contracts c
-      LEFT JOIN contracts canon ON canon.address = c.canonical_address
-      WHERE
-        c.deployment_timestamp IS NOT NULL
-        AND EXTRACT(YEAR FROM c.deployment_timestamp) BETWEEN 2015 AND 2017
-        AND ${dateCondition}
-      ORDER BY c.deployment_timestamp ASC
-      LIMIT 20
-    `) as any[];
+    const rows = await db
+      .select({
+        address: schema.contracts.address,
+        tokenName: schema.contracts.tokenName,
+        etherscanContractName: schema.contracts.etherscanContractName,
+        shortDescription: schema.contracts.shortDescription,
+        eraId: schema.contracts.eraId,
+        deploymentTimestamp: schema.contracts.deploymentTimestamp,
+        canonicalAddress: schema.contracts.canonicalAddress,
+      })
+      .from(schema.contracts)
+      .where(
+        and(
+          isNotNull(schema.contracts.deploymentTimestamp),
+          dateCondition,
+          sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 2015 AND 2017`
+        )
+      )
+      .orderBy(sql`${schema.contracts.deploymentTimestamp} ASC`)
+      .limit(20) as any[];
+
+    // Fetch canonical names for siblings in a second pass
+    const canonicalAddresses = [...new Set(rows.map((r: any) => r.canonicalAddress).filter(Boolean))];
+    const canonicalMap: Record<string, { name: string | null; description: string | null }> = {};
+    if (canonicalAddresses.length > 0) {
+      const canonRows = await db.execute(sql`
+        SELECT address, etherscan_contract_name, token_name, short_description
+        FROM contracts WHERE address = ANY(${sql`ARRAY[${sql.join(canonicalAddresses.map((a) => sql`${a}`), sql`, `)}]::text[]`})
+      `) as any[];
+      for (const canon of canonRows) {
+        canonicalMap[canon.address] = {
+          name: canon.token_name || canon.etherscan_contract_name || null,
+          description: canon.short_description || null,
+        };
+      }
+    }
 
     const contracts = rows.map((row: any) => {
+      const canon = row.canonicalAddress ? canonicalMap[row.canonicalAddress] : null;
       const name =
-        row.token_name ||
-        row.etherscan_contract_name ||
-        row.canonical_token_name ||
-        row.canonical_name ||
+        row.tokenName ||
+        row.etherscanContractName ||
+        canon?.name ||
         null;
 
-      const ts = row.deployment_timestamp ? new Date(row.deployment_timestamp) : null;
+      const ts = row.deploymentTimestamp ? new Date(row.deploymentTimestamp) : null;
       const deploymentDate = ts ? ts.toISOString().split("T")[0] : null;
       const deploymentYear = ts ? ts.getFullYear() : null;
 
       return {
         address: row.address,
         name,
-        shortDescription: row.short_description || row.canonical_description || null,
-        eraId: row.era_id || null,
+        shortDescription: row.shortDescription || canon?.description || null,
+        eraId: row.eraId || null,
         deploymentDate,
         deploymentYear,
-        canonicalAddress: row.canonical_address || null,
+        canonicalAddress: row.canonicalAddress || null,
       };
     });
 
