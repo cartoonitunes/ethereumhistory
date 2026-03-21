@@ -47,12 +47,12 @@ export async function GET(): Promise<NextResponse> {
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contracts),
 
-      // Overall documented: has description OR is a verified sibling (canonical_address set)
+      // Overall documented: has description, is verified (any method), or is a verified sibling
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contracts)
         .where(
-          sql`(${schema.contracts.shortDescription} IS NOT NULL AND ${schema.contracts.shortDescription} != '') OR ${schema.contracts.canonicalAddress} IS NOT NULL`
+          sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`
         ),
 
       // Active historian count
@@ -78,7 +78,7 @@ export async function GET(): Promise<NextResponse> {
           .where(
             and(
               eq(schema.contracts.eraId, eraId),
-              sql`((${schema.contracts.shortDescription} IS NOT NULL AND ${schema.contracts.shortDescription} != '') OR ${schema.contracts.canonicalAddress} IS NOT NULL)`
+              sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`
             )
           ),
       ]),
@@ -97,7 +97,7 @@ export async function GET(): Promise<NextResponse> {
           .where(
             and(
               sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
-              sql`((${schema.contracts.shortDescription} IS NOT NULL AND ${schema.contracts.shortDescription} != '') OR ${schema.contracts.canonicalAddress} IS NOT NULL)`
+              sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`
             )
           ),
       ]),
