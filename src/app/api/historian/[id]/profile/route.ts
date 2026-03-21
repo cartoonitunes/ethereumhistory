@@ -40,6 +40,8 @@ export async function GET(
         bio: schema.historians.bio,
         websiteUrl: schema.historians.websiteUrl,
         createdAt: schema.historians.createdAt,
+        trusted: schema.historians.trusted,
+        role: schema.historians.role,
       })
       .from(schema.historians)
       .where(
@@ -115,6 +117,8 @@ export async function GET(
           totalEdits,
           uniqueContracts,
           recentEdits,
+          trusted: historian.trusted,
+          role: historian.role || null,
         },
         error: null,
       },

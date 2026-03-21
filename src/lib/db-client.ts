@@ -895,8 +895,39 @@ export async function getEditCountForHistorianFromDb(historianId: number): Promi
 }
 
 /**
- * Check and promote historian to trusted status if they have 30+ edits
- * Returns true if promoted, false otherwise
+ * Count how many contracts this historian was the FIRST to document
+ * (first edit ever on that contract address)
+ */
+export async function getFirstDocumentationCountFromDb(historianId: number): Promise<number> {
+  const database = getDb();
+
+  // For each contract this historian edited, check if their earliest edit
+  // on that contract predates any other historian's edit on the same contract
+  const result = await database.execute(sql`
+    SELECT COUNT(*)::int AS count
+    FROM (
+      SELECT ce.contract_address
+      FROM contract_edits ce
+      WHERE ce.historian_id = ${historianId}
+        AND ce.edited_at = (
+          SELECT MIN(ce2.edited_at)
+          FROM contract_edits ce2
+          WHERE ce2.contract_address = ce.contract_address
+        )
+      GROUP BY ce.contract_address
+    ) first_docs
+  `);
+
+  return (result.rows[0] as { count: number })?.count || 0;
+}
+
+/**
+ * Check and promote historian to trusted status based on contribution quality.
+ * Auto-promotion criteria (either condition):
+ *   - 2+ contracts where they were the first ever documenter, OR
+ *   - 10+ total edits
+ * Manual override (trustedOverride=false) blocks auto-promotion permanently.
+ * Returns true if promoted, false otherwise.
  */
 export async function checkAndPromoteTrustedStatusFromDb(historianId: number): Promise<boolean> {
   const database = getDb();
@@ -911,12 +942,15 @@ export async function checkAndPromoteTrustedStatusFromDb(historianId: number): P
   // If manually overridden to untrusted, don't auto-promote
   if (historian.trustedOverride === false) return false;
   
-  // Count edits
+  // Check total edits
   const editCount = await getEditCountForHistorianFromDb(historianId);
-  
-  // If >= 30 edits and not manually blocked, promote
-  // At this point, trustedOverride is either null (auto) or true (manual trusted)
-  if (editCount >= 30) {
+
+  // Check first-documentation count (first ever edit on a contract)
+  const firstDocCount = await getFirstDocumentationCountFromDb(historianId);
+
+  const shouldPromote = firstDocCount >= 2 || editCount >= 10;
+
+  if (shouldPromote) {
     await database
       .update(schema.historians)
       .set({
