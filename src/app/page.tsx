@@ -81,7 +81,7 @@ async function getProgressStats(): Promise<ProgressStats | null> {
         ] = await Promise.all([
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-            .where(sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`),
+            .where(sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.historians)
             .where(eq(schema.historians.active, true)),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contractEdits),
@@ -89,13 +89,13 @@ async function getProgressStats(): Promise<ProgressStats | null> {
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
               .where(eq(schema.contracts.eraId, eraId)),
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(eq(schema.contracts.eraId, eraId), sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`)),
+              .where(and(eq(schema.contracts.eraId, eraId), sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`)),
           ]),
           ...YEARS.flatMap((year) => [
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
               .where(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`),
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`, sql`(short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL`)),
+              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`, sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`)),
           ]),
         ]);
 
