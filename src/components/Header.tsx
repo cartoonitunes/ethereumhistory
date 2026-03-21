@@ -79,7 +79,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
   const navLinks = [
     { href: "/browse", label: "Browse" },
     { href: "/proofs", label: "Proofs" },
-    { href: "/#for-agents", label: "For Agents" },
+    { href: "/for-agents", label: "For Agents" },
     { href: "/supporters", label: "Supporters" },
     { href: "/donate", label: "Donate", highlight: true },
   ];

@@ -302,6 +302,28 @@ export async function POST(
     // Source code may only be set when the contract is being verified in this same
     // request, or is already marked as verified. Prevents unverified code from being
     // added to contracts that haven't been proven.
+
+    // --- Proof lock: once verificationMethod is set, only admins can overwrite ---
+    const isAdmin = me.role === "admin";
+    const alreadyVerified = !!currentContract?.verificationMethod;
+    const isAttemptingVerificationChange =
+      contractPatch.verificationMethod !== undefined ||
+      contractPatch.verificationProofUrl !== undefined ||
+      contractPatch.verificationNotes !== undefined ||
+      contractPatch.compilerCommit !== undefined ||
+      contractPatch.compilerLanguage !== undefined;
+
+    if (alreadyVerified && isAttemptingVerificationChange && !isAdmin) {
+      return NextResponse.json(
+        {
+          data: null,
+          error:
+            "This contract already has a verified proof. Verification fields are locked and can only be updated by an admin. Use /api/contract/{address}/proof for new proof submissions.",
+        },
+        { status: 403 }
+      );
+    }
+
     const verificationPatch: Record<string, string | null> = {};
     if (contractPatch.sourceCode !== undefined) {
       const isBeingVerified = contractPatch.verificationStatus === "verified";

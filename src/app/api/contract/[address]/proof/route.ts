@@ -1,20 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { ApiResponse } from "@/types";
 import { isValidAddress } from "@/lib/utils";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 import {
+  getContractByAddress,
   insertBatchEditSuggestionsFromDb,
   logContractEditFromDb,
-  updateContractHistoryFieldsFromDb,
   updateContractEtherscanEnrichmentFromDb,
 } from "@/lib/db-client";
 
 export const dynamic = "force-dynamic";
 
+const VERIFICATION_FIELDS = [
+  "verificationMethod",
+  "verificationProofUrl",
+  "verificationNotes",
+  "compilerCommit",
+  "compilerLanguage",
+];
+
+async function fetchOnChainBytecode(address: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://eth.llamarpc.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getCode",
+        params: [address, "latest"],
+        id: 1,
+      }),
+    });
+    const data = await res.json();
+    const hex: string = data?.result ?? "";
+    // Strip 0x prefix
+    return hex.startsWith("0x") ? hex.slice(2).toLowerCase() : hex.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ address: string }> }
-): Promise<NextResponse> {
+): Promise<NextResponse<ApiResponse<{ status: "published" | "pending_review" }>>> {
   const { address } = await params;
+
   if (!isValidAddress(address)) {
     return NextResponse.json(
       { data: null, error: "Invalid Ethereum address format." },
@@ -24,18 +55,14 @@ export async function POST(
 
   const me = await getHistorianMeFromCookies();
   if (!me || !me.active) {
-    return NextResponse.json(
-      { data: null, error: "Unauthorized." },
-      { status: 401 }
-    );
+    return NextResponse.json({ data: null, error: "Unauthorized." }, { status: 401 });
   }
+
+  const normalized = address.toLowerCase();
 
   const body = await request.json().catch(() => null);
   if (!body) {
-    return NextResponse.json(
-      { data: null, error: "Invalid request body." },
-      { status: 400 }
-    );
+    return NextResponse.json({ data: null, error: "Invalid request body." }, { status: 400 });
   }
 
   const {
@@ -46,96 +73,90 @@ export async function POST(
     compilerLanguage,
     notes,
     runtimeBytecodeHex,
-  } = body;
+  } = body as {
+    repoUrl?: string;
+    compilerVersion?: string;
+    optimizerEnabled?: boolean;
+    optimizerRuns?: number;
+    compilerLanguage?: string;
+    notes?: string;
+    runtimeBytecodeHex?: string;
+  };
 
-  if (!repoUrl || !runtimeBytecodeHex) {
+  if (!repoUrl || !compilerVersion || !runtimeBytecodeHex) {
     return NextResponse.json(
-      { data: null, error: "repoUrl and runtimeBytecodeHex are required." },
+      { data: null, error: "Missing required fields: repoUrl, compilerVersion, runtimeBytecodeHex." },
       { status: 400 }
     );
   }
 
-  const normalized = address.toLowerCase();
-
-  // Fetch on-chain runtime bytecode
-  let onChainCode: string;
-  try {
-    const rpcRes = await fetch("https://eth.llamarpc.com", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_getCode",
-        params: [address, "latest"],
-        id: 1,
-      }),
-    });
-    const rpcJson = await rpcRes.json();
-    onChainCode = (rpcJson.result || "").replace(/^0x/i, "").toLowerCase();
-  } catch (error) {
-    console.error("Error fetching on-chain bytecode:", error);
+  // --- Automated bytecode verification ---
+  const onChain = await fetchOnChainBytecode(normalized);
+  if (!onChain) {
     return NextResponse.json(
-      { data: null, error: "Failed to fetch on-chain bytecode." },
-      { status: 502 }
+      { data: null, error: "Could not fetch on-chain bytecode. Try again later." },
+      { status: 503 }
     );
   }
 
-  // Compare bytecodes
-  const submittedCode = runtimeBytecodeHex.replace(/^0x/i, "").toLowerCase();
-  if (onChainCode !== submittedCode) {
+  const submitted = runtimeBytecodeHex.replace(/^0x/i, "").toLowerCase();
+  if (submitted !== onChain) {
     return NextResponse.json(
-      { data: null, error: "Bytecode does not match on-chain runtime." },
+      {
+        data: null,
+        error: "Bytecode does not match on-chain runtime. Verify your compiler settings and source.",
+      },
       { status: 400 }
     );
   }
 
-  const fieldsChanged = [
-    "verificationMethod",
-    "verificationProofUrl",
-    "verificationNotes",
-    "compilerCommit",
-    "compilerLanguage",
-  ];
+  // --- Check if already verified (lock protection) ---
+  const currentContract = await getContractByAddress(normalized);
+  if (!currentContract) {
+    return NextResponse.json({ data: null, error: "Contract not found." }, { status: 404 });
+  }
 
-  try {
-    if (me.trusted) {
-      // Trusted historian: publish immediately
-      await updateContractEtherscanEnrichmentFromDb(normalized, {
-        verificationMethod: "exact_bytecode_match",
-        verificationProofUrl: repoUrl,
-        verificationNotes: notes || null,
-        compilerCommit: compilerVersion || null,
-        compilerLanguage: compilerLanguage || null,
-      });
+  const isAdmin = me.role === "admin";
+  const alreadyVerified = !!currentContract.verificationMethod;
 
-      await logContractEditFromDb({
-        contractAddress: normalized,
-        historianId: me.id,
-        fieldsChanged,
-      });
+  if (alreadyVerified && !isAdmin) {
+    return NextResponse.json(
+      {
+        data: null,
+        error:
+          "This contract already has a verified proof. Only admins can update existing proofs. Contact an admin if the current proof is incorrect.",
+      },
+      { status: 403 }
+    );
+  }
 
-      return NextResponse.json({
-        data: { status: "published" },
-        error: null,
-      });
-    }
+  const verificationNotes =
+    [
+      notes,
+      optimizerEnabled !== undefined
+        ? `Optimizer: ${optimizerEnabled ? `ON (${optimizerRuns ?? 200} runs)` : "OFF"}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(". ") || null;
 
-    // Untrusted historian: insert into edit_suggestions
-    const fields = [
-      { fieldName: "verificationMethod", suggestedValue: "exact_bytecode_match" },
-      { fieldName: "verificationProofUrl", suggestedValue: repoUrl },
-      ...(notes ? [{ fieldName: "verificationNotes", suggestedValue: notes }] : []),
-      ...(compilerVersion ? [{ fieldName: "compilerCommit", suggestedValue: compilerVersion }] : []),
-      ...(compilerLanguage ? [{ fieldName: "compilerLanguage", suggestedValue: compilerLanguage }] : []),
-    ];
+  const fieldsChanged = VERIFICATION_FIELDS.filter((f) => {
+    if (f === "verificationMethod") return true;
+    if (f === "verificationProofUrl") return !!repoUrl;
+    if (f === "verificationNotes") return !!verificationNotes;
+    if (f === "compilerCommit") return !!compilerVersion;
+    if (f === "compilerLanguage") return !!compilerLanguage;
+    return false;
+  });
 
-    await insertBatchEditSuggestionsFromDb({
-      contractAddress: normalized,
-      submitterHistorianId: me.id,
-      submitterName: me.name,
-      submitterGithub: me.githubUsername || null,
-      fields,
-      reason: `Bytecode proof submission (optimizer: ${optimizerEnabled ?? "unknown"}, runs: ${optimizerRuns ?? "unknown"})`,
+  // --- Trusted / admin: publish immediately ---
+  if (me.trusted || isAdmin) {
+    await updateContractEtherscanEnrichmentFromDb(normalized, {
+      verificationMethod: "exact_bytecode_match",
+      verificationProofUrl: repoUrl,
+      verificationNotes,
+      compilerCommit: compilerVersion,
+      compilerLanguage: compilerLanguage ?? null,
     });
 
     await logContractEditFromDb({
@@ -144,15 +165,26 @@ export async function POST(
       fieldsChanged,
     });
 
-    return NextResponse.json({
-      data: { status: "pending_review" },
-      error: null,
-    });
-  } catch (error) {
-    console.error("Error processing proof submission:", error);
-    return NextResponse.json(
-      { data: null, error: "Failed to process proof submission." },
-      { status: 500 }
-    );
+    return NextResponse.json({ data: { status: "published" }, error: null });
   }
+
+  // --- Untrusted: queue for review ---
+  const suggestionFields: Array<{ fieldName: string; suggestedValue: string }> = [
+    { fieldName: "verificationMethod", suggestedValue: "exact_bytecode_match" },
+    { fieldName: "verificationProofUrl", suggestedValue: repoUrl },
+    ...(verificationNotes ? [{ fieldName: "verificationNotes", suggestedValue: verificationNotes }] : []),
+    { fieldName: "compilerCommit", suggestedValue: compilerVersion },
+    ...(compilerLanguage ? [{ fieldName: "compilerLanguage", suggestedValue: compilerLanguage }] : []),
+  ];
+
+  await insertBatchEditSuggestionsFromDb({
+    contractAddress: normalized,
+    submitterHistorianId: me.id,
+    submitterName: me.name ?? me.githubUsername ?? "unknown",
+    submitterGithub: me.githubUsername ?? null,
+    fields: suggestionFields,
+    reason: `Proof submission via /api/contract/${normalized}/proof`,
+  });
+
+  return NextResponse.json({ data: { status: "pending_review" }, error: null });
 }
