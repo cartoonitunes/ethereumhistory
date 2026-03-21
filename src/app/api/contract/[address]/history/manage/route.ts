@@ -225,7 +225,7 @@ export async function POST(
       manualCategories: normalizedCategories,
       shortDescription:
         contractPatch.shortDescription !== undefined
-          ? (String(contractPatch.shortDescription || "").trim() || null)
+          ? (String(contractPatch.shortDescription || "").trim().slice(0, 160) || null)
           : undefined,
       description:
         contractPatch.description !== undefined
