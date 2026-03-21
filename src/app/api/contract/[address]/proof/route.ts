@@ -21,7 +21,7 @@ const VERIFICATION_FIELDS = [
 
 async function fetchOnChainBytecode(address: string): Promise<string | null> {
   try {
-    const res = await fetch("https://eth.llamarpc.com", {
+    const res = await fetch("https://ethereum.publicnode.com", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
