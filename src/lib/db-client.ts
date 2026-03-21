@@ -1672,6 +1672,10 @@ export async function getDocumentedContractsFromDb(params: {
     const pattern = `%${params.codeQuery.trim()}%`;
     conditions.push(
       or(
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.etherscanContractName, pattern),
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
@@ -1774,6 +1778,10 @@ export async function getDocumentedContractsCountFromDb(params: {
     const pattern = `%${params.codeQuery.trim()}%`;
     conditions.push(
       or(
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.etherscanContractName, pattern),
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
@@ -1879,6 +1887,10 @@ export async function getUndocumentedContractsFromDb(params: {
     const pattern = `%${params.codeQuery.trim()}%`;
     conditions.push(
       or(
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.etherscanContractName, pattern),
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
@@ -1983,6 +1995,10 @@ export async function getUndocumentedContractsCountFromDb(params: {
     const pattern = `%${params.codeQuery.trim()}%`;
     conditions.push(
       or(
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.etherscanContractName, pattern),
         ilike(schema.contracts.decompiledCode, pattern),
         ilike(schema.contracts.sourceCode, pattern)
       )!
