@@ -698,6 +698,7 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
     name: row.name,
     active: row.active ?? true,
     trusted: row.trusted ?? false,
+    role: row.role || null,
     avatarUrl: row.avatarUrl || null,
     bio: row.bio || null,
     websiteUrl: row.websiteUrl || null,

@@ -448,6 +448,7 @@ export interface HistorianMe {
   name: string;
   active: boolean;
   trusted: boolean;
+  role: string | null;
   avatarUrl: string | null;
   bio: string | null;
   websiteUrl: string | null;

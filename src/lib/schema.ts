@@ -198,6 +198,7 @@ export const historians = pgTable(
     active: boolean("active").notNull().default(true),
     trusted: boolean("trusted").notNull().default(false),
     trustedOverride: boolean("trusted_override"), // NULL = auto, TRUE/FALSE = manual
+    role: text("role"), // NULL or "historian" = standard, "trusted" = established, "admin" = full access
     // GitHub OAuth
     githubId: text("github_id"),
     githubUsername: text("github_username"),
