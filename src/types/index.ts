@@ -106,6 +106,7 @@ export interface Contract {
 
   // On-chain data (factual)
   runtimeBytecode: string | null;
+  runtimeBytecodeHash: string | null;
   creationBytecode: string | null;
   deployerAddress: string | null;
   deploymentTxHash: string | null;
