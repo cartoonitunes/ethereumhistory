@@ -639,6 +639,7 @@ function SiblingBytecodeTab({
       verificationMethod: string | null;
       canonicalAddress: string | null;
       codeSizeBytes: number | null;
+      hasDescription?: boolean;
     }>;
     hasMore: boolean;
   };
@@ -705,14 +706,21 @@ function SiblingBytecodeTab({
                   </td>
                   <td className="px-4 py-3 text-obsidian-400 text-xs whitespace-nowrap">{date}</td>
                   <td className="px-4 py-3">
-                    {isVerified ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
-                        <Check className="w-3 h-3" />
-                        Verified
-                      </span>
-                    ) : (
-                      <span className="text-xs text-obsidian-600">Unverified</span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isVerified ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
+                          <Check className="w-3 h-3" />
+                          Verified
+                        </span>
+                      ) : (
+                        <span className="text-xs text-obsidian-600">Unverified</span>
+                      )}
+                      {c.hasDescription && (
+                        <span className="inline-flex items-center rounded-full border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 text-xs font-medium text-purple-400">
+                          Documented
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
