@@ -346,7 +346,7 @@ export default function HistorianProfilePage() {
             </div>
             <div className="pt-2 border-t border-obsidian-800">
               <p className="text-xs text-obsidian-500 mb-3">
-                Optional. For future token rewards and airdrops to historians based on their contributions.
+                Optional. For future contributor recognition programs.
               </p>
               <div className="space-y-4">
                 <div>
