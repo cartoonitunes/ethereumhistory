@@ -4,8 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { Loader2, ArrowLeft, Save, UserPlus, LogOut, ClipboardCheck, ExternalLink, Github } from "lucide-react";
+import { Loader2, ArrowLeft, Save, UserPlus, LogOut, ClipboardCheck, ExternalLink, Github, Key, Plus, Copy, Check, Trash2 } from "lucide-react";
 import type { HistorianMe } from "@/types";
+
+interface ApiKeyRow {
+  id: number;
+  keyPrefix: string;
+  name: string | null;
+  tier: string;
+  rateLimitPerMinute: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
 
 export default function HistorianProfilePage() {
   const router = useRouter();
@@ -26,6 +37,16 @@ export default function HistorianProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // API Keys state
+  const [apiKeys, setApiKeys] = useState<ApiKeyRow[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [apiKeyName, setApiKeyName] = useState("");
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +69,8 @@ export default function HistorianProfilePage() {
         setWebsiteUrl(historian.websiteUrl || "");
         setEthereumAddress(historian.ethereumAddress || "");
         setBaseAddress(historian.baseAddress || "");
+        // Load API keys after profile loads
+        loadApiKeys();
       } catch {
         if (!cancelled) setMe(null);
       } finally {
@@ -185,6 +208,76 @@ export default function HistorianProfilePage() {
     } catch {
       // Ignore errors
     }
+  }
+
+  async function loadApiKeys() {
+    setApiKeysLoading(true);
+    try {
+      const res = await fetch("/api/historian/api-keys");
+      const json = await res.json();
+      if (json?.data) setApiKeys(json.data);
+    } catch {
+      // Ignore
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }
+
+  async function handleGenerateKey(e: React.FormEvent) {
+    e.preventDefault();
+    setGeneratingKey(true);
+    setApiKeyError(null);
+    setNewlyGeneratedKey(null);
+
+    try {
+      const res = await fetch("/api/historian/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: apiKeyName.trim() || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        setApiKeyError(String(json?.error || "Failed to generate API key."));
+        return;
+      }
+      setNewlyGeneratedKey(json.data.key);
+      setApiKeyName("");
+      await loadApiKeys();
+    } catch {
+      setApiKeyError("Failed to generate API key.");
+    } finally {
+      setGeneratingKey(false);
+    }
+  }
+
+  async function handleRevokeKey(id: number) {
+    if (!confirm("Revoke this API key? This cannot be undone.")) return;
+    setRevokingId(id);
+    setApiKeyError(null);
+    try {
+      const res = await fetch("/api/historian/api-keys", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        setApiKeyError(String(json?.error || "Failed to revoke key."));
+        return;
+      }
+      await loadApiKeys();
+    } catch {
+      setApiKeyError("Failed to revoke key.");
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  async function handleCopyKey() {
+    if (!newlyGeneratedKey) return;
+    await navigator.clipboard.writeText(newlyGeneratedKey);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
   }
 
   if (loading) {
@@ -470,6 +563,143 @@ export default function HistorianProfilePage() {
               )}
             </button>
           </form>
+        </div>
+
+        {/* API Keys */}
+        <div className="mb-8 p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+          <div className="flex items-center gap-2 mb-1">
+            <Key className="w-5 h-5 text-ether-400" />
+            <h2 className="text-lg font-semibold">API Keys</h2>
+          </div>
+          <p className="text-sm text-obsidian-400 mb-4">
+            Use API keys to authenticate programmatic access to EthereumHistory APIs.{" "}
+            <span className="text-obsidian-500">Historian tier: 120 requests/minute.</span>
+          </p>
+
+          {/* Newly generated key banner */}
+          {newlyGeneratedKey && (
+            <div className="mb-4 p-4 rounded-lg border border-amber-500/40 bg-amber-500/10">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-amber-400 text-sm font-semibold">⚠ Copy this key now — it won&apos;t be shown again</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-obsidian-900/60 px-3 py-2 rounded border border-obsidian-700 text-amber-300 break-all">
+                  {newlyGeneratedKey}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyKey}
+                  className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 text-sm font-medium transition-colors"
+                >
+                  {copiedKey ? (
+                    <><Check className="w-4 h-4 text-green-400" /><span className="text-green-400">Copied</span></>
+                  ) : (
+                    <><Copy className="w-4 h-4" /><span>Copy</span></>
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNewlyGeneratedKey(null)}
+                className="mt-2 text-xs text-obsidian-500 hover:text-obsidian-300 transition-colors"
+              >
+                I&apos;ve saved it — dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Generate new key form */}
+          <form onSubmit={handleGenerateKey} className="flex items-end gap-2 mb-4">
+            <div className="flex-1">
+              <label className="block text-sm text-obsidian-400 mb-1">Key label (optional)</label>
+              <input
+                type="text"
+                value={apiKeyName}
+                onChange={(e) => setApiKeyName(e.target.value)}
+                placeholder="e.g. My Bot, CI Pipeline"
+                maxLength={80}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                disabled={generatingKey}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={generatingKey}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingKey ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              Generate Key
+            </button>
+          </form>
+
+          {apiKeyError && (
+            <div className="mb-3 text-sm text-red-400">{apiKeyError}</div>
+          )}
+
+          {/* Key list */}
+          {apiKeysLoading ? (
+            <div className="flex items-center gap-2 text-sm text-obsidian-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading keys...
+            </div>
+          ) : apiKeys.length === 0 ? (
+            <p className="text-sm text-obsidian-600">No API keys yet. Generate one above.</p>
+          ) : (
+            <div className="space-y-2">
+              {apiKeys.map((k) => (
+                <div
+                  key={k.id}
+                  className={`flex items-center gap-3 px-3 py-3 rounded-lg border text-sm ${
+                    k.revokedAt
+                      ? "border-obsidian-800/50 bg-obsidian-900/20 opacity-50"
+                      : "border-obsidian-800 bg-obsidian-900/40"
+                  }`}
+                >
+                  <Key className="w-4 h-4 text-obsidian-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <code className="font-mono text-xs text-ether-300">{k.keyPrefix}••••••••</code>
+                      {k.name && (
+                        <span className="text-obsidian-400 truncate">{k.name}</span>
+                      )}
+                      {k.revokedAt && (
+                        <span className="text-xs text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded">revoked</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-obsidian-600 mt-0.5">
+                      Created {new Date(k.createdAt).toLocaleDateString()}
+                      {k.lastUsedAt && (
+                        <> · Last used {new Date(k.lastUsedAt).toLocaleDateString()}</>
+                      )}
+                      {!k.lastUsedAt && !k.revokedAt && (
+                        <> · Never used</>
+                      )}
+                    </div>
+                  </div>
+                  {!k.revokedAt && (
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeKey(k.id)}
+                      disabled={revokingId === k.id}
+                      title="Revoke key"
+                      className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs transition-colors disabled:opacity-50"
+                    >
+                      {revokingId === k.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Logout */}

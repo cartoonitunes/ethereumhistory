@@ -536,3 +536,32 @@ export const donationClaims = pgTable("donation_claims", {
 
 export type DonationClaim = typeof donationClaims.$inferSelect;
 export type NewDonationClaim = typeof donationClaims.$inferInsert;
+
+// =============================================================================
+// API Keys
+// =============================================================================
+
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: serial("id").primaryKey(),
+    historianId: integer("historian_id")
+      .notNull()
+      .references(() => historians.id),
+    keyHash: text("key_hash").notNull().unique(),
+    keyPrefix: text("key_prefix").notNull(),
+    name: text("name"),
+    tier: text("tier").notNull().default("historian"),
+    rateLimitPerMinute: integer("rate_limit_per_minute").notNull().default(120),
+    createdAt: timestamp("created_at").defaultNow(),
+    lastUsedAt: timestamp("last_used_at"),
+    revokedAt: timestamp("revoked_at"),
+  },
+  (table) => ({
+    keyHashIdx: index("idx_api_keys_key_hash").on(table.keyHash),
+    historianIdx: index("idx_api_keys_historian").on(table.historianId),
+  })
+);
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
