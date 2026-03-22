@@ -83,6 +83,8 @@ export const contracts = pgTable(
     shapeSignature: text("shape_signature"),
     runtimeBytecodeHash: text("runtime_bytecode_hash"),
     canonicalAddress: text("canonical_address"),
+    deployedBytecode: text("deployed_bytecode"),
+    deployedBytecodeHash: text("deployed_bytecode_hash"),
 
     // Verification proof data (compiler archaeology)
     compilerLanguage: text("compiler_language"),

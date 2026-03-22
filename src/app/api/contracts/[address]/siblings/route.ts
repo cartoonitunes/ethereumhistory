@@ -19,18 +19,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const db = getDb();
 
-    // Get the target contract's bytecode hash
+    // Get the target contract's bytecode hash (prefer deployed, fall back to runtime)
     const [target] = await db
-      .select({ runtimeBytecodeHash: contracts.runtimeBytecodeHash })
+      .select({
+        deployedBytecodeHash: contracts.deployedBytecodeHash,
+        runtimeBytecodeHash: contracts.runtimeBytecodeHash,
+      })
       .from(contracts)
       .where(eq(contracts.address, normalizedAddress))
       .limit(1);
 
-    if (!target?.runtimeBytecodeHash) {
+    const hash = target?.deployedBytecodeHash ?? target?.runtimeBytecodeHash;
+    if (!hash) {
       return NextResponse.json({ hash: null, count: 0, contracts: [] });
     }
 
-    const hash = target.runtimeBytecodeHash;
+    // Use the appropriate hash column for matching
+    const hashColumn = target?.deployedBytecodeHash
+      ? contracts.deployedBytecodeHash
+      : contracts.runtimeBytecodeHash;
 
     // Get true total count of siblings
     const [{ totalCount }] = await db
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .from(contracts)
       .where(
         and(
-          eq(contracts.runtimeBytecodeHash, hash),
+          eq(hashColumn, hash),
           ne(contracts.address, normalizedAddress)
         )
       );
@@ -59,7 +66,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .from(contracts)
       .where(
         and(
-          eq(contracts.runtimeBytecodeHash, hash),
+          eq(hashColumn, hash),
           ne(contracts.address, normalizedAddress)
         )
       )

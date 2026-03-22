@@ -2884,10 +2884,11 @@ export async function getSiblingCountsForAddresses(
   if (addresses.length === 0) return {};
   const database = getDb();
 
-  // Get bytecode hashes for the given addresses
+  // Get bytecode hashes for the given addresses (prefer deployed, fall back to runtime)
   const hashRows = await database
     .select({
       address: schema.contracts.address,
+      deployedBytecodeHash: schema.contracts.deployedBytecodeHash,
       runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash,
     })
     .from(schema.contracts)
@@ -2895,38 +2896,40 @@ export async function getSiblingCountsForAddresses(
 
   const hashToAddresses: Record<string, string[]> = {};
   for (const row of hashRows) {
-    if (!row.runtimeBytecodeHash) continue;
-    if (!hashToAddresses[row.runtimeBytecodeHash]) {
-      hashToAddresses[row.runtimeBytecodeHash] = [];
+    const hash = row.deployedBytecodeHash ?? row.runtimeBytecodeHash;
+    if (!hash) continue;
+    if (!hashToAddresses[hash]) {
+      hashToAddresses[hash] = [];
     }
-    hashToAddresses[row.runtimeBytecodeHash].push(row.address);
+    hashToAddresses[hash].push(row.address);
   }
 
   const uniqueHashes = Object.keys(hashToAddresses);
   if (uniqueHashes.length === 0) return {};
 
-  // Count contracts per hash (all contracts, not just verified ones)
+  // Count contracts per hash using deployed_bytecode_hash (with fallback via COALESCE)
   const countRows = await database
     .select({
-      runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash,
+      hash: sql<string>`COALESCE(deployed_bytecode_hash, runtime_bytecode_hash)`,
       count: sql<number>`count(*)::int`,
     })
     .from(schema.contracts)
-    .where(inArray(schema.contracts.runtimeBytecodeHash, uniqueHashes))
-    .groupBy(schema.contracts.runtimeBytecodeHash);
+    .where(sql`COALESCE(deployed_bytecode_hash, runtime_bytecode_hash) IN (${sql.join(uniqueHashes.map(h => sql`${h}`), sql`, `)})`)
+    .groupBy(sql`COALESCE(deployed_bytecode_hash, runtime_bytecode_hash)`);
 
   const hashToTotal: Record<string, number> = {};
   for (const row of countRows) {
-    if (row.runtimeBytecodeHash) {
-      hashToTotal[row.runtimeBytecodeHash] = row.count;
+    if (row.hash) {
+      hashToTotal[row.hash] = row.count;
     }
   }
 
   // Build address -> sibling count (total minus 1 = siblings)
   const result: Record<string, number> = {};
   for (const row of hashRows) {
-    if (!row.runtimeBytecodeHash) continue;
-    const total = hashToTotal[row.runtimeBytecodeHash] ?? 1;
+    const hash = row.deployedBytecodeHash ?? row.runtimeBytecodeHash;
+    if (!hash) continue;
+    const total = hashToTotal[hash] ?? 1;
     result[row.address] = total - 1; // siblings = total minus self
   }
   return result;
