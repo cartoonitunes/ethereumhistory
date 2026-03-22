@@ -62,6 +62,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         verificationMethod: contracts.verificationMethod,
         canonicalAddress: contracts.canonicalAddress,
         codeSizeBytes: contracts.codeSizeBytes,
+        shortDescription: contracts.shortDescription,
       })
       .from(contracts)
       .where(
@@ -77,7 +78,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       hash,
       count: totalCount,
-      contracts: siblings,
+      contracts: siblings.map((s) => ({
+        ...s,
+        hasDescription: s.shortDescription != null && s.shortDescription !== "",
+        shortDescription: undefined,
+      })),
       offset,
       hasMore: offset + siblings.length < totalCount,
     });
