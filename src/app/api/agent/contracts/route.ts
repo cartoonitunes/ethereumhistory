@@ -16,13 +16,46 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isDatabaseConfigured, getContractsForAgentDiscoveryFromDb } from "@/lib/db-client";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
 
+// Rate limits: authenticated users get 120/min, anonymous get 20/min
+const RATE_LIMIT_AUTH = { maxRequests: 120, windowSeconds: 60 };
+const RATE_LIMIT_ANON = { maxRequests: 20, windowSeconds: 60 };
+
+function validateApiKey(request: NextRequest): boolean {
+  const token = request.headers.get("x-historian-token") || request.headers.get("x-api-key");
+  if (!token) return false;
+  // Accept historian tokens (validated elsewhere) or the agent token
+  const validTokens = [
+    process.env.AGENT_API_KEY,
+    "neo-historian-d4b105db78f760f0abcc58c13c4452f2", // Neo's token
+  ].filter(Boolean);
+  return validTokens.includes(token);
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Rate limiting
+  const isAuthenticated = validateApiKey(request);
+  const config = isAuthenticated ? RATE_LIMIT_AUTH : RATE_LIMIT_ANON;
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") || "unknown";
+  const identifier = isAuthenticated
+    ? `agent-auth:${request.headers.get("x-historian-token") || request.headers.get("x-api-key")}`
+    : `agent-anon:${ip}`;
+  const { allowed, remaining, resetAt } = checkRateLimit(identifier, config);
+
+  if (!allowed) {
+    return NextResponse.json(
+      { data: [], error: "Rate limit exceeded. Authenticate with x-api-key header for higher limits.", meta: { resetAt: new Date(resetAt).toISOString() } },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((resetAt - Date.now()) / 1000)), "X-RateLimit-Remaining": "0" } }
+    );
+  }
+
   if (!isDatabaseConfigured()) {
     return NextResponse.json(
       {
@@ -91,6 +124,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       limit,
       offset,
       count: data.length,
+    },
+  }, {
+    headers: {
+      "X-RateLimit-Remaining": String(remaining),
     },
   });
 }
