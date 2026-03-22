@@ -50,6 +50,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         )
       );
 
+    // Check if ANY contract in this bytecode group is verified or documented
+    // This propagates to all siblings automatically
+    const [groupInfo] = await db
+      .select({
+        verifiedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.verificationMethod} IS NOT NULL OR ${contracts.canonicalAddress} IS NOT NULL)::int`,
+        documentedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.shortDescription} IS NOT NULL AND ${contracts.shortDescription} != '')::int`,
+        groupName: sql<string | null>`MAX(${contracts.etherscanContractName})`,
+        groupTokenName: sql<string | null>`MAX(${contracts.tokenName})`,
+        groupContractType: sql<string | null>`MAX(${contracts.contractType})`,
+        groupVerificationMethod: sql<string | null>`MAX(${contracts.verificationMethod})`,
+      })
+      .from(contracts)
+      .where(eq(hashColumn, hash));
+
     // Fetch up to 100 siblings for display
     const siblings = await db
       .select({
@@ -78,6 +92,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({
       hash,
       count: totalCount,
+      // Group-level info: if ANY sibling is verified, all share the same bytecode
+      groupVerified: (groupInfo?.verifiedCount ?? 0) > 0,
+      groupVerificationMethod: groupInfo?.groupVerificationMethod ?? null,
+      groupDocumented: (groupInfo?.documentedCount ?? 0) > 0,
+      groupName: groupInfo?.groupName || groupInfo?.groupTokenName || null,
+      groupContractType: groupInfo?.groupContractType || null,
       contracts: siblings.map((s) => ({
         ...s,
         hasDescription: s.shortDescription != null && s.shortDescription !== "",

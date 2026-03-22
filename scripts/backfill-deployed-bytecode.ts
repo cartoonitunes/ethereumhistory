@@ -24,8 +24,8 @@ import * as crypto from "crypto";
 
 dotenv.config({ path: ".env.local" });
 
-const ETHERSCAN_API_KEY = "AHMV3WAI75TQVJI2XEFUUKFKK1KJTFY1BD";
-const RATE_LIMIT_MS = 200; // 5 req/sec
+const ALCHEMY_URL = "https://eth-mainnet.g.alchemy.com/v2/s6mjmXnzhzfbVLypKdbFCAe02Zf9HQa1";
+const RATE_LIMIT_MS = 10; // ~100 req/sec (Alchemy handles it)
 const LOG_INTERVAL = 100;
 
 // Swarm bzzr0 metadata marker
@@ -69,9 +69,17 @@ function md5(input: string): string {
 }
 
 async function fetchDeployedBytecode(address: string): Promise<string | null> {
-  const url = `https://api.etherscan.io/api?module=proxy&action=eth_getCode&address=${address}&tag=latest&apikey=${ETHERSCAN_API_KEY}`;
+  const res = await fetch(ALCHEMY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getCode",
+      params: [address, "latest"],
+    }),
+  });
 
-  const res = await fetch(url);
   if (!res.ok) {
     console.error(`  HTTP ${res.status} for ${address}`);
     return null;

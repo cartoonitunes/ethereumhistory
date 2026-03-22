@@ -98,6 +98,11 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [siblings, setSiblings] = useState<{
     hash: string | null;
     count: number;
+    groupVerified: boolean;
+    groupVerificationMethod: string | null;
+    groupDocumented: boolean;
+    groupName: string | null;
+    groupContractType: string | null;
     contracts: SiblingContract[];
     hasMore: boolean;
   } | null>(null);
@@ -629,6 +634,11 @@ function SiblingBytecodeTab({
   siblings: {
     hash: string | null;
     count: number;
+    groupVerified?: boolean;
+    groupVerificationMethod?: string | null;
+    groupDocumented?: boolean;
+    groupName?: string | null;
+    groupContractType?: string | null;
     contracts: Array<{
       address: string;
       etherscanContractName: string | null;
@@ -647,6 +657,16 @@ function SiblingBytecodeTab({
   onLoadMore: () => void;
   loadingMore: boolean;
 }) {
+  const CONTRACT_TYPE_LABELS: Record<string, string> = {
+    wallet: "Wallet",
+    token: "Token",
+    dao: "DAO",
+    crowdsale: "Crowdsale",
+    registry: "Registry",
+    exchange: "Exchange",
+    unknown: "",
+  };
+
   return (
     <div className="space-y-4">
       <div className="p-4 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
@@ -662,6 +682,17 @@ function SiblingBytecodeTab({
             bytecode md5: {siblings.hash}
           </p>
         )}
+        {siblings.groupVerified && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
+              <Check className="w-3 h-3" />
+              Bytecode Verified
+            </span>
+            <span className="text-xs text-obsidian-500">
+              All {(siblings.count + 1).toLocaleString()} contracts share verified source code
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-obsidian-800">
@@ -676,7 +707,10 @@ function SiblingBytecodeTab({
           </thead>
           <tbody className="divide-y divide-obsidian-800">
             {siblings.contracts.map((c) => {
-              const name = c.etherscanContractName || c.tokenName || c.ensName || null;
+              // Individual name, or fall back to group-level name/type
+              const individualName = c.etherscanContractName || c.tokenName || c.ensName || null;
+              const fallbackName = siblings.groupName || (siblings.groupContractType ? CONTRACT_TYPE_LABELS[siblings.groupContractType] || siblings.groupContractType : null);
+              const name = individualName || fallbackName;
               const date = c.deploymentTimestamp
                 ? new Date(c.deploymentTimestamp).toLocaleDateString("en-US", {
                     year: "numeric",
@@ -686,10 +720,12 @@ function SiblingBytecodeTab({
                 : c.deploymentBlock
                   ? `Block ${c.deploymentBlock.toLocaleString()}`
                   : "Unknown";
+              // A sibling is verified if it has its own verification, or the group is verified (same bytecode = same source)
               const isVerified = c.verificationMethod === "exact_bytecode_match" ||
                 c.verificationMethod === "author_published_source" ||
                 c.verificationMethod === "etherscan_verified" ||
-                !!c.canonicalAddress;
+                !!c.canonicalAddress ||
+                !!siblings.groupVerified;
 
               return (
                 <tr key={c.address} className="hover:bg-obsidian-900/30 transition-colors">
@@ -702,7 +738,7 @@ function SiblingBytecodeTab({
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-obsidian-300 text-xs">
-                    {name || <span className="text-obsidian-600">—</span>}
+                    {individualName ? name : (fallbackName ? <span className="text-obsidian-500 italic">{fallbackName}</span> : <span className="text-obsidian-600">—</span>)}
                   </td>
                   <td className="px-4 py-3 text-obsidian-400 text-xs whitespace-nowrap">{date}</td>
                   <td className="px-4 py-3">
