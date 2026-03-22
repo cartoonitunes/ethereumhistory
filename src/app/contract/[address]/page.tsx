@@ -192,8 +192,23 @@ export default async function ContractPage({ params }: Props) {
     return <ContractPageClient address={address} data={null} error={null} />;
   }
 
-  // Proxy detection — run on runtime bytecode
-  const proxyDetection = detectProxyTarget(data.contract.runtimeBytecode);
+  // Proxy detection — prefer deployed bytecode (actual on-chain code) over runtime
+  // runtime_bytecode may be creation code from seed data, not the deployed proxy stub
+  let proxyBytecode = data.contract.runtimeBytecode;
+  try {
+    const db = (await import("@/lib/db-client")).getDb();
+    const { contracts } = await import("@/lib/schema");
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select({ deployedBytecode: contracts.deployedBytecode })
+      .from(contracts)
+      .where(eq(contracts.address, address.toLowerCase()))
+      .limit(1);
+    if (row?.deployedBytecode && row.deployedBytecode !== "0x") {
+      proxyBytecode = row.deployedBytecode;
+    }
+  } catch {}
+  const proxyDetection = detectProxyTarget(proxyBytecode);
   let proxyInfo = proxyDetection.isProxy
     ? { ...proxyDetection, targetName: null as string | null }
     : null;
