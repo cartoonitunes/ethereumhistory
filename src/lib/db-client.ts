@@ -1478,7 +1478,7 @@ export async function getContractsForAgentDiscoveryFromDb(params: {
       ORDER BY _sibling_count DESC, c.deployment_timestamp ASC NULLS LAST
       LIMIT ${limit} OFFSET ${offset}
     `);
-    return (results.rows as any[]).map((row: any) => {
+    return ((results as any).rows ?? results as any[]).map((row: any) => {
       const contract = dbRowToContract(row);
       (contract as any)._siblingCount = Number(row._sibling_count) || 0;
       return contract;
