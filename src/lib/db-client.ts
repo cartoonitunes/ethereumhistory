@@ -2948,51 +2948,21 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
     ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
   `);
 
-  const directAddresses = (dedupedAddresses as unknown as Array<{ address: string }>).map((r) => r.address);
-  if (directAddresses.length === 0) return [];
+  const addresses = (dedupedAddresses as unknown as Array<{ address: string }>).map((r) => r.address);
+  if (addresses.length === 0) return [];
 
-  // Step 2: Fetch full rows for directly verified contracts.
-  const directResults = await database
+  // Step 2: Fetch full rows via Drizzle ORM so dbRowToContract gets properly mapped fields.
+  const results = await database
     .select()
     .from(schema.contracts)
-    .where(inArray(schema.contracts.address, directAddresses))
+    .where(inArray(schema.contracts.address, addresses))
     .orderBy(asc(schema.contracts.deploymentTimestamp));
 
-  // Collect deployed_bytecode_hash values from directly verified contracts.
-  const verifiedHashes = new Set<string>();
-  for (const row of directResults) {
-    if (row.deployedBytecodeHash) verifiedHashes.add(row.deployedBytecodeHash);
-  }
-
-  // Step 3: Find sibling contracts that share a deployed_bytecode_hash with verified contracts
-  // but are not themselves directly verified.
-  const directAddressSet = new Set(directAddresses);
-  let siblingResults: schema.Contract[] = [];
-  if (verifiedHashes.size > 0) {
-    const siblingAddresses = await database.execute(sql`
-      SELECT DISTINCT ON (COALESCE(deployed_bytecode_hash, address)) address
-      FROM contracts
-      WHERE deployed_bytecode_hash IN (${sql.join([...verifiedHashes].map(h => sql`${h}`), sql`, `)})
-        AND (verification_method IS NULL
-             OR verification_method NOT IN ('exact_bytecode_match', 'author_published_source', 'partial_match')
-             OR source_code IS NULL)
-      ORDER BY COALESCE(deployed_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
-    `);
-    const sibAddrs = (siblingAddresses as unknown as Array<{ address: string }>)
-      .map((r) => r.address)
-      .filter((a) => !directAddressSet.has(a));
-    if (sibAddrs.length > 0) {
-      siblingResults = await database
-        .select()
-        .from(schema.contracts)
-        .where(inArray(schema.contracts.address, sibAddrs))
-        .orderBy(asc(schema.contracts.deploymentTimestamp));
-    }
-  }
-
   // Deduplicate by bytecode hash: only keep the earliest deploy per bytecode family.
+  // Results are already ordered by deploymentTimestamp asc, so the first seen is the earliest.
+  // Contracts without a hash are always included individually.
   const seenHashes = new Set<string>();
-  const deduped = directResults.filter((row) => {
+  const deduped = results.filter((row) => {
     const hash = row.runtimeBytecodeHash;
     if (!hash) return true;
     if (seenHashes.has(hash)) return false;
@@ -3000,23 +2970,5 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
     return true;
   });
 
-  // Convert directly verified contracts.
-  const directContracts = deduped.map(dbRowToContract);
-
-  // Convert sibling contracts, labeling them as sibling_verified.
-  const siblingContracts = siblingResults.map((row) => {
-    const contract = dbRowToContract(row);
-    contract.verificationMethod = "sibling_verified";
-    return contract;
-  });
-
-  // Merge and sort by deployment timestamp.
-  const all = [...directContracts, ...siblingContracts];
-  all.sort((a, b) => {
-    const ta = a.deploymentTimestamp ?? "";
-    const tb = b.deploymentTimestamp ?? "";
-    return ta < tb ? -1 : ta > tb ? 1 : 0;
-  });
-
-  return all;
+  return deduped.map(dbRowToContract);
 }
