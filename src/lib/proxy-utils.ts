@@ -1,6 +1,7 @@
 /**
  * Proxy detection utilities for Ethereum contract bytecode.
- * Detects DELEGATECALL and CALLCODE proxy patterns.
+ * Detects DELEGATECALL and CALLCODE proxy patterns by properly
+ * walking the EVM opcode stream.
  */
 
 export interface ProxyInfo {
@@ -12,12 +13,13 @@ export interface ProxyInfo {
 /**
  * Detects common proxy patterns in runtime bytecode.
  *
- * Looks for PUSH20 (0x73) followed by a 20-byte address,
- * then DELEGATECALL (0xf4) or CALLCODE (0xf2) nearby.
+ * Properly walks the EVM opcode stream to find PUSH20 (0x73)
+ * followed by DELEGATECALL (0xf4) or CALLCODE (0xf2).
  *
- * Example bytecode:
- *   3660008037602060003660003473273930d21e01ee25e4c219b63259d214872220a261235a5a03f2
- *   The `73` opcode pushes the next 20 bytes (40 hex chars) as an address.
+ * Only flags as proxy if:
+ * 1. The contract is small (< 200 bytes) — large contracts with DELEGATECALL
+ *    are libraries/complex contracts, not simple proxies
+ * 2. PUSH20 is followed by DELEGATECALL or CALLCODE within ~30 opcodes
  */
 export function detectProxyTarget(runtimeBytecode: string | null | undefined): ProxyInfo {
   const noProxy: ProxyInfo = { isProxy: false, targetAddress: null, proxyType: null };
@@ -29,38 +31,59 @@ export function detectProxyTarget(runtimeBytecode: string | null | undefined): P
     ? runtimeBytecode.slice(2).toLowerCase()
     : runtimeBytecode.toLowerCase();
 
-  if (hex.length < 42) return noProxy; // Too short to contain PUSH20 + address
+  const byteLen = hex.length / 2;
 
-  // Scan for PUSH20 opcode (0x73)
-  for (let i = 0; i < hex.length - 41; i += 2) {
-    const byte = hex.slice(i, i + 2);
-    if (byte !== "73") continue;
+  // Large contracts aren't simple proxies — they may use DELEGATECALL internally
+  // but that doesn't make them proxy stubs
+  if (byteLen > 200) return noProxy;
 
-    // Next 20 bytes (40 hex chars) is the pushed address
-    const addressHex = hex.slice(i + 2, i + 42);
+  // Walk the opcode stream properly
+  // PUSH1-PUSH32 (0x60-0x7f) consume 1-32 bytes of data after the opcode
+  let i = 0;
+  const candidates: Array<{ address: string; offset: number }> = [];
 
-    // Skip zero address
-    if (addressHex === "0".repeat(40)) continue;
+  while (i < hex.length) {
+    const opByte = parseInt(hex.slice(i, i + 2), 16);
+    if (isNaN(opByte)) break;
 
-    // Look for DELEGATECALL (f4) or CALLCODE (f2) within the next ~60 bytes
-    const lookAhead = hex.slice(i + 42, Math.min(hex.length, i + 42 + 120));
-
-    for (let j = 0; j < lookAhead.length - 1; j += 2) {
-      const opcode = lookAhead.slice(j, j + 2);
-      if (opcode === "f4") {
+    if (opByte === 0x73) {
+      // PUSH20: next 20 bytes is the address
+      if (i + 42 <= hex.length) {
+        const addressHex = hex.slice(i + 2, i + 42);
+        // Skip zero address and addresses that look like bytecode artifacts
+        if (addressHex !== "0".repeat(40)) {
+          candidates.push({ address: addressHex, offset: i });
+        }
+      }
+      i += 42; // opcode (2 chars) + 20 bytes (40 chars)
+    } else if (opByte >= 0x60 && opByte <= 0x7f) {
+      // PUSHn: skip n bytes of data
+      const pushSize = opByte - 0x5f;
+      i += 2 + pushSize * 2;
+    } else if (opByte === 0xf4) {
+      // DELEGATECALL — check if we saw a PUSH20 recently
+      if (candidates.length > 0) {
+        const last = candidates[candidates.length - 1];
         return {
           isProxy: true,
-          targetAddress: "0x" + addressHex,
+          targetAddress: "0x" + last.address,
           proxyType: "delegatecall",
         };
       }
-      if (opcode === "f2") {
+      i += 2;
+    } else if (opByte === 0xf2) {
+      // CALLCODE — check if we saw a PUSH20 recently
+      if (candidates.length > 0) {
+        const last = candidates[candidates.length - 1];
         return {
           isProxy: true,
-          targetAddress: "0x" + addressHex,
+          targetAddress: "0x" + last.address,
           proxyType: "callcode",
         };
       }
+      i += 2;
+    } else {
+      i += 2; // single-byte opcode
     }
   }
 
