@@ -7,6 +7,7 @@ interface ShareOnXProps {
   contractName: string;
   eraId?: string | null;
   shortDescription?: string | null;
+  deploymentTimestamp?: string | null;
 }
 
 export default function ShareOnX({
@@ -14,13 +15,20 @@ export default function ShareOnX({
   contractName,
   eraId,
   shortDescription,
+  deploymentTimestamp,
 }: ShareOnXProps) {
   function handleClick() {
     const eraName = eraId && ERAS[eraId] ? ERAS[eraId].name : null;
 
-    const eraPart = eraName
-      ? `deployed on Ethereum\u2019s ${eraName} era.`
-      : "deployed on early Ethereum.";
+    const deployDate = deploymentTimestamp
+      ? new Date(deploymentTimestamp).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      : null;
+
+    const eraPart = deployDate
+      ? `deployed ${deployDate} on Ethereum${eraName ? `\u2019s ${eraName} era` : ""}.`
+      : eraName
+        ? `deployed on Ethereum\u2019s ${eraName} era.`
+        : "deployed on early Ethereum.";
 
     const descriptionPart = shortDescription
       ? shortDescription.length > 120

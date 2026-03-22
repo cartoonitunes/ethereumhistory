@@ -495,6 +495,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               contractName={title}
               eraId={contract.eraId}
               shortDescription={contract.shortDescription}
+              deploymentTimestamp={contract.deploymentTimestamp}
             />
             <EmbedButton address={address} />
             <CompareButton sourceAddress={address} />
