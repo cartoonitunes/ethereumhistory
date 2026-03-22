@@ -1409,6 +1409,9 @@ export async function getContractsForAgentDiscoveryFromDb(params: {
   eraId?: string | null;
   featured?: boolean | null;
   undocumentedOnly?: boolean | null;
+  unverified?: boolean | null;
+  q?: string | null;
+  sort?: string | null;
   fromTimestamp?: string | null; // ISO string
   toTimestamp?: string | null; // ISO string
   limit?: number;
@@ -1433,6 +1436,21 @@ export async function getContractsForAgentDiscoveryFromDb(params: {
       )!
     );
   }
+  if (params.unverified === true) {
+    conditions.push(isNull(schema.contracts.verificationMethod));
+  }
+  if (params.q != null && params.q.trim() !== "") {
+    const pattern = `%${params.q.trim()}%`;
+    conditions.push(
+      or(
+        ilike(schema.contracts.etherscanContractName, pattern),
+        ilike(schema.contracts.tokenName, pattern),
+        ilike(schema.contracts.tokenSymbol, pattern),
+        ilike(schema.contracts.address, pattern),
+        ilike(schema.contracts.decompiledCode, pattern),
+      )!
+    );
+  }
   if (params.fromTimestamp != null && params.fromTimestamp !== "") {
     try {
       conditions.push(gte(schema.contracts.deploymentTimestamp, new Date(params.fromTimestamp)));
@@ -1449,6 +1467,23 @@ export async function getContractsForAgentDiscoveryFromDb(params: {
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  // Sort by sibling count (most shared bytecode first) or by date
+  if (params.sort === "siblings") {
+    const results = await database.execute(sql`
+      SELECT c.*,
+        COALESCE((SELECT COUNT(*) FROM contracts c2 WHERE c2.deployed_bytecode_hash = c.deployed_bytecode_hash AND c.deployed_bytecode_hash IS NOT NULL), 0) as _sibling_count
+      FROM contracts c
+      WHERE ${whereClause ?? sql`true`}
+      ORDER BY _sibling_count DESC, c.deployment_timestamp ASC NULLS LAST
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+    return (results.rows as any[]).map((row: any) => {
+      const contract = dbRowToContract(row);
+      (contract as any)._siblingCount = Number(row._sibling_count) || 0;
+      return contract;
+    });
+  }
 
   const results = await database
     .select()
