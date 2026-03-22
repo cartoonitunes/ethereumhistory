@@ -88,6 +88,19 @@ export async function getHistorianMeFromCookies(): Promise<HistorianMe | null> {
   const row = await getHistorianByIdFromDb(parsed.historianId);
   if (!row) return null;
   if (!row.active) return null;
+
+  // Sliding session: refresh cookie if older than 1 day to keep active users logged in
+  const ageMs = Date.now() - parsed.issuedAt;
+  if (ageMs > 1000 * 60 * 60 * 24) {
+    try {
+      const freshValue = buildHistorianSessionCookieValue(parsed.historianId);
+      const opts = getHistorianSessionCookieOptions();
+      cookieStore.set(COOKIE_NAME, freshValue, opts);
+    } catch {
+      // cookies().set() may throw in some Next.js contexts (RSC) — ignore silently
+    }
+  }
+
   return historianRowToMe(row);
 }
 
