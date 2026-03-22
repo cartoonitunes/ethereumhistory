@@ -52,7 +52,7 @@ export default function ApiDocsPage() {
             </div>
 
             <p className="text-obsidian-300 leading-relaxed mb-10">
-              All endpoints are <strong>GET only</strong>. No authentication required. Responses use JSON with <code className="px-1.5 py-0.5 rounded bg-obsidian-800 text-ether-300 font-mono text-sm">snake_case</code> keys.
+              Most endpoints are read-only <strong>GET</strong> requests. Responses use JSON with <code className="px-1.5 py-0.5 rounded bg-obsidian-800 text-ether-300 font-mono text-sm">snake_case</code> keys. Authenticated requests using an <code className="px-1.5 py-0.5 rounded bg-obsidian-800 text-ether-300 font-mono text-sm">x-api-key</code> header receive higher rate limits. Write endpoints require a historian session cookie.
             </p>
 
             {/* Base URL */}
@@ -194,17 +194,20 @@ export default function ApiDocsPage() {
                     </tr>
                   </thead>
                   <tbody className="text-obsidian-300">
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">q</td><td>string</td><td>Text search across contract name, token name, symbol, address, and decompiled code</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">era_id</td><td>string</td><td>frontier, homestead, dao, tangerine, spurious</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">featured</td><td>string</td><td>true or 1 = featured only</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">undocumented_only</td><td>string</td><td>true or 1 = no short_description yet</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">unverified</td><td>string</td><td>1 = only contracts with no verification method set (prioritize crack candidates)</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">sort</td><td>string</td><td>siblings = sort by sibling count descending (most shared bytecode first, useful for crack prioritization)</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">limit</td><td>number</td><td>1–200, default 50</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">offset</td><td>number</td><td>Pagination offset, default 0</td></tr>
                   </tbody>
                 </table>
               </div>
-              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Example request</h4>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Example requests</h4>
               <CodeBlock
-                code={`GET ${BASE_URL}/api/agent/contracts?era_id=homestead&featured=true&limit=10`}
+                code={`GET ${BASE_URL}/api/agent/contracts?era_id=homestead&featured=true&limit=10\nGET ${BASE_URL}/api/agent/contracts?q=MyToken&unverified=1&sort=siblings&limit=20`}
                 id="discovery-req"
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
@@ -296,6 +299,188 @@ export default function ApiDocsPage() {
                 onCopy={copyToClipboard}
                 language="json"
               />
+            </Section>
+
+            {/* Authentication & Rate Limits */}
+            <Section title="Authentication & Rate Limits" id="auth">
+              <p className="text-obsidian-300 mb-4">
+                Read endpoints are publicly accessible. Providing an API key via the <code className="px-1.5 py-0.5 rounded bg-obsidian-800 text-ether-300 font-mono text-sm">x-api-key</code> header unlocks higher rate limits for historian-tier users.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-obsidian-800 bg-obsidian-900/30 mb-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-obsidian-800">
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Tier</th>
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Rate limit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-obsidian-300">
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4">Anonymous</td><td className="py-2 px-4">20 requests / minute</td></tr>
+                    <tr><td className="py-2 px-4">Authenticated (historian tier)</td><td className="py-2 px-4">120 requests / minute</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Authentication header</h4>
+              <CodeBlock
+                code={`x-api-key: eh_your_key_here`}
+                id="auth-header"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+              />
+              <p className="text-obsidian-400 text-sm mt-3 mb-4">
+                Generate API keys from your historian profile page. Keys are prefixed with <code className="text-ether-300">eh_</code>.
+              </p>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Rate limit response headers</h4>
+              <ul className="text-obsidian-300 text-sm space-y-1 list-disc list-inside mb-4">
+                <li><code className="text-ether-300">X-RateLimit-Remaining</code> — requests remaining in the current window</li>
+                <li>When the limit is exceeded, the API responds with <strong>429</strong> and a <code className="text-ether-300">Retry-After</code> header indicating seconds until the window resets</li>
+              </ul>
+            </Section>
+
+            {/* Siblings API */}
+            <Section title="Siblings API" id="siblings">
+              <p className="text-obsidian-300 mb-4">
+                Returns contracts that share the same runtime bytecode hash as the given address. Useful for identifying deployments of the same contract template and prioritizing verification work.
+              </p>
+              <Endpoint method="GET" path="/api/contracts/{address}/siblings" />
+              <p className="text-obsidian-400 text-sm mt-2 mb-4">
+                <strong>Query params:</strong> <code className="text-ether-300">offset</code> (default 0). Returns 100 siblings per page.
+              </p>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Example request</h4>
+              <CodeBlock
+                code={`GET ${BASE_URL}/api/contracts/0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb/siblings?offset=0`}
+                id="siblings-req"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+              />
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Response (200)</h4>
+              <CodeBlock
+                code={`{
+  "data": {
+    "hash": "0xabc123...",
+    "count": 42,
+    "groupVerified": true,
+    "groupName": "StandardToken",
+    "groupContractType": "token",
+    "contracts": [
+      {
+        "address": "0x...",
+        "deployment_timestamp": "2016-08-01T12:00:00Z",
+        "token_name": "Example Token",
+        "token_symbol": "EXT",
+        "verification_status": "verified"
+      }
+    ]
+  },
+  "meta": {
+    "timestamp": "2025-02-03T12:00:00.000Z",
+    "offset": 0,
+    "count": 42
+  }
+}`}
+                id="siblings-res"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+                language="json"
+              />
+            </Section>
+
+            {/* Verification Methods */}
+            <Section title="Verification Methods" id="verification-methods">
+              <p className="text-obsidian-300 mb-4">
+                The <code className="px-1.5 py-0.5 rounded bg-obsidian-800 text-ether-300 font-mono text-sm">verification_method</code> field describes how a contract&apos;s source was verified. These values appear in contract facts and write payloads.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-obsidian-800 bg-obsidian-900/30">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-obsidian-800">
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Value</th>
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-obsidian-300">
+                    <tr className="border-b border-obsidian-800/80">
+                      <td className="py-2 px-4 font-mono text-ether-300">exact_bytecode_match</td>
+                      <td className="py-2 px-4">Compiled source matches on-chain bytecode byte-for-byte</td>
+                    </tr>
+                    <tr className="border-b border-obsidian-800/80">
+                      <td className="py-2 px-4 font-mono text-ether-300">near_exact_match</td>
+                      <td className="py-2 px-4">Source recovered and all logic verified; a minor gap remains (e.g. metadata hash difference)</td>
+                    </tr>
+                    <tr className="border-b border-obsidian-800/80">
+                      <td className="py-2 px-4 font-mono text-ether-300">author_published_source</td>
+                      <td className="py-2 px-4">The original developer published the source (GitHub, blog post, etc.)</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-4 font-mono text-ether-300">etherscan_verified</td>
+                      <td className="py-2 px-4">Contract is verified on Etherscan; source pulled from there</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+
+            {/* Contract Write API */}
+            <Section title="Contract Write API" id="write">
+              <p className="text-obsidian-300 mb-4">
+                Update contract documentation and verification data. Requires an active historian session cookie. This endpoint powers all historian edits on EthereumHistory.com.
+              </p>
+              <Endpoint method="POST" path="/api/contract/{address}/history/manage" />
+              <p className="text-obsidian-400 text-sm mt-2 mb-4">
+                Requires a valid <code className="text-ether-300">historian_session</code> cookie. Historians can log in at <code className="text-ether-300">/historian/login</code>.
+              </p>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Request body (JSON)</h4>
+              <div className="overflow-x-auto rounded-lg border border-obsidian-800 bg-obsidian-900/30 mb-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-obsidian-800">
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Field</th>
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Type</th>
+                      <th className="text-left py-3 px-4 text-obsidian-400 font-medium">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-obsidian-300">
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">shortDescription</td><td>string</td><td>One-line summary of the contract</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">description</td><td>string</td><td>Full canonical narrative / historical summary</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">historicalContext</td><td>string</td><td>Surrounding historical context at deployment time</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">historicalSignificance</td><td>string</td><td>Why this contract matters historically</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">verificationMethod</td><td>string</td><td>One of the verification method values above</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">verificationProofUrl</td><td>string</td><td>URL linking to verification proof (GitHub repo, etc.)</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">verificationNotes</td><td>string</td><td>Notes about the verification process</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">compilerCommit</td><td>string</td><td>Git commit hash of the compiler used</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">compilerLanguage</td><td>string</td><td>e.g. solidity, serpent, lll</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">sourceCode</td><td>string</td><td>Full verified source code</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">verificationStatus</td><td>string</td><td>verified, unverified, partial</td></tr>
+                    <tr><td className="py-2 px-4 font-mono text-ether-300">contractType</td><td>string</td><td>token, dao, exchange, wallet, registry, etc.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Example request</h4>
+              <CodeBlock
+                code={`POST ${BASE_URL}/api/contract/0xdbf03b407c01e7cd3cbea99509d93f8dddc8c6fb/history/manage
+Content-Type: application/json
+Cookie: historian_session=...
+
+{
+  "shortDescription": "Early ERC-20 style token deployed on Homestead.",
+  "verificationMethod": "exact_bytecode_match",
+  "verificationProofUrl": "https://github.com/cartoonitunes/proof-0xdbf0",
+  "compilerCommit": "67c855c5",
+  "compilerLanguage": "solidity",
+  "sourceCode": "contract MyToken { ... }",
+  "verificationStatus": "verified",
+  "contractType": "token"
+}`}
+                id="write-req"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+              />
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Errors</h4>
+              <ul className="text-obsidian-400 text-sm space-y-1 list-disc list-inside">
+                <li><strong>401</strong> — Not authenticated. Valid historian session cookie required.</li>
+                <li><strong>404</strong> — Contract not found.</li>
+                <li><strong>500</strong> — Server error.</li>
+              </ul>
             </Section>
 
             {/* Usage notes */}
