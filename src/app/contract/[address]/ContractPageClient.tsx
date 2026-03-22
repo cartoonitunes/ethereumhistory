@@ -55,7 +55,7 @@ import {
   getVerificationStatusLabel,
   getVerificationStatusColor,
 } from "@/lib/utils";
-import type { ContractHistoryData, ContractPageData, ContractMedia, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse } from "@/types";
+import type { ContractHistoryData, ContractPageData, ContractMedia, HistorianMe, HistoricalLink, UnifiedSearchResult, UnifiedSearchResponse, ProxyInfo } from "@/types";
 import { ContractMediaGallery } from "@/components/ContractMedia";
 import { VerificationProofCard } from "@/components/VerificationProofCard";
 
@@ -283,6 +283,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     txCountsByYear,
     archiveNotice,
     media,
+    proxyInfo,
   } = data!;
 
   const frontierEntry = getFrontierRegistrarEntry(address);
@@ -553,6 +554,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               deployerPerson={deployerPerson ?? null}
               txCountsByYear={txCountsByYear ?? null}
               media={media ?? []}
+              proxyInfo={proxyInfo}
             />
           )}
           {activeTab === "history" && (
@@ -576,6 +578,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               sourceCode={contract.sourceCode}
               abi={contract.abi}
               isInheritedVerification={contract.isInheritedVerification}
+              proxyInfo={proxyInfo}
             />
           )}
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
@@ -798,12 +801,14 @@ function OverviewTab({
   deployerPerson,
   txCountsByYear,
   media,
+  proxyInfo,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
   deployerPerson: ContractPageData["deployerPerson"];
   txCountsByYear: ContractPageData["txCountsByYear"];
   media: ContractMedia[];
+  proxyInfo?: ProxyInfo | null;
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -822,6 +827,25 @@ function OverviewTab({
     <div className="grid lg:grid-cols-3 gap-6 min-w-0">
       {/* Main info */}
       <div className="lg:col-span-2 space-y-6 min-w-0">
+        {/* Proxy Banner */}
+        {proxyInfo?.isProxy && proxyInfo.targetAddress && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300 flex gap-3">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400" />
+            <span>
+              This contract is a proxy that delegates all calls to{" "}
+              <Link
+                href={`/contract/${proxyInfo.targetAddress.toLowerCase()}`}
+                className="font-mono underline decoration-blue-500/50 hover:text-blue-200 transition-colors"
+              >
+                {proxyInfo.targetAddress.toLowerCase()}
+              </Link>
+              {proxyInfo.targetName && (
+                <span className="ml-1 text-blue-400">({proxyInfo.targetName})</span>
+              )}
+              . See the master contract for the full logic.
+            </span>
+          </div>
+        )}
         {/* Token Info - Show if available */}
         {hasTokenInfo && (
           <section className="p-6 rounded-xl border border-ether-500/20 bg-ether-500/5">
@@ -1114,7 +1138,24 @@ function OverviewTab({
                     </span>
                   </div>
                   {contract.heuristics.isProxy && (
-                    <div className="text-obsidian-300">Appears to be a proxy contract</div>
+                    <div className="text-obsidian-300">
+                      {proxyInfo?.isProxy && proxyInfo.targetAddress ? (
+                        <>
+                          Proxy contract — delegates to{" "}
+                          <Link
+                            href={`/contract/${proxyInfo.targetAddress.toLowerCase()}`}
+                            className="font-mono text-blue-400 hover:text-blue-300 underline decoration-blue-500/50 transition-colors"
+                          >
+                            {formatAddress(proxyInfo.targetAddress)}
+                          </Link>
+                          {proxyInfo.targetName && (
+                            <span className="ml-1 text-obsidian-400">({proxyInfo.targetName})</span>
+                          )}
+                        </>
+                      ) : (
+                        "Appears to be a proxy contract"
+                      )}
+                    </div>
                   )}
                   {contract.heuristics.hasSelfDestruct && (
                     <div className="text-obsidian-300">Contains SELFDESTRUCT opcode</div>
@@ -1315,6 +1356,7 @@ function CodeTab({
   sourceCode,
   abi,
   isInheritedVerification,
+  proxyInfo,
 }: {
   bytecode: string | null;
   analysis: ContractPageData["bytecodeAnalysis"];
@@ -1325,9 +1367,28 @@ function CodeTab({
   sourceCode?: string | null;
   abi?: string | null;
   isInheritedVerification?: boolean;
+  proxyInfo?: ProxyInfo | null;
 }) {
   return (
     <div className="space-y-6">
+      {proxyInfo?.isProxy && proxyInfo.targetAddress && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300 flex gap-3">
+          <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400" />
+          <span>
+            This contract is a proxy that delegates all calls to{" "}
+            <Link
+              href={`/contract/${proxyInfo.targetAddress.toLowerCase()}`}
+              className="font-mono underline decoration-blue-500/50 hover:text-blue-200 transition-colors"
+            >
+              {proxyInfo.targetAddress.toLowerCase()}
+            </Link>
+            {proxyInfo.targetName && (
+              <span className="ml-1 text-blue-400">({proxyInfo.targetName})</span>
+            )}
+            . The code below is the proxy stub. See the master contract for the full logic.
+          </span>
+        </div>
+      )}
       {sourceCode && isInheritedVerification && (
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
           Source code inherited from verified sibling contract.
