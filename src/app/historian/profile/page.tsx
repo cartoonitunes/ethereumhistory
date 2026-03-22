@@ -344,35 +344,7 @@ export default function HistorianProfilePage() {
                 disabled={savingProfile}
               />
             </div>
-            <div className="pt-2 border-t border-obsidian-800">
-              <p className="text-xs text-obsidian-500 mb-3">
-                Optional. For future contributor recognition programs.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-obsidian-400 mb-1">Ethereum Address</label>
-                  <input
-                    type="text"
-                    value={ethereumAddress}
-                    onChange={(e) => setEthereumAddress(e.target.value)}
-                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
-                    placeholder="0x..."
-                    disabled={savingProfile}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-obsidian-400 mb-1">Base Address</label>
-                  <input
-                    type="text"
-                    value={baseAddress}
-                    onChange={(e) => setBaseAddress(e.target.value)}
-                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
-                    placeholder="0x..."
-                    disabled={savingProfile}
-                  />
-                </div>
-              </div>
-            </div>
+            {/* Wallet address fields removed — will use claim flow instead */}
             <button
               type="submit"
               disabled={savingProfile}
