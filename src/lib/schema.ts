@@ -208,6 +208,9 @@ export const historians = pgTable(
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
     websiteUrl: text("website_url"),
+    // Wallet addresses (for future token rewards and airdrops)
+    ethereumAddress: text("ethereum_address"),
+    baseAddress: text("base_address"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },

@@ -462,6 +462,8 @@ export interface HistorianMe {
   bio: string | null;
   websiteUrl: string | null;
   githubUsername: string | null;
+  ethereumAddress: string | null;
+  baseAddress: string | null;
 }
 
 export interface HistorianInvitation {

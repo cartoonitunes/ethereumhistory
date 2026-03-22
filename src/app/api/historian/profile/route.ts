@@ -99,14 +99,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       });
     }
 
-    // Update profile fields (avatarUrl, bio, websiteUrl) if provided
+    // Validate Ethereum address format (0x + 40 hex chars)
+    const ETH_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+    // Update profile fields (avatarUrl, bio, websiteUrl, ethereumAddress, baseAddress) if provided
     const hasProfileUpdate =
       body?.avatarUrl !== undefined ||
       body?.bio !== undefined ||
-      body?.websiteUrl !== undefined;
+      body?.websiteUrl !== undefined ||
+      body?.ethereumAddress !== undefined ||
+      body?.baseAddress !== undefined;
 
     if (hasProfileUpdate) {
-      const patch: { avatarUrl?: string | null; bio?: string | null; websiteUrl?: string | null } = {};
+      const patch: {
+        avatarUrl?: string | null;
+        bio?: string | null;
+        websiteUrl?: string | null;
+        ethereumAddress?: string | null;
+        baseAddress?: string | null;
+      } = {};
 
       if (body?.avatarUrl !== undefined) {
         patch.avatarUrl = typeof body.avatarUrl === "string" ? body.avatarUrl.trim() || null : null;
@@ -130,6 +141,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
           );
         }
         patch.websiteUrl = urlVal || null;
+      }
+      if (body?.ethereumAddress !== undefined) {
+        const addrVal = typeof body.ethereumAddress === "string" ? body.ethereumAddress.trim() : "";
+        if (addrVal && !ETH_ADDRESS_RE.test(addrVal)) {
+          return NextResponse.json(
+            { data: null, error: "Ethereum address must be a valid 0x address (0x + 40 hex characters)." },
+            { status: 400 }
+          );
+        }
+        patch.ethereumAddress = addrVal || null;
+      }
+      if (body?.baseAddress !== undefined) {
+        const addrVal = typeof body.baseAddress === "string" ? body.baseAddress.trim() : "";
+        if (addrVal && !ETH_ADDRESS_RE.test(addrVal)) {
+          return NextResponse.json(
+            { data: null, error: "Base address must be a valid 0x address (0x + 40 hex characters)." },
+            { status: 400 }
+          );
+        }
+        patch.baseAddress = addrVal || null;
       }
 
       await updateHistorianProfileFromDb(me.id, patch);
