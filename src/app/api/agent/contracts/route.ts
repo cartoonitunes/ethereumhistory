@@ -1,9 +1,17 @@
 /**
  * Agent API: Discovery and temporal queries
  *
- * GET /api/agent/contracts?era_id=...&featured=...&undocumented_only=...&from_timestamp=...&to_timestamp=...&limit=...&offset=...
+ * GET /api/agent/contracts?era_id=...&featured=...&undocumented_only=...&unverified=...&q=...&from_timestamp=...&to_timestamp=...&sort=...&limit=...&offset=...
  * Read-only, deterministic. Returns list of contracts matching criteria.
  * Minimal fields for discovery; full contract facts via GET /api/agent/contracts/[address].
+ *
+ * Params:
+ *   q - Text search across etherscan_contract_name, token_name, token_symbol, decompiled_code
+ *   unverified=1 - Only contracts with no verification_method AND no etherscan-verified source
+ *   sort=siblings - Sort by sibling count (most shared bytecode first), sort=date (default)
+ *   from_timestamp / to_timestamp - ISO date range filter
+ *   era_id - Filter by era (frontier, homestead, dao, tangerine, spurious)
+ *   limit / offset - Pagination (max 200)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -36,6 +44,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     featuredParam === "1" || featuredParam === "true" ? true : featuredParam === "0" || featuredParam === "false" ? false : undefined;
   const undocumentedOnly =
     searchParams.get("undocumented_only") === "1" || searchParams.get("undocumented_only") === "true";
+  const unverified =
+    searchParams.get("unverified") === "1" || searchParams.get("unverified") === "true";
+  const q = searchParams.get("q")?.trim() || undefined;
+  const sort = searchParams.get("sort")?.trim() || undefined;
   const fromTimestamp = searchParams.get("from_timestamp")?.trim() || undefined;
   const toTimestamp = searchParams.get("to_timestamp")?.trim() || undefined;
   const limitRaw = searchParams.get("limit");
@@ -47,6 +59,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     eraId: eraId || null,
     featured: featured ?? null,
     undocumentedOnly: undocumentedOnly || null,
+    unverified: unverified || null,
+    q: q || null,
+    sort: sort || null,
     fromTimestamp: fromTimestamp || null,
     toTimestamp: toTimestamp || null,
     limit,
@@ -63,6 +78,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     etherscan_contract_name: c.etherscanContractName,
     token_name: c.tokenName,
     token_symbol: c.tokenSymbol,
+    verification_method: c.verificationMethod || null,
+    code_size_bytes: c.codeSizeBytes || null,
+    siblings: (c as any)._siblingCount ?? null,
   }));
 
   return NextResponse.json({
