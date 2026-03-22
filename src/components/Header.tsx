@@ -68,10 +68,15 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      router.push(`/browse?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchOpen(false);
+    const q = searchQuery.trim();
+    if (!q) return;
+    // If it looks like an Ethereum address, go directly to the contract page
+    if (/^0x[0-9a-fA-F]{40}$/.test(q)) {
+      router.push(`/contract/${q.toLowerCase()}`);
+    } else {
+      router.push(`/browse?q=${encodeURIComponent(q)}`);
     }
+    setSearchOpen(false);
   };
 
   const shouldShowLogin = showHistorianLogin && !loadingMe && !me;

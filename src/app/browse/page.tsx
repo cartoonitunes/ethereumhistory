@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
@@ -39,6 +39,16 @@ function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: 
 
 function BrowseContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // If the query is an exact Ethereum address, redirect to the contract page
+  const rawQ = searchParams.get("q") || "";
+  useEffect(() => {
+    if (/^0x[0-9a-fA-F]{40}$/i.test(rawQ.trim())) {
+      router.replace(`/contract/${rawQ.trim().toLowerCase()}`);
+    }
+  }, [rawQ, router]);
+
   const [contracts, setContracts] = useState<BrowseContract[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
