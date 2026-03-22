@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContractPageClient } from "./ContractPageClient";
-import { getContractPageData, getContractWithTokenMetadata } from "@/lib/db";
+import { getContractPageData, getContractWithTokenMetadata, getContract } from "@/lib/db";
 import { isValidAddress, formatAddress } from "@/lib/utils";
+import { detectProxyTarget } from "@/lib/proxy-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -189,6 +190,34 @@ export default async function ContractPage({ params }: Props) {
   if (!data) {
     // Return client component with not found state
     return <ContractPageClient address={address} data={null} error={null} />;
+  }
+
+  // Proxy detection — run on runtime bytecode
+  const proxyDetection = detectProxyTarget(data.contract.runtimeBytecode);
+  let proxyInfo = proxyDetection.isProxy
+    ? { ...proxyDetection, targetName: null as string | null }
+    : null;
+
+  if (proxyInfo?.targetAddress) {
+    try {
+      const targetContract = await getContract(proxyInfo.targetAddress.toLowerCase());
+      if (targetContract) {
+        proxyInfo = {
+          ...proxyInfo,
+          targetName:
+            targetContract.etherscanContractName ||
+            targetContract.tokenName ||
+            targetContract.ensName ||
+            null,
+        };
+      }
+    } catch {
+      // non-fatal — just skip the name
+    }
+  }
+
+  if (proxyInfo) {
+    data = { ...data, proxyInfo };
   }
 
   const jsonLd = buildJsonLd(address, data);

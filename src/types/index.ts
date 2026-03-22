@@ -305,6 +305,13 @@ export interface ApiResponse<T> {
   };
 }
 
+export interface ProxyInfo {
+  isProxy: boolean;
+  targetAddress: string | null;
+  proxyType: "delegatecall" | "callcode" | null;
+  targetName?: string | null;
+}
+
 export interface ContractPageData {
   contract: Contract;
   bytecodeAnalysis: BytecodeAnalysis | null;
@@ -315,6 +322,7 @@ export interface ContractPageData {
   txCountsByYear?: { counts: Record<string, number>; truncated: boolean } | null;
   archiveNotice?: string | null;
   media?: ContractMedia[];
+  proxyInfo?: ProxyInfo | null;
 }
 
 // =============================================================================
