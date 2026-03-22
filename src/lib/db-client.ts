@@ -704,6 +704,8 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
     bio: row.bio || null,
     websiteUrl: row.websiteUrl || null,
     githubUsername: row.githubUsername || null,
+    ethereumAddress: row.ethereumAddress || null,
+    baseAddress: row.baseAddress || null,
   };
 }
 
@@ -2569,6 +2571,8 @@ export async function updateHistorianProfileFromDb(
     avatarUrl?: string | null;
     bio?: string | null;
     websiteUrl?: string | null;
+    ethereumAddress?: string | null;
+    baseAddress?: string | null;
   }
 ): Promise<void> {
   const database = getDb();
@@ -2577,6 +2581,8 @@ export async function updateHistorianProfileFromDb(
   if (patch.avatarUrl !== undefined) updates.avatarUrl = patch.avatarUrl;
   if (patch.bio !== undefined) updates.bio = patch.bio;
   if (patch.websiteUrl !== undefined) updates.websiteUrl = patch.websiteUrl;
+  if (patch.ethereumAddress !== undefined) updates.ethereumAddress = patch.ethereumAddress;
+  if (patch.baseAddress !== undefined) updates.baseAddress = patch.baseAddress;
 
   if (Object.keys(updates).length <= 1) return;
 

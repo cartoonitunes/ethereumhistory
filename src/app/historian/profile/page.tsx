@@ -17,6 +17,8 @@ export default function HistorianProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [bio, setBio] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [ethereumAddress, setEthereumAddress] = useState("");
+  const [baseAddress, setBaseAddress] = useState("");
   const [currentToken, setCurrentToken] = useState("");
   const [newToken, setNewToken] = useState("");
   const [confirmToken, setConfirmToken] = useState("");
@@ -44,6 +46,8 @@ export default function HistorianProfilePage() {
         setAvatarUrl(historian.avatarUrl || "");
         setBio(historian.bio || "");
         setWebsiteUrl(historian.websiteUrl || "");
+        setEthereumAddress(historian.ethereumAddress || "");
+        setBaseAddress(historian.baseAddress || "");
       } catch {
         if (!cancelled) setMe(null);
       } finally {
@@ -152,6 +156,8 @@ export default function HistorianProfilePage() {
           avatarUrl: avatarUrl.trim() || null,
           bio: bio.trim() || null,
           websiteUrl: websiteUrl.trim() || null,
+          ethereumAddress: ethereumAddress.trim() || null,
+          baseAddress: baseAddress.trim() || null,
         }),
       });
 
@@ -337,6 +343,35 @@ export default function HistorianProfilePage() {
                 placeholder="https://yourwebsite.com"
                 disabled={savingProfile}
               />
+            </div>
+            <div className="pt-2 border-t border-obsidian-800">
+              <p className="text-xs text-obsidian-500 mb-3">
+                Optional. For future token rewards and airdrops to historians based on their contributions.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-obsidian-400 mb-1">Ethereum Address</label>
+                  <input
+                    type="text"
+                    value={ethereumAddress}
+                    onChange={(e) => setEthereumAddress(e.target.value)}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
+                    placeholder="0x..."
+                    disabled={savingProfile}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-obsidian-400 mb-1">Base Address</label>
+                  <input
+                    type="text"
+                    value={baseAddress}
+                    onChange={(e) => setBaseAddress(e.target.value)}
+                    className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20 font-mono"
+                    placeholder="0x..."
+                    disabled={savingProfile}
+                  />
+                </div>
+              </div>
             </div>
             <button
               type="submit"

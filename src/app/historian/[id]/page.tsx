@@ -14,6 +14,8 @@ interface HistorianProfile {
   avatarUrl: string | null;
   bio: string | null;
   websiteUrl: string | null;
+  ethereumAddress: string | null;
+  baseAddress: string | null;
   joinedAt: string | null;
   totalEdits: number;
   uniqueContracts: number;
@@ -193,6 +195,30 @@ export default function HistorianProfilePage({
                     >
                       <Globe className="w-3.5 h-3.5" />
                       {profile.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                    </a>
+                  )}
+                  {profile.ethereumAddress && (
+                    <a
+                      href={`https://etherscan.io/address/${profile.ethereumAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-ether-400 transition-colors font-mono"
+                      title={profile.ethereumAddress}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      {profile.ethereumAddress.slice(0, 6)}…{profile.ethereumAddress.slice(-4)}
+                    </a>
+                  )}
+                  {profile.baseAddress && (
+                    <a
+                      href={`https://basescan.org/address/${profile.baseAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-obsidian-400 hover:text-ether-400 transition-colors font-mono"
+                      title={profile.baseAddress}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      Base: {profile.baseAddress.slice(0, 6)}…{profile.baseAddress.slice(-4)}
                     </a>
                   )}
                   {profile.joinedAt && (
