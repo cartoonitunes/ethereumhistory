@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isDatabaseConfigured, getContractsForAgentDiscoveryFromDb } from "@/lib/db-client";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { validateApiKeyFromRequest } from "@/lib/api-key-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ const DEFAULT_LIMIT = 50;
 const RATE_LIMIT_AUTH = { maxRequests: 120, windowSeconds: 60 };
 const RATE_LIMIT_ANON = { maxRequests: 20, windowSeconds: 60 };
 
-function validateApiKey(request: NextRequest): boolean {
+function validateHistorianToken(request: NextRequest): boolean {
   const token = request.headers.get("x-historian-token") || request.headers.get("x-api-key");
   if (!token) return false;
   // Accept historian tokens (validated elsewhere) or the agent token
@@ -39,8 +40,9 @@ function validateApiKey(request: NextRequest): boolean {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  // Rate limiting
-  const isAuthenticated = validateApiKey(request);
+  // Rate limiting — check DB-backed API keys first, then fall back to hardcoded tokens
+  const apiKeyResult = await validateApiKeyFromRequest(request);
+  const isAuthenticated = apiKeyResult.valid || validateHistorianToken(request);
   const config = isAuthenticated ? RATE_LIMIT_AUTH : RATE_LIMIT_ANON;
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip") || "unknown";
