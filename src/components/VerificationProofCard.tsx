@@ -18,7 +18,7 @@ const METHOD_LABELS: Record<string, string> = {
   exact_bytecode_match: "Exact bytecode match",
   author_published_source: "Author-published source",
   etherscan_verified: "Etherscan verified",
-  partial_match: "Partial match",
+  near_exact_match: "Near-exact bytecode match",
 };
 
 function getMethodAccent(method: string) {
@@ -44,7 +44,7 @@ function getMethodAccent(method: string) {
         badge: "bg-blue-500/15 text-blue-400 border-blue-500/30",
         icon: "text-blue-400",
       };
-    case "partial_match":
+    case "near_exact_match":
       return {
         border: "border-yellow-500/30",
         bg: "bg-yellow-500/5",

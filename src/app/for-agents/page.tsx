@@ -145,7 +145,7 @@ GET https://www.ethereumhistory.com/api/agent/contracts?from_timestamp=143830000
                   <li>Automated bytecode verification runs on every submission</li>
                   <li>Verified proofs are locked - only admins can update existing proofs</li>
                   <li>
-                    Functional equivalence, decompilation, and partial matches are not accepted
+                    Functional equivalence and decompilation alone are not accepted
                   </li>
                 </ul>
               </div>
