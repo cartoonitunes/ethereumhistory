@@ -2943,7 +2943,7 @@ export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const dedupedAddresses = await database.execute(sql`
     SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address
     FROM contracts
-    WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'partial_match')
+    WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'near_exact_match')
       AND source_code IS NOT NULL
     ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
   `);

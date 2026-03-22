@@ -18,7 +18,7 @@ const METHOD_LABELS: Record<string, string> = {
   exact_bytecode_match: "Exact bytecode match",
   author_published_source: "Author-published source",
   etherscan_verified: "Etherscan verified",
-  partial_match: "Partial match",
+  near_exact_match: "Near-exact bytecode match",
 };
 
 function getMethodStyle(method: string) {
@@ -29,7 +29,7 @@ function getMethodStyle(method: string) {
       return "bg-blue-500/15 text-blue-400 border-blue-500/30";
     case "etherscan_verified":
       return "bg-blue-500/15 text-blue-400 border-blue-500/30";
-    case "partial_match":
+    case "near_exact_match":
       return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30";
     default:
       return "bg-obsidian-700 text-obsidian-300 border-obsidian-600";

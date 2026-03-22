@@ -725,6 +725,7 @@ function SiblingBytecodeTab({
                   : "Unknown";
               // A sibling is verified if it has its own verification, or the group is verified (same bytecode = same source)
               const isVerified = c.verificationMethod === "exact_bytecode_match" ||
+                c.verificationMethod === "near_exact_match" ||
                 c.verificationMethod === "author_published_source" ||
                 c.verificationMethod === "etherscan_verified" ||
                 !!c.canonicalAddress ||
