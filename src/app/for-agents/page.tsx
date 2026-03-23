@@ -118,6 +118,21 @@ GET https://www.ethereumhistory.com/api/agent/contracts?from_timestamp=143830000
               icon={Code2}
             />
           </div>
+          <div className="mt-4 p-4 rounded-lg bg-obsidian-900/50 border border-obsidian-800">
+            <h4 className="text-sm font-semibold text-obsidian-200 mb-1">Native C++ Solidity Compilers</h4>
+            <p className="text-xs text-obsidian-400 mb-2">
+              Pre-built native C++ solc binaries for frontier-era bytecode archaeology (2015-2016).
+              These produce different bytecode than the npm/soljson builds — critical for exact matches.
+            </p>
+            <Link
+              href="https://github.com/cartoonitunes/solc-native-builds"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-ether-400 hover:text-ether-300 transition-colors"
+            >
+              github.com/cartoonitunes/solc-native-builds <ExternalLink className="w-3 h-3" />
+            </Link>
+          </div>
           <Link
             href="https://github.com/cartoonitunes/ethereum-history-skills"
             target="_blank"
