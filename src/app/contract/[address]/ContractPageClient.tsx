@@ -28,7 +28,8 @@ import {
   ShieldCheck,
   BookOpen,
 } from "lucide-react";
-import { encodeFunctionData, decodeFunctionResult } from "viem";
+import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
+import { mainnet } from "viem/chains";
 import { Header } from "@/components/Header";
 import { DonationBanner } from "@/components/DonationBanner";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -700,14 +701,37 @@ function TabButton({
 // Interact Panel
 // =============================================================================
 
+declare global {
+  interface Window {
+    ethereum?: {
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      on: (event: string, handler: (...args: unknown[]) => void) => void;
+      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+  }
+}
+
 type AbiItem = {
   name: string;
   type: string;
   stateMutability?: string | null;
   constant?: boolean; // legacy pre-2016 ABI format uses constant:true instead of stateMutability:"view"
+  payable?: boolean; // legacy ABI format
   inputs: Array<{ name: string; type: string; internalType?: string }>;
   outputs: Array<{ name: string; type: string; internalType?: string }>;
 };
+
+const isReadFunction = (item: AbiItem) =>
+  item.type === "function" &&
+  (item.stateMutability === "view" ||
+    item.stateMutability === "pure" ||
+    (item.constant === true && !item.stateMutability));
+
+const isWriteFunction = (item: AbiItem) =>
+  item.type === "function" &&
+  (item.stateMutability === "nonpayable" ||
+    item.stateMutability === "payable" ||
+    (item.stateMutability == null && item.constant !== true));
 
 function formatReturnValue(value: unknown, type: string): string {
   if (value === null || value === undefined) return "null";
@@ -966,6 +990,192 @@ function FunctionRow({
   );
 }
 
+// =============================================================================
+// Write Function Row
+// =============================================================================
+
+function WriteFunctionRow({
+  fn,
+  address,
+  walletAddress,
+}: {
+  fn: AbiItem;
+  address: string;
+  walletAddress: string | null;
+}) {
+  const [inputValues, setInputValues] = useState<string[]>(
+    fn.inputs.map((i) => (i.type === "bool" ? "true" : ""))
+  );
+  const [ethValue, setEthValue] = useState("");
+  const [status, setStatus] = useState<"idle" | "simulating" | "sending" | "waiting" | "success" | "error">("idle");
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [gasEstimate, setGasEstimate] = useState<string | null>(null);
+
+  const isPayable = fn.stateMutability === "payable" || fn.payable === true;
+  const isDisabled = !walletAddress;
+
+  const estimateGas = useCallback(async () => {
+    if (!walletAddress) return;
+    try {
+      const args = fn.inputs.map((inp, i) => parseInputValue(inputValues[i] ?? "", inp.type));
+      const publicClient = createPublicClient({ chain: mainnet, transport: http("https://eth.drpc.org") });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const gas = await publicClient.estimateContractGas({
+        address: address as `0x${string}`,
+        abi: [fn] as Parameters<typeof publicClient.estimateContractGas>[0]["abi"],
+        functionName: fn.name,
+        args,
+        account: walletAddress as `0x${string}`,
+        value: (ethValue && isPayable ? parseEther(ethValue) : undefined),
+      } as Parameters<typeof publicClient.estimateContractGas>[0]);
+      setGasEstimate(gas.toLocaleString());
+    } catch {
+      setGasEstimate(null);
+    }
+  }, [fn, address, walletAddress, inputValues, ethValue, isPayable]);
+
+  const sendTx = useCallback(async () => {
+    if (!walletAddress || !window.ethereum) return;
+    setError(null);
+    setTxHash(null);
+    setStatus("simulating");
+    try {
+      const args = fn.inputs.map((inp, i) => parseInputValue(inputValues[i] ?? "", inp.type));
+      const publicClient = createPublicClient({ chain: mainnet, transport: http("https://eth.drpc.org") });
+      const walletClient = createWalletClient({
+        account: walletAddress as `0x${string}`,
+        chain: mainnet,
+        transport: custom(window.ethereum),
+      });
+
+      const { request } = await publicClient.simulateContract({
+        address: address as `0x${string}`,
+        abi: [fn] as Parameters<typeof publicClient.simulateContract>[0]["abi"],
+        functionName: fn.name,
+        args,
+        account: walletAddress as `0x${string}`,
+        value: (ethValue && isPayable ? parseEther(ethValue) : undefined),
+      } as Parameters<typeof publicClient.simulateContract>[0]);
+
+      setStatus("sending");
+      const hash = await walletClient.writeContract(request);
+      setTxHash(hash);
+
+      setStatus("waiting");
+      await publicClient.waitForTransactionReceipt({ hash });
+      setStatus("success");
+    } catch (err: unknown) {
+      setStatus("error");
+      const e = err as { shortMessage?: string; message?: string };
+      setError(e.shortMessage || e.message || "Transaction failed");
+    }
+  }, [fn, address, walletAddress, inputValues, ethValue, isPayable]);
+
+  return (
+    <div className={`rounded-xl border p-4 transition-opacity ${isDisabled ? "border-obsidian-800 bg-obsidian-900/20 opacity-60" : "border-obsidian-700 bg-obsidian-900/30"}`}>
+      <div className="font-mono text-sm text-obsidian-200 font-medium mb-2">
+        {fn.name}
+        <span className="text-obsidian-600 ml-1 font-normal text-xs">
+          ({fn.inputs.map((i) => `${i.type} ${i.name}`).join(", ")})
+        </span>
+        {isPayable && (
+          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400">
+            payable
+          </span>
+        )}
+      </div>
+
+      {fn.inputs.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {fn.inputs.map((inp, i) => (
+            <div key={i}>
+              <label className="block text-xs text-obsidian-500 mb-1">
+                {inp.name || `arg${i}`} <span className="text-obsidian-600">({inp.type})</span>
+              </label>
+              <FunctionInput
+                input={inp}
+                value={inputValues[i] ?? ""}
+                onChange={(v) => {
+                  const next = [...inputValues];
+                  next[i] = v;
+                  setInputValues(next);
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isPayable && (
+        <div className="mb-3">
+          <label className="block text-xs text-obsidian-500 mb-1">ETH value to send</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={ethValue}
+              onChange={(e) => setEthValue(e.target.value)}
+              placeholder="0.0"
+              className="w-full rounded-lg bg-obsidian-900/50 border border-amber-500/30 px-3 py-1.5 text-sm text-obsidian-100 font-mono outline-none focus:border-amber-500/60"
+            />
+            <span className="text-xs text-obsidian-400 font-medium shrink-0">ETH</span>
+          </div>
+        </div>
+      )}
+
+      {!isDisabled && (
+        <div className="flex items-center gap-3 mb-3">
+          <button
+            onClick={sendTx}
+            disabled={status === "simulating" || status === "sending" || status === "waiting"}
+            className="px-4 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm text-white font-medium transition-colors flex items-center gap-2"
+          >
+            {(status === "simulating" || status === "sending" || status === "waiting") && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            )}
+            {status === "simulating" ? "Simulating…" : status === "sending" ? "Sending…" : status === "waiting" ? "Confirming…" : "Send Transaction"}
+          </button>
+          <button
+            onClick={estimateGas}
+            disabled={status !== "idle" && status !== "success" && status !== "error"}
+            className="px-3 py-1.5 rounded-lg border border-obsidian-700 hover:border-obsidian-600 text-xs text-obsidian-400 hover:text-obsidian-300 transition-colors"
+          >
+            Estimate Gas
+          </button>
+          {gasEstimate && (
+            <span className="text-xs text-obsidian-500">~{gasEstimate} gas</span>
+          )}
+        </div>
+      )}
+
+      {status === "success" && txHash && (
+        <div className="text-xs bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2 text-green-400">
+          ✓ Transaction confirmed!{" "}
+          <a
+            href={`https://etherscan.io/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-green-300 font-mono"
+          >
+            {txHash.slice(0, 18)}…
+          </a>
+          <ExternalLink className="w-3 h-3 inline ml-1" />
+        </div>
+      )}
+
+      {status === "error" && error && (
+        <div className="text-xs bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2 text-red-400 break-all">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Interact Panel (Read + Write)
+// =============================================================================
+
 function ReadContractPanel({
   address,
   abiData,
@@ -978,35 +1188,69 @@ function ReadContractPanel({
   };
 }) {
   const [autoCallDone, setAutoCallDone] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
   // Trigger auto-call when panel is first shown
   useEffect(() => {
     setAutoCallDone(true);
   }, []);
 
+  // Check if already connected on mount
+  useEffect(() => {
+    if (!window.ethereum) return;
+    window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
+      const accs = accounts as string[];
+      if (accs.length > 0) setWalletAddress(accs[0]);
+    }).catch(() => {});
+  }, []);
+
+  // Listen for account changes
+  useEffect(() => {
+    if (!window.ethereum) return;
+    const handler = (...args: unknown[]) => {
+      const accs = args[0] as string[];
+      setWalletAddress(accs.length > 0 ? accs[0] : null);
+    };
+    window.ethereum.on("accountsChanged", handler);
+    return () => window.ethereum?.removeListener("accountsChanged", handler);
+  }, []);
+
+  const connectWallet = async () => {
+    if (!window.ethereum) {
+      setWalletError("No Ethereum wallet detected. Please install MetaMask.");
+      return;
+    }
+    setConnecting(true);
+    setWalletError(null);
+    try {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
+      setWalletAddress(accounts[0]);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setWalletError(e.message || "Failed to connect wallet");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   // Parse and filter ABI
-  const viewFunctions = useMemo<AbiItem[]>(() => {
+  const { readFunctions, writeFunctions } = useMemo<{ readFunctions: AbiItem[]; writeFunctions: AbiItem[] }>(() => {
     try {
       const parsed = JSON.parse(abiData.abi) as AbiItem[];
-      return parsed.filter(
-        (item) =>
-          item.type === "function" &&
-          // Support both modern stateMutability field and legacy constant:true (pre-2016 ABI format)
-          (item.stateMutability === "view" ||
-            item.stateMutability === "pure" ||
-            (item.constant === true && item.stateMutability == null) ||
-            item.constant === true)
-      );
+      return {
+        readFunctions: parsed.filter(isReadFunction),
+        writeFunctions: parsed.filter(isWriteFunction),
+      };
     } catch {
-      return [];
+      return { readFunctions: [], writeFunctions: [] };
     }
   }, [abiData.abi]);
 
   // Source badge
   const sourceBadge = (() => {
     if (abiData.source === "direct") {
-      // Distinguish etherscan_verified vs exact_bytecode_match based on context
-      // We return a green badge for direct
       return (
         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/15 border border-green-500/30 text-green-400 text-xs font-medium">
           <Check className="w-3 h-3" />
@@ -1029,41 +1273,98 @@ function ReadContractPanel({
     );
   })();
 
-  if (viewFunctions.length === 0) {
+  if (readFunctions.length === 0 && writeFunctions.length === 0) {
     return (
       <div className="text-center py-12 text-obsidian-500">
         <BookOpen className="w-8 h-8 mx-auto mb-3 opacity-50" />
-        <p>No view or pure functions found in this contract's ABI.</p>
+        <p>No callable functions found in this contract's ABI.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {sourceBadge}
-          <span className="text-xs text-obsidian-500">
-            {viewFunctions.length} readable function{viewFunctions.length !== 1 ? "s" : ""}
+        </div>
+        {writeFunctions.length > 0 && (
+          <div className="flex items-center gap-2">
+            {walletAddress ? (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-medium font-mono">
+                <Check className="w-3 h-3" />
+                {walletAddress.slice(0, 8)}…{walletAddress.slice(-4)}
+              </span>
+            ) : (
+              <button
+                onClick={connectWallet}
+                disabled={connecting}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm text-white font-medium transition-colors"
+              >
+                {connecting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {connecting ? "Connecting…" : "Connect Wallet"}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {walletError && (
+        <div className="text-xs text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">{walletError}</div>
+      )}
+
+      {/* Mainnet warning — only when wallet connected */}
+      {walletAddress && writeFunctions.length > 0 && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-amber-300">
+            <span className="font-semibold">You are on Ethereum mainnet.</span> Transactions cost real ETH and cannot be undone. Always verify function parameters before sending.
           </span>
         </div>
-        <p className="text-xs text-obsidian-500 italic">
-          Read-only. These calls use the public Ethereum RPC and cost no gas.
-        </p>
-      </div>
+      )}
 
-      {/* Function list */}
-      <div className="space-y-3">
-        {viewFunctions.map((fn, i) => (
-          <FunctionRow
-            key={`${fn.name}-${i}`}
-            fn={fn}
-            address={address}
-            autoCall={autoCallDone}
-          />
-        ))}
-      </div>
+      {/* Read Functions */}
+      {readFunctions.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-obsidian-300">Read Functions</h3>
+            <span className="text-xs text-obsidian-600">{readFunctions.length}</span>
+            <span className="text-xs text-obsidian-600 italic">No gas required</span>
+          </div>
+          {readFunctions.map((fn, i) => (
+            <FunctionRow
+              key={`read-${fn.name}-${i}`}
+              fn={fn}
+              address={address}
+              autoCall={autoCallDone}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Write Functions */}
+      {writeFunctions.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-obsidian-300">Write Functions</h3>
+            <span className="text-xs text-obsidian-600">{writeFunctions.length}</span>
+          </div>
+          {!walletAddress && (
+            <div className="rounded-xl border border-obsidian-700 bg-obsidian-900/20 px-4 py-3 text-sm text-obsidian-400 flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 text-obsidian-500 flex-shrink-0" />
+              Connect your wallet above to send write transactions.
+            </div>
+          )}
+          {writeFunctions.map((fn, i) => (
+            <WriteFunctionRow
+              key={`write-${fn.name}-${i}`}
+              fn={fn}
+              address={address}
+              walletAddress={walletAddress}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
