@@ -112,7 +112,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   } | null>(null);
   const [siblingsLoading, setSiblingsLoading] = useState(false);
 
-  // ABI availability check for "Read Contract" tab
+  // ABI availability check for "Interact" tab
   type AbiData = {
     abi: string;
     source: "direct" | "sibling";
@@ -598,7 +598,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                 onClick={() => { setActiveTab("read"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "read" } }); }}
                 icon={<BookOpen className="w-4 h-4" />}
               >
-                Read Contract
+                Interact
               </TabButton>
             )}
           </div>
@@ -697,7 +697,7 @@ function TabButton({
 }
 
 // =============================================================================
-// Read Contract Panel
+// Interact Panel
 // =============================================================================
 
 type AbiItem = {
@@ -854,7 +854,7 @@ function FunctionRow({
         args,
       });
 
-      const rpcRes = await fetch("https://cloudflare-eth.com", {
+      const rpcRes = await fetch("https://eth.drpc.org", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
