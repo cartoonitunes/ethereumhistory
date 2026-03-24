@@ -81,14 +81,21 @@ export async function GET(
 
     const uniqueContracts = uniqueContractsResult[0]?.count || 0;
 
-    // 3b. Get verified proof count (distinct contracts where this historian set verificationMethod)
+    // 3b. Get verified proof count — distinct contracts where this historian performed actual proof work.
+    // Excludes etherscan_verified (just importing existing Etherscan data, not archaeology).
+    // Joins to contracts table to check the current verification_method on the contract itself.
     const proofCountResult = await database
       .select({ count: sql<number>`COUNT(DISTINCT ${schema.contractEdits.contractAddress})::int` })
       .from(schema.contractEdits)
+      .innerJoin(
+        schema.contracts,
+        eq(schema.contractEdits.contractAddress, schema.contracts.address)
+      )
       .where(
         and(
           eq(schema.contractEdits.historianId, historianId),
-          sql`${schema.contractEdits.fieldsChanged} @> ARRAY['verificationMethod']::text[]`
+          sql`${schema.contractEdits.fieldsChanged} @> ARRAY['verificationMethod']::text[]`,
+          sql`${schema.contracts.verificationMethod} IN ('exact_bytecode_match', 'near_exact_match', 'author_published', 'author_published_source', 'source_reconstructed')`
         )
       );
 
