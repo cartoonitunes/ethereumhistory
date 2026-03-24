@@ -42,26 +42,26 @@ See the eth-bytecode-cracker skill for the full methodology. The short version:
 
 A crack is only complete when the compiled output matches exactly. Functional similarity is not enough.
 
-### 3. Create a verification repo
+### 3. Add your proof to awesome-ethereum-proofs
 
-Create `cartoonitunes/<contractname>-verification` on GitHub. Include:
-
-- `<ContractName>.sol` — the source
-- `README.md` — contract address, compiler version, optimizer setting, runtime/creation SHA-256 hashes
-- `verify.js` (or similar) — reproducible script that downloads the compiler and checks the match
-- `target_runtime.txt` — the on-chain runtime hex
-
-Commit as `cartoonitunes <cartoonitunes@users.noreply.github.com>`.
-
-### 4. Add to awesome-ethereum-proofs
-
-Add a row to the table in `cartoonitunes/awesome-ethereum-proofs/README.md`:
+All proofs live in `cartoonitunes/awesome-ethereum-proofs` under `proofs/<contractname>/`. Fork the repo, create your folder, open a PR.
 
 ```
-| [ContractName](https://ethereumhistory.com/contract/0xADDRESS) | Mmm DD, YYYY (block N) | soljson vX.X.X (optimizer ON/OFF) | Exact bytecode match | [Repo](https://github.com/cartoonitunes/contractname-verification) |
+proofs/
+  your-contract-name/
+    ContractName.sol       ← source code
+    README.md              ← address, compiler, optimizer, SHA-256 hashes, verify instructions
+    target_runtime.txt     ← on-chain runtime hex
+    verify.js              ← reproducible script that downloads compiler + checks match
 ```
 
-Insert in chronological order by deployment date.
+In the same PR, add a row to `README.md` in chronological order:
+
+```
+| [ContractName](https://ethereumhistory.com/contract/0xADDRESS) | Mmm DD, YYYY (block N) | soljson vX.X.X (optimizer ON/OFF) | Exact bytecode match | [Proof](proofs/your-contract-name/) |
+```
+
+Note: individual `*-verification` repos are the old pattern. New proofs go in the monorepo.
 
 ### 5. Document on EthereumHistory
 
