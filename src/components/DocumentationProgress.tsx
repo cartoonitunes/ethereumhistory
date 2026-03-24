@@ -122,6 +122,7 @@ function HomepageProgress({ stats }: { stats: ProgressStats }) {
           transition={{ duration: 0.8, ease: "easeOut" }}
         />
       </div>
+      <p className="text-obsidian-600 text-xs mt-1.5">Includes contracts with editorial history, verified source code, or bytecode siblings of documented contracts.</p>
 
       {/* Year/Era toggle + breakdown */}
       <div className="mt-4">
@@ -251,7 +252,7 @@ function BrowseProgress({
           {documented.toLocaleString()} of {total.toLocaleString()} contracts documented ({overallPct}%)
         </span>
       </div>
-      <div className="bg-obsidian-800 rounded-full h-2 overflow-hidden mb-4">
+      <div className="bg-obsidian-800 rounded-full h-2 overflow-hidden mb-1.5">
         <motion.div
           className="h-full rounded-full"
           style={{ backgroundColor: "#8b5cf6" }}
@@ -260,6 +261,7 @@ function BrowseProgress({
           transition={{ duration: 0.8, ease: "easeOut" }}
         />
       </div>
+      <p className="text-obsidian-600 text-xs mb-4">Includes contracts with editorial history, verified source code, or bytecode siblings of documented contracts.</p>
 
       <div className="flex items-center justify-between mb-3">
         <span className="text-obsidian-500 text-xs uppercase tracking-wide">Breakdown</span>
