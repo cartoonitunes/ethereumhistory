@@ -81,9 +81,9 @@ export async function GET(
 
     const uniqueContracts = uniqueContractsResult[0]?.count || 0;
 
-    // 3b. Get verified proof count (edits where fieldsChanged contains 'verificationMethod')
+    // 3b. Get verified proof count (distinct contracts where this historian set verificationMethod)
     const proofCountResult = await database
-      .select({ count: sql<number>`COUNT(*)::int` })
+      .select({ count: sql<number>`COUNT(DISTINCT ${schema.contractEdits.contractAddress})::int` })
       .from(schema.contractEdits)
       .where(
         and(
