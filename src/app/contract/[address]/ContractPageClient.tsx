@@ -757,12 +757,59 @@ function formatReturnValue(value: unknown, type: string): string {
   return String(value);
 }
 
+const ARRAY_PREVIEW_LIMIT = 10;
+
+function ArrayValueDisplay({ items, itemType }: { items: unknown[]; itemType: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? items : items.slice(0, ARRAY_PREVIEW_LIMIT);
+  const hidden = items.length - ARRAY_PREVIEW_LIMIT;
+  return (
+    <div className="space-y-0.5">
+      <div className="text-obsidian-500 text-xs mb-1">{itemType}[{items.length}]</div>
+      {visible.map((item, i) => (
+        <div key={i} className="text-sm font-mono break-all text-obsidian-200">
+          <span className="text-obsidian-600 mr-1.5 select-none">[{i}]</span>
+          {formatReturnValue(item, itemType)}
+        </div>
+      ))}
+      {!expanded && hidden > 0 && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="text-xs text-ether-400 hover:text-ether-300 mt-1"
+        >
+          + {hidden} more items — expand
+        </button>
+      )}
+      {expanded && items.length > ARRAY_PREVIEW_LIMIT && (
+        <button
+          onClick={() => setExpanded(false)}
+          className="text-xs text-obsidian-500 hover:text-obsidian-300 mt-1"
+        >
+          collapse
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ReturnValueDisplay({ value, outputs }: { value: unknown; outputs: AbiItem["outputs"] }) {
   if (outputs.length === 0) return <span className="text-obsidian-500 text-xs italic">void</span>;
 
   if (outputs.length === 1) {
     const type = outputs[0].type;
     const name = outputs[0].name;
+
+    // Array return type
+    if (Array.isArray(value)) {
+      const itemType = type.replace(/\[\d*\]$/, "") || "bytes32";
+      return (
+        <div>
+          {name && <div className="text-obsidian-500 text-xs mb-1">{name}</div>}
+          <ArrayValueDisplay items={value} itemType={itemType} />
+        </div>
+      );
+    }
+
     const formatted = formatReturnValue(value, type);
     return (
       <div className="text-sm font-mono break-all">
@@ -784,7 +831,17 @@ function ReturnValueDisplay({ value, outputs }: { value: unknown; outputs: AbiIt
   return (
     <div className="space-y-1 text-sm font-mono">
       {outputs.map((out, i) => {
-        const formatted = formatReturnValue(values[i], out.type);
+        const val = values[i];
+        if (Array.isArray(val)) {
+          const itemType = out.type.replace(/\[\d*\]$/, "") || "bytes32";
+          return (
+            <div key={i}>
+              {out.name && <div className="text-obsidian-500 text-xs mb-1">{out.name}</div>}
+              <ArrayValueDisplay items={val} itemType={itemType} />
+            </div>
+          );
+        }
+        const formatted = formatReturnValue(val, out.type);
         return (
           <div key={i} className="break-all">
             {out.name && <span className="text-obsidian-500 mr-1">{out.name}:</span>}
