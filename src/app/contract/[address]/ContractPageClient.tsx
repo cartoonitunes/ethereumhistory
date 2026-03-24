@@ -733,13 +733,12 @@ const isWriteFunction = (item: AbiItem) =>
     item.stateMutability === "payable" ||
     (item.stateMutability == null && item.constant !== true));
 
-const RISKY_FUNCTION_KEYWORDS = ["withdraw", "send", "transfer", "payout", "claim", "collect", "drain"];
+const RISKY_FUNCTION_KEYWORDS = ["withdraw", "payout", "claim", "drain"];
 
 const isRiskyFunction = (fn: AbiItem): boolean => {
   const nameLower = fn.name.toLowerCase();
-  const nameMatch = RISKY_FUNCTION_KEYWORDS.some((kw) => nameLower.includes(kw));
-  const isPayableNoOutput = (fn.stateMutability === "payable" || fn.payable === true) && fn.outputs.length === 0;
-  return nameMatch || isPayableNoOutput;
+  // Only flag functions whose primary purpose is moving ETH out — not generic transfer/send
+  return RISKY_FUNCTION_KEYWORDS.some((kw) => nameLower === kw || nameLower.startsWith(kw));
 };
 
 function formatReturnValue(value: unknown, type: string): string {
@@ -1380,7 +1379,7 @@ function ReadContractPanel({
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <span className="text-sm text-amber-300">
-            <span className="font-semibold">You are on Ethereum mainnet.</span> Transactions cost real ETH and cannot be undone. Always verify function parameters before sending.
+            <span className="font-semibold">Ethereum mainnet.</span> Transactions cost real ETH and are permanent. Review parameters before sending.
           </span>
         </div>
       )}
@@ -1435,12 +1434,9 @@ function ReadContractPanel({
           })()}
 
           {/* Disclaimer — always visible */}
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
-            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-300 leading-relaxed">
-              <span className="font-semibold">Write transactions are irreversible.</span>{" "}
-              These are historical contracts with no upgrade path. Always verify what a function does before sending.
-              Transactions are simulated before sending, but simulation cannot catch all failure modes.
+          <div className="px-1 py-1">
+            <p className="text-xs text-obsidian-500 leading-relaxed">
+              Write transactions are permanent. Calls are simulated first to catch obvious errors, but always verify what a function does before sending.
             </p>
           </div>
 
