@@ -100,6 +100,7 @@ export function DocumentationProgress({
 function HomepageProgress({ stats }: { stats: ProgressStats }) {
   const { total, documented } = stats.overall;
   const pct = percentage(documented, total);
+  const [view, setView] = useState<"year" | "era">("year");
 
   return (
     <div className="bg-obsidian-900/30 border border-obsidian-800 rounded-xl p-5">
@@ -122,41 +123,72 @@ function HomepageProgress({ stats }: { stats: ProgressStats }) {
         />
       </div>
 
-      {/* Year breakdown */}
-      {stats.byYear && (
-        <div className="mt-4 space-y-2">
-          {YEARS.map((year) => {
-            const yearStats = stats.byYear[year];
-            if (!yearStats) return null;
-            const yPct = percentage(yearStats.documented, yearStats.total);
-            return (
-              <div key={year}>
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2 h-2 rounded-full inline-block"
-                      style={{ backgroundColor: YEAR_COLORS[year] }}
-                    />
-                    <span className="text-obsidian-300 text-xs">{year}</span>
-                  </div>
-                  <span className="text-obsidian-500 text-xs">
-                    {yearStats.documented.toLocaleString()}/{yearStats.total.toLocaleString()} ({yPct}%)
-                  </span>
-                </div>
-                <div className="bg-obsidian-800 rounded-full h-1.5 overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full"
-                    style={{ backgroundColor: YEAR_COLORS[year] }}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${yPct}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-                  />
-                </div>
-              </div>
-            );
-          })}
+      {/* Year/Era toggle + breakdown */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-obsidian-500 text-xs uppercase tracking-wide">Breakdown</span>
+          <div className="flex items-center gap-1 rounded-lg bg-obsidian-800/60 p-0.5">
+            <button
+              onClick={() => setView("year")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${view === "year" ? "bg-obsidian-700 text-obsidian-100" : "text-obsidian-400 hover:text-obsidian-200"}`}
+            >
+              By Year
+            </button>
+            <button
+              onClick={() => setView("era")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${view === "era" ? "bg-obsidian-700 text-obsidian-100" : "text-obsidian-400 hover:text-obsidian-200"}`}
+            >
+              By Era
+            </button>
+          </div>
         </div>
-      )}
+        <div className="space-y-2">
+          {view === "year"
+            ? YEARS.map((year) => {
+                const yearStats = stats.byYear[year];
+                if (!yearStats) return null;
+                const yPct = percentage(yearStats.documented, yearStats.total);
+                return (
+                  <div key={year}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: YEAR_COLORS[year] }} />
+                        <span className="text-obsidian-300 text-xs">{year}</span>
+                      </div>
+                      <span className="text-obsidian-500 text-xs">
+                        {yearStats.documented.toLocaleString()}/{yearStats.total.toLocaleString()} ({yPct}%)
+                      </span>
+                    </div>
+                    <div className="bg-obsidian-800 rounded-full h-1.5 overflow-hidden">
+                      <motion.div className="h-full rounded-full" style={{ backgroundColor: YEAR_COLORS[year] }} initial={{ width: 0 }} animate={{ width: `${yPct}%` }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} />
+                    </div>
+                  </div>
+                );
+              })
+            : ERA_IDS.map((eraId) => {
+                const era = ERAS[eraId];
+                const eraStats = stats.byEra[eraId];
+                if (!era || !eraStats) return null;
+                const ePct = percentage(eraStats.documented, eraStats.total);
+                return (
+                  <div key={eraId}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: ERA_COLORS[eraId] }} />
+                        <span className="text-obsidian-300 text-xs">{era.name}</span>
+                      </div>
+                      <span className="text-obsidian-500 text-xs">
+                        {eraStats.documented.toLocaleString()}/{eraStats.total.toLocaleString()} ({ePct}%)
+                      </span>
+                    </div>
+                    <div className="bg-obsidian-800 rounded-full h-1.5 overflow-hidden">
+                      <motion.div className="h-full rounded-full" style={{ backgroundColor: ERA_COLORS[eraId] }} initial={{ width: 0 }} animate={{ width: `${ePct}%` }} transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }} />
+                    </div>
+                  </div>
+                );
+              })}
+        </div>
+      </div>
 
       {/* Community stats */}
       {stats.community && (stats.community.historians > 0 || stats.community.totalEdits > 0) && (
@@ -207,12 +239,30 @@ function BrowseProgress({
     ? YEARS.filter((y) => y === filterYear)
     : YEARS;
 
+  const { total, documented } = stats.overall;
+  const overallPct = percentage(documented, total);
+
   return (
     <div className="bg-obsidian-900/30 border border-obsidian-800 rounded-xl p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-obsidian-200 text-sm font-medium">
-          Documentation Progress
-        </h3>
+      {/* Overall total — matches homepage */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-obsidian-200 text-sm font-medium">Documentation Progress</span>
+        <span className="text-obsidian-400 text-sm">
+          {documented.toLocaleString()} of {total.toLocaleString()} contracts documented ({overallPct}%)
+        </span>
+      </div>
+      <div className="bg-obsidian-800 rounded-full h-2 overflow-hidden mb-4">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ backgroundColor: "#8b5cf6" }}
+          initial={{ width: 0 }}
+          animate={{ width: `${overallPct}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        />
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-obsidian-500 text-xs uppercase tracking-wide">Breakdown</span>
         {!filterEra && !filterYear && (
           <div className="flex items-center gap-1 rounded-lg bg-obsidian-800/60 p-0.5">
             <button
@@ -238,7 +288,7 @@ function BrowseProgress({
           </div>
         )}
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {view === "year"
           ? yearsToShow.map((year) => {
               const yearStats = stats.byYear?.[year];
