@@ -703,7 +703,8 @@ function TabButton({
 type AbiItem = {
   name: string;
   type: string;
-  stateMutability: string;
+  stateMutability?: string | null;
+  constant?: boolean; // legacy pre-2016 ABI format uses constant:true instead of stateMutability:"view"
   inputs: Array<{ name: string; type: string; internalType?: string }>;
   outputs: Array<{ name: string; type: string; internalType?: string }>;
 };
@@ -990,7 +991,11 @@ function ReadContractPanel({
       return parsed.filter(
         (item) =>
           item.type === "function" &&
-          (item.stateMutability === "view" || item.stateMutability === "pure")
+          // Support both modern stateMutability field and legacy constant:true (pre-2016 ABI format)
+          (item.stateMutability === "view" ||
+            item.stateMutability === "pure" ||
+            (item.constant === true && item.stateMutability == null) ||
+            item.constant === true)
       );
     } catch {
       return [];
