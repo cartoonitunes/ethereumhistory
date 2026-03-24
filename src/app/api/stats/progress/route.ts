@@ -181,7 +181,7 @@ export async function GET(): Promise<NextResponse> {
       {
         headers: {
           "Cache-Control":
-            "public, s-maxage=300, stale-while-revalidate=600",
+            "public, s-maxage=0, must-revalidate",
         },
       }
     );
