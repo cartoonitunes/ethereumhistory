@@ -4,7 +4,7 @@
  * GET /api/stats/progress
  * Returns total and documented contract counts overall, per era, and per year.
  * Also returns community stats (historian count, total edits).
- * "Documented" = short_description IS NOT NULL AND short_description != ''.
+ * "Documented" = has description OR is verified OR is a bytecode sibling of a documented/verified contract.
  */
 
 import { NextResponse } from "next/server";
@@ -52,7 +52,20 @@ export async function GET(): Promise<NextResponse> {
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contracts)
         .where(
-          sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`
+          sql`(
+                (short_description IS NOT NULL AND short_description != '')
+                OR verification_method IS NOT NULL
+                OR canonical_address IS NOT NULL
+                OR (
+                  deployed_bytecode_hash IS NOT NULL
+                  AND deployed_bytecode_hash IN (
+                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
+              )`
         ),
 
       // Active historian count
@@ -78,7 +91,20 @@ export async function GET(): Promise<NextResponse> {
           .where(
             and(
               eq(schema.contracts.eraId, eraId),
-              sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`
+              sql`(
+                (short_description IS NOT NULL AND short_description != '')
+                OR verification_method IS NOT NULL
+                OR canonical_address IS NOT NULL
+                OR (
+                  deployed_bytecode_hash IS NOT NULL
+                  AND deployed_bytecode_hash IN (
+                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
+              )`
             )
           ),
       ]),
@@ -97,7 +123,20 @@ export async function GET(): Promise<NextResponse> {
           .where(
             and(
               sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
-              sql`((short_description IS NOT NULL AND short_description != '') OR verification_method IS NOT NULL OR canonical_address IS NOT NULL)`
+              sql`(
+                (short_description IS NOT NULL AND short_description != '')
+                OR verification_method IS NOT NULL
+                OR canonical_address IS NOT NULL
+                OR (
+                  deployed_bytecode_hash IS NOT NULL
+                  AND deployed_bytecode_hash IN (
+                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
+              )`
             )
           ),
       ]),
