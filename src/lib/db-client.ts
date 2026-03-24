@@ -1717,6 +1717,7 @@ export async function getDocumentedContractsFromDb(params: {
   verification?: string | null;
   registrar?: RegistrarType | "any" | null;
   sort?: string | null;
+  selfDestructed?: boolean | null;
   limit?: number;
   offset?: number;
 }): Promise<AppContract[]> {
@@ -1730,6 +1731,15 @@ export async function getDocumentedContractsFromDb(params: {
     isNotNull(schema.contracts.shortDescription),
     ne(schema.contracts.shortDescription, ""),
   ];
+
+  // Self-destructed contracts (code_size_bytes = 0) are opt-in; exclude by default.
+  // selfDestructed=true → show only self-destructed; false/null → exclude self-destructed.
+  if (params.selfDestructed === true) {
+    conditions.push(sql`${schema.contracts.codeSizeBytes} = 0`);
+  } else {
+    // Default: exclude contracts where code_size_bytes = 0
+    conditions.push(sql`(${schema.contracts.codeSizeBytes} IS NULL OR ${schema.contracts.codeSizeBytes} != 0)`);
+  }
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
   }
@@ -1830,12 +1840,20 @@ export async function getDocumentedContractsCountFromDb(params: {
   verification?: string | null;
   registrar?: RegistrarType | "any" | null;
   sort?: string | null;
+  selfDestructed?: boolean | null;
 }): Promise<number> {
   const database = getDb();
   const conditions: SQL[] = params.registrar != null ? [] : [
     isNotNull(schema.contracts.shortDescription),
     ne(schema.contracts.shortDescription, ""),
   ];
+
+  // Self-destructed contracts (code_size_bytes = 0) are opt-in; exclude by default.
+  if (params.selfDestructed === true) {
+    conditions.push(sql`${schema.contracts.codeSizeBytes} = 0`);
+  } else {
+    conditions.push(sql`(${schema.contracts.codeSizeBytes} IS NULL OR ${schema.contracts.codeSizeBytes} != 0)`);
+  }
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
   }

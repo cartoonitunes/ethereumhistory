@@ -55,6 +55,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const verification = searchParams.get("verification")?.trim() || undefined;
   const sort = searchParams.get("sort")?.trim() || undefined;
   const registrar = searchParams.get("registrar")?.trim() || undefined;
+  const selfDestructedParam = searchParams.get("self_destructed")?.trim();
+  // selfDestructed=true → show only self-destructed; false/null → exclude self-destructed (default)
+  const selfDestructed = selfDestructedParam === "1" ? true : selfDestructedParam === "0" ? false : null;
 
   const filterParams = {
     eraId: era || null,
@@ -65,10 +68,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     verification: verification || null,
     registrar: (registrar as "any" | "GlobalRegistrar" | "LinageeRegistrar" | "NameRegistry" | null) || null,
     sort: sort || null,
+    selfDestructed,
   };
 
   // Build a cache key from all filter params for short-lived caching
-  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${capabilitiesParam}:${verification || ""}:${registrar || ""}:${sort || ""}:${page}:${limit}`;
+  const cacheKey = `browse:${undocumented ? "u" : "d"}:${era || ""}:${type || ""}:${q || ""}:${year || ""}:${capabilitiesParam}:${verification || ""}:${registrar || ""}:${sort || ""}:${selfDestructedParam || ""}:${page}:${limit}`;
 
   const [contracts, total] = await cached(
     cacheKey,
