@@ -50,10 +50,30 @@ All proofs live in `cartoonitunes/awesome-ethereum-proofs` under `proofs/<contra
 proofs/
   your-contract-name/
     ContractName.sol       ← source code
-    README.md              ← address, compiler, optimizer, SHA-256 hashes, verify instructions
+    README.md              ← address, compiler, optimizer, SHA-256 hashes, Proved by, verify instructions
     target_runtime.txt     ← on-chain runtime hex
     verify.js              ← reproducible script that downloads compiler + checks match
 ```
+
+The proof README should include a `Proved by` field linking to the historian's EH profile:
+
+```markdown
+# ContractName Verification
+
+| Field | Value |
+|-------|-------|
+| Address | `0xADDRESS` |
+| Deployed | Oct 1, 2015 (block 319,519) |
+| Compiler | soljson-v0.1.2+commit.d0d36e3 |
+| Optimizer | OFF |
+| Runtime | 131 bytes |
+| Creation | 147 bytes |
+| Runtime SHA-256 | `abc123...` |
+| Creation SHA-256 | `def456...` |
+| Proved by | [@YourName](https://ethereumhistory.com/historian/YOUR_ID) |
+```
+
+This ensures attribution is explicit in the proof itself, independent of git history or the EH edits API.
 
 In the same PR, add a row to `README.md` in chronological order:
 
