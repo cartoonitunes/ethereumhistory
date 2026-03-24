@@ -19,25 +19,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const db = getDb();
 
-    // Get the target contract's bytecode hash (prefer deployed, fall back to runtime)
+    // Get the target contract's runtime bytecode hash.
+    // We group siblings by runtime bytecode only — constructor args differ between deployments
+    // of the same contract code (e.g. same ERC-20 template deployed with different token names/supplies)
+    // and should not split the sibling group.
     const [target] = await db
       .select({
-        deployedBytecodeHash: contracts.deployedBytecodeHash,
         runtimeBytecodeHash: contracts.runtimeBytecodeHash,
       })
       .from(contracts)
       .where(eq(contracts.address, normalizedAddress))
       .limit(1);
 
-    const hash = target?.deployedBytecodeHash ?? target?.runtimeBytecodeHash;
+    const hash = target?.runtimeBytecodeHash;
     if (!hash) {
       return NextResponse.json({ hash: null, count: 0, contracts: [] });
     }
 
-    // Use the appropriate hash column for matching
-    const hashColumn = target?.deployedBytecodeHash
-      ? contracts.deployedBytecodeHash
-      : contracts.runtimeBytecodeHash;
+    const hashColumn = contracts.runtimeBytecodeHash;
 
     // Get true total count of siblings
     const [{ totalCount }] = await db
