@@ -1237,8 +1237,10 @@ function OverviewTab({
               {contract.verificationMethod
                 ? contract.verificationMethod === "exact_bytecode_match"
                   ? "Source verified through compiler archaeology and exact bytecode matching."
-                  : contract.verificationMethod === "author_published_source"
+                  : contract.verificationMethod === "author_published"
                   ? "Source code published by the original contract author."
+                  : contract.verificationMethod === "etherscan_verified"
+                  ? "Source verified on Etherscan."
                   : "This contract has verified source code."
                 : "This contract has verified source code on Etherscan."}
             </p>
@@ -1252,17 +1254,17 @@ function OverviewTab({
                 View Verification Proof
                 <ExternalLink className="w-3 h-3" />
               </a>
-            ) : (
+            ) : contract.verificationMethod === "etherscan_verified" ? (
               <a
                 href={`https://etherscan.io/address/${contract.address}#code`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
               >
-                View Source Code
+                View on Etherscan
                 <ExternalLink className="w-3 h-3" />
               </a>
-            )}
+            ) : null}
             {contract.sourceCode && (
               <details className="mt-4">
                 <summary className="text-xs text-obsidian-400 cursor-pointer hover:text-obsidian-300">
