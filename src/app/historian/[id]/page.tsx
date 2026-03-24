@@ -19,6 +19,7 @@ interface HistorianProfile {
   joinedAt: string | null;
   totalEdits: number;
   uniqueContracts: number;
+  proofCount: number;
   trusted: boolean;
   role: string | null;
   recentEdits: Array<{
@@ -237,7 +238,7 @@ export default function HistorianProfilePage({
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className={`grid gap-4 ${profile.proofCount > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
               <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5 text-center">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <FileText className="w-5 h-5 text-ether-400" />
@@ -256,6 +257,17 @@ export default function HistorianProfilePage({
                 </p>
                 <p className="text-sm text-obsidian-400">Unique contracts</p>
               </div>
+              {profile.proofCount > 0 && (
+                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <ShieldCheck className="w-5 h-5 text-green-400" />
+                  </div>
+                  <p className="text-2xl font-bold text-obsidian-100">
+                    {profile.proofCount}
+                  </p>
+                  <p className="text-sm text-obsidian-400">Verified proofs</p>
+                </div>
+              )}
             </div>
 
             {/* Recent edits */}
@@ -276,7 +288,11 @@ export default function HistorianProfilePage({
                         href={`/contract/${edit.contractAddress}`}
                         className="flex items-center gap-4 p-4 rounded-xl border border-obsidian-800 bg-obsidian-900/30 hover:border-obsidian-700 transition-colors group"
                       >
-                        <div className="w-2 h-2 rounded-full bg-ether-400 shrink-0" />
+                        {edit.fieldsChanged.includes("verificationMethod") ? (
+                          <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-ether-400 shrink-0" />
+                        )}
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium text-obsidian-200 group-hover:text-ether-400 transition-colors">
