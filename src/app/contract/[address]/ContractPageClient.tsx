@@ -95,6 +95,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     codeSizeBytes: number | null;
   };
   // Siblings (same bytecode) state
+  const [verifiedBy, setVerifiedBy] = useState<{ name: string; editedAt: string } | null>(null);
+
   const [siblings, setSiblings] = useState<{
     hash: string | null;
     count: number;
@@ -152,6 +154,31 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
       cancelled = true;
     };
   }, []);
+
+  // Load verifiedBy attribution (who first set verificationMethod)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadVerifiedBy() {
+      try {
+        const res = await fetch(`/api/contract/${address}/edits`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const edits: Array<{ historianName: string; fieldsChanged: string[]; editedAt: string }> =
+          json?.data?.edits || [];
+        const proofEdit = edits.find(
+          (e) => Array.isArray(e.fieldsChanged) && e.fieldsChanged.includes("verificationMethod")
+        );
+        if (proofEdit) {
+          setVerifiedBy({ name: proofEdit.historianName, editedAt: proofEdit.editedAt });
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+    loadVerifiedBy();
+    return () => { cancelled = true; };
+  }, [address]);
 
   // Load siblings (same bytecode contracts)
   useEffect(() => {
@@ -556,6 +583,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               txCountsByYear={txCountsByYear ?? null}
               media={media ?? []}
               proxyInfo={proxyInfo}
+              verifiedBy={verifiedBy}
             />
           )}
           {activeTab === "history" && (
@@ -804,6 +832,7 @@ function OverviewTab({
   txCountsByYear,
   media,
   proxyInfo,
+  verifiedBy,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
@@ -811,6 +840,7 @@ function OverviewTab({
   txCountsByYear: ContractPageData["txCountsByYear"];
   media: ContractMedia[];
   proxyInfo?: ProxyInfo | null;
+  verifiedBy?: { name: string; editedAt: string } | null;
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -1265,6 +1295,11 @@ function OverviewTab({
                 <ExternalLink className="w-3 h-3" />
               </a>
             ) : null}
+            {verifiedBy && (
+              <p className="text-xs text-obsidian-500 mt-2">
+                Verified by <span className="text-obsidian-300">{verifiedBy.name}</span> · {formatRelativeTime(verifiedBy.editedAt)}
+              </p>
+            )}
             {contract.sourceCode && (
               <details className="mt-4">
                 <summary className="text-xs text-obsidian-400 cursor-pointer hover:text-obsidian-300">

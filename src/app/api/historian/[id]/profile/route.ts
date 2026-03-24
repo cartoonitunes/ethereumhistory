@@ -81,6 +81,19 @@ export async function GET(
 
     const uniqueContracts = uniqueContractsResult[0]?.count || 0;
 
+    // 3b. Get verified proof count (edits where fieldsChanged contains 'verificationMethod')
+    const proofCountResult = await database
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(schema.contractEdits)
+      .where(
+        and(
+          eq(schema.contractEdits.historianId, historianId),
+          sql`${schema.contractEdits.fieldsChanged} @> ARRAY['verificationMethod']::text[]`
+        )
+      );
+
+    const proofCount = proofCountResult[0]?.count || 0;
+
     // 4. Get recent edits with contract names (limit 50)
     const recentEditRows = await database
       .select({
@@ -120,6 +133,7 @@ export async function GET(
           joinedAt: historian.createdAt?.toISOString() || null,
           totalEdits,
           uniqueContracts,
+          proofCount,
           recentEdits,
           trusted: historian.trusted,
           role: historian.role || null,
