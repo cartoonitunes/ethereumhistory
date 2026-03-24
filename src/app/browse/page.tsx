@@ -158,7 +158,7 @@ function BrowseContent() {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
+            className="mb-6"
           >
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
               Browse archived contracts
@@ -167,6 +167,11 @@ function BrowseContent() {
               Find documented contracts for your research. Filter by era, type, or search in code.
             </p>
           </motion.div>
+
+          {/* Documentation Progress */}
+          <div className="mb-6">
+            <DocumentationProgress variant="browse" filterEra={era || undefined} filterYear={year || undefined} />
+          </div>
 
           {/* Search bar + Filters toggle */}
           {(() => {
@@ -344,11 +349,6 @@ function BrowseContent() {
               </motion.div>
             );
           })()}
-
-          {/* Documentation Progress */}
-          <div className="mb-8">
-            <DocumentationProgress variant="browse" filterEra={era || undefined} filterYear={year || undefined} />
-          </div>
 
           {/* Results */}
           {loading ? (
