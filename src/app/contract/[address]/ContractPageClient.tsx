@@ -76,8 +76,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
-  const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings", "read"] as const), []);
-  type TabId = "overview" | "history" | "code" | "siblings" | "read";
+  const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings", "interact"] as const), []);
+  type TabId = "overview" | "history" | "code" | "siblings"  | "interact";
   const [activeTab, setActiveTabRaw] = useState<TabId>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace("#", "") as TabId;
@@ -595,8 +595,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             )}
             {abiData && (
               <TabButton
-                active={activeTab === "read"}
-                onClick={() => { setActiveTab("read"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "read" } }); }}
+                active={activeTab === "interact"}
+                onClick={() => { setActiveTab("interact"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "interact" } }); }}
                 icon={<BookOpen className="w-4 h-4" />}
               >
                 Interact
@@ -650,7 +650,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
             <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
           )}
-          {activeTab === "read" && abiData && (
+          {activeTab === "interact" && abiData && (
             <ReadContractPanel address={address} abiData={abiData} currentBalanceWei={contract.currentBalanceWei} />
           )}
         </motion.div>
