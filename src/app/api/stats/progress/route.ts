@@ -46,7 +46,7 @@ export async function GET(): Promise<NextResponse> {
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contracts)
-        .where(isNotNull(schema.contracts.codeSizeBytes)),
+        ,
 
       // Overall documented: has description, is verified (any method), or is a verified sibling
       db
@@ -85,7 +85,7 @@ export async function GET(): Promise<NextResponse> {
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
-          .where(and(eq(schema.contracts.eraId, eraId), isNotNull(schema.contracts.codeSizeBytes))),
+          .where(and(eq(schema.contracts.eraId, eraId))),
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
@@ -116,10 +116,7 @@ export async function GET(): Promise<NextResponse> {
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
           .where(
-            and(
-              sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
-              isNotNull(schema.contracts.codeSizeBytes)
-            )
+            sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`
           ),
         db
           .select({ count: sql<number>`COUNT(*)::int` })
