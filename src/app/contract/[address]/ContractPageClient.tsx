@@ -26,7 +26,9 @@ import {
   Search,
   Loader2,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
+import { encodeFunctionData, decodeFunctionResult } from "viem";
 import { Header } from "@/components/Header";
 import { DonationBanner } from "@/components/DonationBanner";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -73,8 +75,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
-  const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings"] as const), []);
-  type TabId = "overview" | "history" | "code" | "siblings";
+  const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings", "read"] as const), []);
+  type TabId = "overview" | "history" | "code" | "siblings" | "read";
   const [activeTab, setActiveTabRaw] = useState<TabId>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace("#", "") as TabId;
@@ -109,6 +111,14 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     hasMore: boolean;
   } | null>(null);
   const [siblingsLoading, setSiblingsLoading] = useState(false);
+
+  // ABI availability check for "Read Contract" tab
+  type AbiData = {
+    abi: string;
+    source: "direct" | "sibling";
+    siblingAddress?: string;
+  } | null;
+  const [abiData, setAbiData] = useState<AbiData | undefined>(undefined); // undefined = loading
 
   const setActiveTab = useCallback((tab: TabId) => {
     setActiveTabRaw(tab);
@@ -195,6 +205,23 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
       }
     }
     loadSiblings();
+    return () => { cancelled = true; };
+  }, [address]);
+
+  // Load ABI availability
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAbi() {
+      try {
+        const res = await fetch(`/api/contract/${address}/abi`);
+        const json = await res.json();
+        if (cancelled) return;
+        setAbiData(json?.data ?? null);
+      } catch {
+        if (!cancelled) setAbiData(null);
+      }
+    }
+    loadAbi();
     return () => { cancelled = true; };
   }, [address]);
 
@@ -565,6 +592,15 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                 </span>
               </TabButton>
             )}
+            {abiData && (
+              <TabButton
+                active={activeTab === "read"}
+                onClick={() => { setActiveTab("read"); trackEvent({ eventType: "tab_click", pagePath: `/contract/${address}`, contractAddress: address, eventData: { tab: "read" } }); }}
+                icon={<BookOpen className="w-4 h-4" />}
+              >
+                Read Contract
+              </TabButton>
+            )}
           </div>
         </div>
 
@@ -613,6 +649,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
             <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
           )}
+          {activeTab === "read" && abiData && (
+            <ReadContractPanel address={address} abiData={abiData} />
+          )}
         </motion.div>
       </div>
     </div>
@@ -654,6 +693,373 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+// =============================================================================
+// Read Contract Panel
+// =============================================================================
+
+type AbiItem = {
+  name: string;
+  type: string;
+  stateMutability: string;
+  inputs: Array<{ name: string; type: string; internalType?: string }>;
+  outputs: Array<{ name: string; type: string; internalType?: string }>;
+};
+
+function formatReturnValue(value: unknown, type: string): string {
+  if (value === null || value === undefined) return "null";
+  if (type === "bool") return value ? "✓ true" : "✗ false";
+  if (type === "address") return String(value);
+  if (type.startsWith("uint") || type.startsWith("int")) {
+    try {
+      return BigInt(value as string | number | bigint).toLocaleString();
+    } catch {
+      return String(value);
+    }
+  }
+  if (type === "string") return `"${String(value)}"`;
+  if (type.startsWith("bytes")) return String(value);
+  return String(value);
+}
+
+function ReturnValueDisplay({ value, outputs }: { value: unknown; outputs: AbiItem["outputs"] }) {
+  if (outputs.length === 0) return <span className="text-obsidian-500 text-xs italic">void</span>;
+
+  if (outputs.length === 1) {
+    const type = outputs[0].type;
+    const name = outputs[0].name;
+    const formatted = formatReturnValue(value, type);
+    return (
+      <div className="text-sm font-mono break-all">
+        {name && <span className="text-obsidian-500 mr-1">{name}:</span>}
+        <span className="text-obsidian-500 mr-1">{type}:</span>
+        {type === "address" ? (
+          <span className="text-ether-400">{formatted}</span>
+        ) : type === "bool" ? (
+          <span className={(value as boolean) ? "text-green-400" : "text-red-400"}>{formatted}</span>
+        ) : (
+          <span className="text-obsidian-200">{formatted}</span>
+        )}
+      </div>
+    );
+  }
+
+  // Multiple outputs (tuple-like)
+  const values = Array.isArray(value) ? (value as unknown[]) : [value];
+  return (
+    <div className="space-y-1 text-sm font-mono">
+      {outputs.map((out, i) => {
+        const formatted = formatReturnValue(values[i], out.type);
+        return (
+          <div key={i} className="break-all">
+            {out.name && <span className="text-obsidian-500 mr-1">{out.name}:</span>}
+            <span className="text-obsidian-500 mr-1">{out.type}:</span>
+            <span className="text-obsidian-200">{formatted}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FunctionInput({
+  input,
+  value,
+  onChange,
+}: {
+  input: AbiItem["inputs"][0];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const type = input.type;
+
+  if (type === "bool") {
+    return (
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-1.5 text-sm text-obsidian-100 outline-none focus:border-ether-500/50"
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+
+  return (
+    <input
+      type={type.startsWith("uint") || type.startsWith("int") ? "text" : "text"}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={
+        type.startsWith("uint") || type.startsWith("int")
+          ? "0"
+          : type === "address"
+          ? "0x..."
+          : type.startsWith("bytes")
+          ? "0x..."
+          : type.endsWith("[]")
+          ? "comma-separated"
+          : ""
+      }
+      className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-1.5 text-sm text-obsidian-100 font-mono outline-none focus:border-ether-500/50"
+    />
+  );
+}
+
+function parseInputValue(value: string, type: string): unknown {
+  if (type === "bool") return value === "true";
+  if (type.startsWith("uint") || type.startsWith("int")) {
+    return BigInt(value.trim());
+  }
+  if (type.endsWith("[]")) {
+    const baseType = type.slice(0, -2);
+    return value.split(",").map((v) => parseInputValue(v.trim(), baseType));
+  }
+  return value.trim();
+}
+
+function FunctionRow({
+  fn,
+  address,
+  autoCall,
+}: {
+  fn: AbiItem;
+  address: string;
+  autoCall: boolean;
+}) {
+  const [inputValues, setInputValues] = useState<string[]>(
+    fn.inputs.map((i) => (i.type === "bool" ? "true" : ""))
+  );
+  const [result, setResult] = useState<unknown>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const calledRef = useRef(false);
+
+  const callFn = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setResult(undefined);
+    try {
+      // Parse inputs
+      const args = fn.inputs.map((inp, i) => parseInputValue(inputValues[i] ?? "", inp.type));
+
+      // Encode call data using viem
+      const data = encodeFunctionData({
+        abi: [fn] as Parameters<typeof encodeFunctionData>[0]["abi"],
+        functionName: fn.name,
+        args,
+      });
+
+      const rpcRes = await fetch("https://cloudflare-eth.com", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "eth_call",
+          params: [{ to: address, data }, "latest"],
+        }),
+      });
+
+      const rpcJson = await rpcRes.json();
+      if (rpcJson.error) {
+        setError(rpcJson.error.message || "RPC error");
+        return;
+      }
+
+      const rawResult = rpcJson.result as `0x${string}`;
+      if (!rawResult || rawResult === "0x") {
+        setResult(null);
+        return;
+      }
+
+      // Decode result using viem
+      const decoded = decodeFunctionResult({
+        abi: [fn] as Parameters<typeof decodeFunctionResult>[0]["abi"],
+        functionName: fn.name,
+        data: rawResult,
+      });
+
+      setResult(decoded);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, [fn, address, inputValues]);
+
+  // Auto-call zero-argument functions
+  useEffect(() => {
+    if (autoCall && fn.inputs.length === 0 && !calledRef.current) {
+      calledRef.current = true;
+      callFn();
+    }
+  }, [autoCall, fn.inputs.length, callFn]);
+
+  const hasInputs = fn.inputs.length > 0;
+
+  return (
+    <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-4">
+      <div className="font-mono text-sm text-obsidian-200 font-medium mb-2">
+        {fn.name}
+        <span className="text-obsidian-600 ml-1 font-normal text-xs">
+          ({fn.inputs.map((i) => `${i.type} ${i.name}`).join(", ")})
+          {fn.outputs.length > 0 && (
+            <> → {fn.outputs.map((o) => o.type).join(", ")}</>
+          )}
+        </span>
+      </div>
+
+      {hasInputs && (
+        <div className="space-y-2 mb-3">
+          {fn.inputs.map((inp, i) => (
+            <div key={i}>
+              <label className="block text-xs text-obsidian-500 mb-1">
+                {inp.name || `arg${i}`} <span className="text-obsidian-600">({inp.type})</span>
+              </label>
+              <FunctionInput
+                input={inp}
+                value={inputValues[i] ?? ""}
+                onChange={(v) => {
+                  const next = [...inputValues];
+                  next[i] = v;
+                  setInputValues(next);
+                }}
+              />
+            </div>
+          ))}
+          <button
+            onClick={callFn}
+            disabled={loading}
+            className="mt-1 px-4 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm text-white font-medium transition-colors flex items-center gap-2"
+          >
+            {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Call
+          </button>
+        </div>
+      )}
+
+      {/* Result area */}
+      <div className="mt-2 min-h-[24px]">
+        {loading && !hasInputs && (
+          <div className="flex items-center gap-2 text-obsidian-500 text-xs">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Calling…
+          </div>
+        )}
+        {error && (
+          <div className="text-xs text-red-400 bg-red-500/5 rounded-lg px-3 py-2 border border-red-500/20">
+            {error}
+          </div>
+        )}
+        {!loading && !error && result !== undefined && (
+          <div className="bg-obsidian-950 rounded-lg px-3 py-2 border border-obsidian-800">
+            <ReturnValueDisplay value={result} outputs={fn.outputs} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReadContractPanel({
+  address,
+  abiData,
+}: {
+  address: string;
+  abiData: {
+    abi: string;
+    source: "direct" | "sibling";
+    siblingAddress?: string;
+  };
+}) {
+  const [autoCallDone, setAutoCallDone] = useState(false);
+
+  // Trigger auto-call when panel is first shown
+  useEffect(() => {
+    setAutoCallDone(true);
+  }, []);
+
+  // Parse and filter ABI
+  const viewFunctions = useMemo<AbiItem[]>(() => {
+    try {
+      const parsed = JSON.parse(abiData.abi) as AbiItem[];
+      return parsed.filter(
+        (item) =>
+          item.type === "function" &&
+          (item.stateMutability === "view" || item.stateMutability === "pure")
+      );
+    } catch {
+      return [];
+    }
+  }, [abiData.abi]);
+
+  // Source badge
+  const sourceBadge = (() => {
+    if (abiData.source === "direct") {
+      // Distinguish etherscan_verified vs exact_bytecode_match based on context
+      // We return a green badge for direct
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/15 border border-green-500/30 text-green-400 text-xs font-medium">
+          <Check className="w-3 h-3" />
+          Verified ABI
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-obsidian-700 border border-obsidian-600 text-obsidian-300 text-xs font-medium">
+        ABI from verified sibling{" "}
+        {abiData.siblingAddress && (
+          <Link
+            href={`/contract/${abiData.siblingAddress}`}
+            className="text-ether-400 hover:text-ether-300 font-mono ml-1"
+          >
+            {abiData.siblingAddress.slice(0, 10)}…
+          </Link>
+        )}
+      </span>
+    );
+  })();
+
+  if (viewFunctions.length === 0) {
+    return (
+      <div className="text-center py-12 text-obsidian-500">
+        <BookOpen className="w-8 h-8 mx-auto mb-3 opacity-50" />
+        <p>No view or pure functions found in this contract's ABI.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {sourceBadge}
+          <span className="text-xs text-obsidian-500">
+            {viewFunctions.length} readable function{viewFunctions.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        <p className="text-xs text-obsidian-500 italic">
+          Read-only. These calls use the public Ethereum RPC and cost no gas.
+        </p>
+      </div>
+
+      {/* Function list */}
+      <div className="space-y-3">
+        {viewFunctions.map((fn, i) => (
+          <FunctionRow
+            key={`${fn.name}-${i}`}
+            fn={fn}
+            address={address}
+            autoCall={autoCallDone}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

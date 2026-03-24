@@ -2976,6 +2976,81 @@ export async function getSiblingCountsForAddresses(
   return result;
 }
 
+// =============================================================================
+// ABI Resolution
+// =============================================================================
+
+export type AbiResult = {
+  abi: string;
+  source: "direct" | "sibling";
+  siblingAddress?: string;
+} | null;
+
+/**
+ * Resolve the ABI for a given contract address.
+ * 1. If the contract itself is verified and has an ABI, return it directly.
+ * 2. If not, look for a sibling with the same runtime_bytecode_hash that is verified and has an ABI.
+ */
+export async function getContractAbiFromDb(address: string): Promise<AbiResult> {
+  const database = getDb();
+  const normalizedAddress = address.toLowerCase();
+
+  // Step 1: Check if the contract itself is directly verified with an ABI
+  const directRows = await database
+    .select({
+      abi: schema.contracts.abi,
+      verificationMethod: schema.contracts.verificationMethod,
+      runtimeBytecodeHash: schema.contracts.runtimeBytecodeHash,
+    })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, normalizedAddress))
+    .limit(1);
+
+  const direct = directRows[0];
+  if (!direct) return null;
+
+  const isDirectVerified =
+    direct.verificationMethod === "exact_bytecode_match" ||
+    direct.verificationMethod === "etherscan_verified";
+
+  if (isDirectVerified && direct.abi) {
+    return { abi: direct.abi, source: "direct" };
+  }
+
+  // Step 2: Look for a sibling with matching runtime_bytecode_hash that has an ABI
+  if (direct.runtimeBytecodeHash) {
+    const siblingRows = await database
+      .select({
+        address: schema.contracts.address,
+        abi: schema.contracts.abi,
+      })
+      .from(schema.contracts)
+      .where(
+        and(
+          eq(schema.contracts.runtimeBytecodeHash, direct.runtimeBytecodeHash),
+          ne(schema.contracts.address, normalizedAddress),
+          inArray(schema.contracts.verificationMethod, [
+            "exact_bytecode_match",
+            "etherscan_verified",
+          ]),
+          isNotNull(schema.contracts.abi)
+        )
+      )
+      .limit(1);
+
+    const sibling = siblingRows[0];
+    if (sibling?.abi) {
+      return {
+        abi: sibling.abi,
+        source: "sibling",
+        siblingAddress: sibling.address,
+      };
+    }
+  }
+
+  return null;
+}
+
 export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
   const database = getDb();
 
