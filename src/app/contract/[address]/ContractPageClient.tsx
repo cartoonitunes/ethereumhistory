@@ -651,7 +651,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
           )}
           {activeTab === "read" && abiData && (
-            <ReadContractPanel address={address} abiData={abiData} />
+            <ReadContractPanel address={address} abiData={abiData} currentBalanceWei={contract.currentBalanceWei} />
           )}
         </motion.div>
       </div>
@@ -732,6 +732,15 @@ const isWriteFunction = (item: AbiItem) =>
   (item.stateMutability === "nonpayable" ||
     item.stateMutability === "payable" ||
     (item.stateMutability == null && item.constant !== true));
+
+const RISKY_FUNCTION_KEYWORDS = ["withdraw", "send", "transfer", "payout", "claim", "collect", "drain"];
+
+const isRiskyFunction = (fn: AbiItem): boolean => {
+  const nameLower = fn.name.toLowerCase();
+  const nameMatch = RISKY_FUNCTION_KEYWORDS.some((kw) => nameLower.includes(kw));
+  const isPayableNoOutput = (fn.stateMutability === "payable" || fn.payable === true) && fn.outputs.length === 0;
+  return nameMatch || isPayableNoOutput;
+};
 
 function formatReturnValue(value: unknown, type: string): string {
   if (value === null || value === undefined) return "null";
@@ -1011,9 +1020,11 @@ function WriteFunctionRow({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gasEstimate, setGasEstimate] = useState<string | null>(null);
+  const [showPayableConfirm, setShowPayableConfirm] = useState(false);
 
   const isPayable = fn.stateMutability === "payable" || fn.payable === true;
   const isDisabled = !walletAddress;
+  const isRisky = isRiskyFunction(fn);
 
   const estimateGas = useCallback(async () => {
     if (!walletAddress) return;
@@ -1072,16 +1083,65 @@ function WriteFunctionRow({
     }
   }, [fn, address, walletAddress, inputValues, ethValue, isPayable]);
 
+  const handleSendClick = useCallback(() => {
+    // If payable and ETH value > 0, show confirmation modal first
+    if (isPayable && ethValue && parseFloat(ethValue) > 0) {
+      setShowPayableConfirm(true);
+      return;
+    }
+    sendTx();
+  }, [isPayable, ethValue, sendTx]);
+
   return (
     <div className={`rounded-xl border p-4 transition-opacity ${isDisabled ? "border-obsidian-800 bg-obsidian-900/20 opacity-60" : "border-obsidian-700 bg-obsidian-900/30"}`}>
-      <div className="font-mono text-sm text-obsidian-200 font-medium mb-2">
+      {/* Payable confirmation modal */}
+      {showPayableConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-amber-500/30 bg-obsidian-900 shadow-2xl p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-semibold text-obsidian-100 mb-1">
+                  You are about to send {ethValue} ETH
+                </h3>
+                <p className="text-sm text-obsidian-400 leading-relaxed">
+                  This transaction cannot be undone. ETH sent to a contract may be permanently locked if the contract has no withdrawal mechanism.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowPayableConfirm(false)}
+                className="px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-800 hover:bg-obsidian-700 text-sm text-obsidian-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowPayableConfirm(false);
+                  sendTx();
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm text-white font-medium transition-colors"
+              >
+                Confirm &amp; Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="font-mono text-sm text-obsidian-200 font-medium mb-2 flex flex-wrap items-center gap-1.5">
         {fn.name}
-        <span className="text-obsidian-600 ml-1 font-normal text-xs">
+        <span className="text-obsidian-600 font-normal text-xs">
           ({fn.inputs.map((i) => `${i.type} ${i.name}`).join(", ")})
         </span>
         {isPayable && (
-          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400">
+          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400">
             payable
+          </span>
+        )}
+        {isRisky && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400">
+            ⚠ May transfer ETH
           </span>
         )}
       </div>
@@ -1126,7 +1186,7 @@ function WriteFunctionRow({
       {!isDisabled && (
         <div className="flex items-center gap-3 mb-3">
           <button
-            onClick={sendTx}
+            onClick={handleSendClick}
             disabled={status === "simulating" || status === "sending" || status === "waiting"}
             className="px-4 py-1.5 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm text-white font-medium transition-colors flex items-center gap-2"
           >
@@ -1179,6 +1239,7 @@ function WriteFunctionRow({
 function ReadContractPanel({
   address,
   abiData,
+  currentBalanceWei,
 }: {
   address: string;
   abiData: {
@@ -1186,6 +1247,7 @@ function ReadContractPanel({
     source: "direct" | "sibling";
     siblingAddress?: string;
   };
+  currentBalanceWei?: string | null;
 }) {
   const [autoCallDone, setAutoCallDone] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -1345,24 +1407,85 @@ function ReadContractPanel({
       {/* Write Functions */}
       {writeFunctions.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-semibold text-obsidian-300">Write Functions</h3>
-            <span className="text-xs text-obsidian-600">{writeFunctions.length}</span>
+          {/* Balance display in header */}
+          {(() => {
+            const balanceEth = currentBalanceWei && currentBalanceWei !== "0"
+              ? (Number(BigInt(currentBalanceWei)) / 1e18)
+              : null;
+            const isSibling = abiData.source === "sibling";
+            return (
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="text-sm font-semibold text-obsidian-300">Write Functions</h3>
+                <span className="text-xs text-obsidian-600">{writeFunctions.length}</span>
+                {balanceEth !== null && balanceEth > 0 && (
+                  <span className="text-xs text-obsidian-400 font-mono">
+                    Contract holds:{" "}
+                    <span className="text-amber-400 font-semibold">
+                      {balanceEth.toLocaleString(undefined, { maximumFractionDigits: 4 })} ETH
+                    </span>
+                  </span>
+                )}
+                {isSibling && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-obsidian-700 border border-obsidian-600 text-obsidian-400">
+                    Sibling ABI
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Disclaimer — always visible */}
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300 leading-relaxed">
+              <span className="font-semibold">Write transactions are irreversible.</span>{" "}
+              These are historical contracts with no upgrade path. Always verify what a function does before sending.
+              Transactions are simulated before sending, but simulation cannot catch all failure modes.
+            </p>
           </div>
-          {!walletAddress && (
-            <div className="rounded-xl border border-obsidian-700 bg-obsidian-900/20 px-4 py-3 text-sm text-obsidian-400 flex items-center gap-3">
-              <AlertTriangle className="w-4 h-4 text-obsidian-500 flex-shrink-0" />
-              Connect your wallet above to send write transactions.
+
+          {/* Sibling gate: disable writes for sibling-sourced ABI */}
+          {abiData.source === "sibling" ? (
+            <div className="rounded-xl border border-obsidian-700 bg-obsidian-900/20 px-4 py-4 text-sm text-obsidian-400">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-obsidian-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-obsidian-300 mb-1">Write functions are disabled for sibling contracts.</p>
+                  <p className="text-xs text-obsidian-500 leading-relaxed">
+                    The ABI is inherited from a verified sibling — connect to{" "}
+                    {abiData.siblingAddress ? (
+                      <Link
+                        href={`/contract/${abiData.siblingAddress}`}
+                        className="text-ether-400 hover:text-ether-300 font-mono"
+                      >
+                        {abiData.siblingAddress.slice(0, 10)}…
+                      </Link>
+                    ) : (
+                      "the sibling contract"
+                    )}{" "}
+                    to interact directly.
+                  </p>
+                </div>
+              </div>
             </div>
+          ) : (
+            <>
+              {!walletAddress && (
+                <div className="rounded-xl border border-obsidian-700 bg-obsidian-900/20 px-4 py-3 text-sm text-obsidian-400 flex items-center gap-3">
+                  <AlertTriangle className="w-4 h-4 text-obsidian-500 flex-shrink-0" />
+                  Connect your wallet above to send write transactions.
+                </div>
+              )}
+              {writeFunctions.map((fn, i) => (
+                <WriteFunctionRow
+                  key={`write-${fn.name}-${i}`}
+                  fn={fn}
+                  address={address}
+                  walletAddress={walletAddress}
+                />
+              ))}
+            </>
           )}
-          {writeFunctions.map((fn, i) => (
-            <WriteFunctionRow
-              key={`write-${fn.name}-${i}`}
-              fn={fn}
-              address={address}
-              walletAddress={walletAddress}
-            />
-          ))}
         </div>
       )}
     </div>
