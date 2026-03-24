@@ -1118,7 +1118,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
         ...contract,
         // Inherit name only if this contract has no name of its own
         etherscanContractName: contract.etherscanContractName || canonicalName,
-        etherscanVerified: !!canonical.sourceCode,
+        etherscanVerified: canonical.verificationMethod === "etherscan_verified",
         verificationMethod: canonical.verificationMethod,
         sourceCode: canonical.sourceCode,
         compilerCommit: canonical.compilerCommit,

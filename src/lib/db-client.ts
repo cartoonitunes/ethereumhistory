@@ -106,7 +106,7 @@ function dbRowToContract(row: schema.Contract): AppContract {
     manualCategories: Array.isArray(row.manualCategories) ? (row.manualCategories as string[]) : null,
     ensName: row.ensName ?? null,
     deployerEnsName: row.deployerEnsName ?? null,
-    etherscanVerified: !!row.sourceCode,
+    etherscanVerified: row.verificationMethod === "etherscan_verified",
     etherscanContractName: row.etherscanContractName,
     sourceCode: row.sourceCode,
     abi: row.abi,
