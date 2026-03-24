@@ -42,10 +42,11 @@ export async function GET(): Promise<NextResponse> {
       totalEditsResult,
       ...rest
     ] = await Promise.all([
-      // Overall total
+      // Overall total (contracts with recorded bytecode only)
       db
         .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contracts),
+        .from(schema.contracts)
+        .where(isNotNull(schema.contracts.codeSizeBytes)),
 
       // Overall documented: has description, is verified (any method), or is a verified sibling
       db
@@ -79,12 +80,12 @@ export async function GET(): Promise<NextResponse> {
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contractEdits),
 
-      // Per-era: total then documented for each era
+      // Per-era: total then documented for each era (total = contracts with recorded bytecode)
       ...ERA_IDS.flatMap((eraId) => [
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
-          .where(eq(schema.contracts.eraId, eraId)),
+          .where(and(eq(schema.contracts.eraId, eraId), isNotNull(schema.contracts.codeSizeBytes))),
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
@@ -109,13 +110,16 @@ export async function GET(): Promise<NextResponse> {
           ),
       ]),
 
-      // Per-year: total then documented for each year
+      // Per-year: total then documented for each year (total = contracts with recorded bytecode)
       ...YEARS.flatMap((year) => [
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
           .where(
-            sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`
+            and(
+              sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
+              isNotNull(schema.contracts.codeSizeBytes)
+            )
           ),
         db
           .select({ count: sql<number>`COUNT(*)::int` })
