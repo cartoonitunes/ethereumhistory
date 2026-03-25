@@ -1732,13 +1732,14 @@ export async function getDocumentedContractsFromDb(params: {
     ne(schema.contracts.shortDescription, ""),
   ];
 
-  // Self-destructed contracts (code_size_bytes = 0) are opt-in; exclude by default.
-  // selfDestructed=true → show only self-destructed; false/null → exclude self-destructed.
+  // Self-destruct filter: based on has_selfdestruct opcode in bytecode.
+  // selfDestructed=true → show only contracts with selfdestruct opcode
+  // selfDestructed=false → show only contracts without selfdestruct opcode
+  // selfDestructed=null → no filter (show all)
   if (params.selfDestructed === true) {
-    conditions.push(sql`${schema.contracts.codeSizeBytes} = 0`);
-  } else {
-    // Default: exclude contracts where code_size_bytes = 0
-    conditions.push(sql`(${schema.contracts.codeSizeBytes} IS NULL OR ${schema.contracts.codeSizeBytes} != 0)`);
+    conditions.push(sql`${schema.contracts.hasSelfDestruct} = true`);
+  } else if (params.selfDestructed === false) {
+    conditions.push(sql`(${schema.contracts.hasSelfDestruct} = false OR ${schema.contracts.hasSelfDestruct} IS NULL)`);
   }
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
@@ -1848,11 +1849,11 @@ export async function getDocumentedContractsCountFromDb(params: {
     ne(schema.contracts.shortDescription, ""),
   ];
 
-  // Self-destructed contracts (code_size_bytes = 0) are opt-in; exclude by default.
+  // Self-destruct filter
   if (params.selfDestructed === true) {
-    conditions.push(sql`${schema.contracts.codeSizeBytes} = 0`);
-  } else {
-    conditions.push(sql`(${schema.contracts.codeSizeBytes} IS NULL OR ${schema.contracts.codeSizeBytes} != 0)`);
+    conditions.push(sql`${schema.contracts.hasSelfDestruct} = true`);
+  } else if (params.selfDestructed === false) {
+    conditions.push(sql`(${schema.contracts.hasSelfDestruct} = false OR ${schema.contracts.hasSelfDestruct} IS NULL)`);
   }
   if (params.eraId != null && params.eraId !== "") {
     conditions.push(eq(schema.contracts.eraId, params.eraId));
