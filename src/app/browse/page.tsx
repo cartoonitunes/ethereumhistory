@@ -265,11 +265,11 @@ function BrowseContent() {
                             </select>
                           </label>
                           <label className="flex flex-col gap-1.5 text-sm">
-                            <span className="text-obsidian-400">Self-destruct</span>
+                            <span className="text-obsidian-400">Status</span>
                             <select value={selfDestructed} onChange={(e) => setFilter("self_destructed", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
                               <option value="">All contracts</option>
-                              <option value="1">Has selfdestruct opcode</option>
-                              <option value="0">No selfdestruct opcode</option>
+                              <option value="0">Live only</option>
+                              <option value="1">Self-destructed only</option>
                             </select>
                           </label>
                           <label className="flex flex-col gap-1.5 text-sm">
