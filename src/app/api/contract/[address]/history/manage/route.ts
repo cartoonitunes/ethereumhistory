@@ -361,6 +361,10 @@ export async function POST(
       verificationPatch.verificationNotes = String(contractPatch.verificationNotes || "").trim() || null;
       fieldsChanged.push("verificationNotes");
     }
+    if (contractPatch.abi !== undefined) {
+      verificationPatch.abi = String(contractPatch.abi || "").trim() || null;
+      fieldsChanged.push("abi");
+    }
     if (Object.keys(verificationPatch).length > 0) {
       await updateContractEtherscanEnrichmentFromDb(normalized, verificationPatch as any);
     }
