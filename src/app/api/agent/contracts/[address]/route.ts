@@ -92,6 +92,8 @@ export async function GET(
     historical_significance: contract.historicalSignificance,
     historical_context: contract.historicalContext,
     verification_status: contract.verificationStatus,
+    verification_method: contract.verificationMethod,
+    verification_proof_url: contract.verificationProofUrl,
     links: links.map((l) => ({
       id: l.id,
       title: l.title,
