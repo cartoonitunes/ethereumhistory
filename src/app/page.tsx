@@ -15,8 +15,8 @@ import HomePageClient from "./HomePageClient";
 import type { FeaturedContract } from "@/types";
 import type { MarqueeContract, TopEditor, RecentEdit, ProgressStats } from "./HomePageClient";
 
-// Revalidate every 60 seconds — balances freshness and performance
-export const revalidate = 60;
+// Revalidate every 5 minutes — homepage data changes infrequently; reduces Fluid compute
+export const revalidate = 300;
 
 async function getContractOfTheDay(): Promise<FeaturedContract | null> {
   if (!isDatabaseConfigured()) return null;

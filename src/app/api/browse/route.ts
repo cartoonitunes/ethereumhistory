@@ -104,17 +104,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     tokenSymbol: c.tokenSymbol,
   }));
 
-  return NextResponse.json({
-    data: {
-      contracts: list,
-      total,
-      page,
-      limit,
-      totalPages,
+  return NextResponse.json(
+    {
+      data: {
+        contracts: list,
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+      meta: {
+        timestamp: new Date().toISOString(),
+        cached: !q, // code-search queries bypass cache
+      },
     },
-    meta: {
-      timestamp: new Date().toISOString(),
-      cached: !q, // code-search queries bypass cache
-    },
-  });
+    {
+      headers: {
+        // Skip CDN cache for code-search queries (highly varied); cache filter browsing for 2 min
+        ...(q ? {} : { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" }),
+      },
+    }
+  );
 }

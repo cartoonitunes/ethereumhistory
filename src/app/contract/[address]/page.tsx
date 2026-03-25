@@ -5,7 +5,8 @@ import { getContractPageData, getContractWithTokenMetadata, getContract } from "
 import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 
-export const dynamic = "force-dynamic";
+// Historical contracts are essentially immutable — cache for 10 min at the CDN/ISR layer
+export const revalidate = 600;
 
 interface Props {
   params: Promise<{ address: string }>;
