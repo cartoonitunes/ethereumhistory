@@ -3027,7 +3027,9 @@ export async function getContractAbiFromDb(address: string): Promise<AbiResult> 
 
   const isDirectVerified =
     direct.verificationMethod === "exact_bytecode_match" ||
-    direct.verificationMethod === "etherscan_verified";
+    direct.verificationMethod === "etherscan_verified" ||
+    direct.verificationMethod === "source_reconstructed" ||
+    direct.verificationMethod === "author_published";
 
   if (isDirectVerified && direct.abi) {
     return { abi: direct.abi, source: "direct" };
@@ -3048,6 +3050,8 @@ export async function getContractAbiFromDb(address: string): Promise<AbiResult> 
           inArray(schema.contracts.verificationMethod, [
             "exact_bytecode_match",
             "etherscan_verified",
+            "source_reconstructed",
+            "author_published",
           ]),
           isNotNull(schema.contracts.abi)
         )
