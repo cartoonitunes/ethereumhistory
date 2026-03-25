@@ -387,7 +387,9 @@ export async function POST(
       });
 
       // If this is the first documentation, send event to social media bot (async, don't block)
-      if (isFirstDoc) {
+      // Skip if caller passes skipBotNotification: true (agents that fire the bot manually)
+      const skipBot = body?.skipBotNotification === true;
+      if (isFirstDoc && !skipBot) {
         // Fetch the updated contract to get all fields
         const updatedContract = await getContractByAddress(normalized);
         if (updatedContract) {
