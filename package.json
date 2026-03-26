@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "npx tsx scripts/migrate.ts || echo 'Migration skipped (no DB connection)'",
+    "postbuild": "echo 'Migrations skipped in postbuild. Run npm run db:migrate manually when schema changes.'",
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
