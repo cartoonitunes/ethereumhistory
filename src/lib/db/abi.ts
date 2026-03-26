@@ -43,11 +43,13 @@ export async function getContractAbiFromDb(address: string): Promise<AbiResult> 
 
   const isDirectVerified =
     direct.verificationMethod === "exact_bytecode_match" ||
+    direct.verificationMethod === "near_exact_match" ||
     direct.verificationMethod === "etherscan_verified" ||
-    direct.verificationMethod === "source_reconstructed" ||
-    direct.verificationMethod === "author_published";
+    direct.verificationMethod === "author_published_source";
 
-  if (isDirectVerified && direct.abi) {
+  // Serve ABI if verified method is set, OR if contract simply has an ABI
+  // (covers Etherscan-verified contracts where verificationMethod may be null)
+  if ((isDirectVerified || direct.abi) && direct.abi) {
     return { abi: direct.abi, source: "direct" };
   }
 
@@ -65,9 +67,9 @@ export async function getContractAbiFromDb(address: string): Promise<AbiResult> 
           ne(schema.contracts.address, normalizedAddress),
           inArray(schema.contracts.verificationMethod, [
             "exact_bytecode_match",
+            "near_exact_match",
             "etherscan_verified",
-            "source_reconstructed",
-            "author_published",
+            "author_published_source",
           ]),
           isNotNull(schema.contracts.abi)
         )
