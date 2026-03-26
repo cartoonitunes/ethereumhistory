@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Disable source maps in production to reduce bundle size and deploy time
+  productionBrowserSourceMaps: false,
   experimental: {
     // Enable server actions for form handling
   },
