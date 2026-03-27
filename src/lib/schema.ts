@@ -37,6 +37,10 @@ export const contracts = pgTable(
     deploymentTimestamp: timestamp("deployment_timestamp"),
     deploymentTxIndex: integer("deployment_tx_index"),
     deploymentTraceIndex: integer("deployment_trace_index"),
+    deployStatus: text("deploy_status"),        // 'success' | 'failed'
+    deployGasLimit: integer("deploy_gas_limit"),
+    deployNonce: integer("deploy_nonce"),
+    creationBytecode: text("creation_bytecode"),
 
     // Decompiled code
     decompiledCode: text("decompiled_code"),
