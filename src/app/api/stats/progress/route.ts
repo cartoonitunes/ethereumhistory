@@ -66,6 +66,15 @@ export async function GET(): Promise<NextResponse> {
                        OR canonical_address IS NOT NULL
                   )
                 )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
               )`
         ),
 
@@ -105,6 +114,15 @@ export async function GET(): Promise<NextResponse> {
                        OR canonical_address IS NOT NULL
                   )
                 )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
               )`
             )
           ),
@@ -132,6 +150,15 @@ export async function GET(): Promise<NextResponse> {
                   deployed_bytecode_hash IS NOT NULL
                   AND deployed_bytecode_hash IN (
                     SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
                     WHERE (short_description IS NOT NULL AND short_description != '')
                        OR verification_method IS NOT NULL
                        OR canonical_address IS NOT NULL
@@ -182,7 +209,7 @@ export async function GET(): Promise<NextResponse> {
       {
         headers: {
           "Cache-Control":
-            "public, s-maxage=300, stale-while-revalidate=600",
+            "public, s-maxage=600, stale-while-revalidate=1200",
         },
       }
     );
