@@ -95,6 +95,15 @@ async function getProgressStats(): Promise<ProgressStats | null> {
                        OR canonical_address IS NOT NULL
                   )
                 )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
               )`),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.historians)
             .where(eq(schema.historians.active, true)),
@@ -116,6 +125,15 @@ async function getProgressStats(): Promise<ProgressStats | null> {
                        OR canonical_address IS NOT NULL
                   )
                 )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
               )`)),
           ]),
           ...YEARS.flatMap((year) => [
@@ -130,6 +148,15 @@ async function getProgressStats(): Promise<ProgressStats | null> {
                   deployed_bytecode_hash IS NOT NULL
                   AND deployed_bytecode_hash IN (
                     SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                    WHERE (short_description IS NOT NULL AND short_description != '')
+                       OR verification_method IS NOT NULL
+                       OR canonical_address IS NOT NULL
+                  )
+                )
+                OR (
+                  runtime_bytecode_hash IS NOT NULL
+                  AND runtime_bytecode_hash IN (
+                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
                     WHERE (short_description IS NOT NULL AND short_description != '')
                        OR verification_method IS NOT NULL
                        OR canonical_address IS NOT NULL
