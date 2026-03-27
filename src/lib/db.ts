@@ -69,6 +69,7 @@ import {
   getContractMediaFromDb,
   getDb,
 } from "./db-client";
+import { getDeploymentRank } from "./db/contracts";
 import { fetchTokenMetadataFromRpc } from "./token-metadata";
 import { fetchTxCountsByYearFromAlchemy, type TxCountsByYear } from "./tx-stats";
 import {
@@ -625,6 +626,9 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     verificationProofUrl: null,
     verificationNotes: null,
     verificationStatus: "bytecode_only",
+    deploymentTxIndex: null,
+    deploymentTraceIndex: null,
+    deploymentRank: null,
   };
 
   // Persist whenever DB is enabled (regardless of year).
@@ -1186,7 +1190,11 @@ export async function getContractPageData(address: string): Promise<ContractPage
       })
     : Promise.resolve([]);
 
-  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear, media] =
+  const deploymentRankPromise = isDatabaseEnabled()
+    ? getDeploymentRank(address).catch(() => null)
+    : Promise.resolve(null);
+
+  const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear, media, rankResult] =
     await Promise.all([
       getBytecodeAnalysis(address),
       getSimilarContracts(address),
@@ -1194,10 +1202,16 @@ export async function getContractPageData(address: string): Promise<ContractPage
       getFunctionSignatures(address),
       getOrFetchTxCountsByYear(contract.address),
       mediaPromise,
+      deploymentRankPromise,
     ]);
+
+  if (rankResult) {
+    contract = { ...contract, deploymentRank: rankResult.rank };
+  }
 
   return {
     contract,
+    deploymentRankResult: rankResult,
     bytecodeAnalysis,
     similarContracts,
     detectedPatterns,

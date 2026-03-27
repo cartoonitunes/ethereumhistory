@@ -473,8 +473,21 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             </div>
 
             {/* Badges */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               {contract.eraId && <EraCompact eraId={contract.eraId} showLabel />}
+              {contract.codeSizeBytes === 0 || contract.runtimeBytecode === '0x' || contract.runtimeBytecode === '' ? (
+                <span className="px-2 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20" title="The deployment transaction failed — no contract code was written to this address">
+                  Failed Deploy
+                </span>
+              ) : contract.deploymentRank != null && contract.deploymentRank <= 1_000_000 ? (
+                <span className="px-2 py-1 rounded-md text-xs font-medium font-mono bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                  {contract.deploymentRank <= 9_999
+                    ? `Contract #${contract.deploymentRank.toLocaleString()}`
+                    : contract.deploymentRank <= 999_999
+                    ? `Contract #${Math.floor(contract.deploymentRank / 1000)}K`
+                    : `Contract #${(contract.deploymentRank / 1_000_000).toFixed(1)}M`}
+                </span>
+              ) : null}
               <span
                 className={`px-2 py-1 rounded-md text-xs font-medium ${getVerificationStatusColor(
                   contract.verificationStatus

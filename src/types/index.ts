@@ -112,6 +112,9 @@ export interface Contract {
   deploymentTxHash: string | null;
   deploymentBlock: number | null;
   deploymentTimestamp: string | null;
+  deploymentTxIndex: number | null;
+  deploymentTraceIndex: number | null;
+  deploymentRank: number | null; // computed live, not stored
 
   // Decompiled code (from Panoramix/Palkeoramix or similar)
   decompiledCode: string | null;
@@ -323,6 +326,7 @@ export interface ContractPageData {
   archiveNotice?: string | null;
   media?: ContractMedia[];
   proxyInfo?: ProxyInfo | null;
+  deploymentRankResult?: { rank: number; ogSnippet: string | null; rankTag: string } | null;
 }
 
 // =============================================================================

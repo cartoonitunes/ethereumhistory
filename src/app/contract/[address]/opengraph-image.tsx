@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getContractWithTokenMetadata } from "@/lib/db";
+import { getDeploymentRank, buildOgSnippet } from "@/lib/db/contracts";
 import { isValidAddress } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -39,14 +40,19 @@ export default async function OGImage({ params }: { params: Promise<{ address: s
     );
   }
 
-  const contract = await getContractWithTokenMetadata(address.toLowerCase());
+  const [contract, rankResult] = await Promise.all([
+    getContractWithTokenMetadata(address.toLowerCase()),
+    getDeploymentRank(address.toLowerCase()).catch(() => null),
+  ]);
 
   const name =
     contract?.tokenName ||
     contract?.etherscanContractName ||
     `Contract ${address.slice(0, 10)}...`;
   const symbol = contract?.tokenSymbol || null;
-  const shortDesc = contract?.shortDescription || contract?.historicalSummary || null;
+  // Use rank snippet when available; fall back to short description
+  const rankSnippet = rankResult?.ogSnippet ?? null;
+  const shortDesc = rankSnippet || contract?.shortDescription || contract?.historicalSummary || null;
   const eraId = contract?.eraId || "frontier";
   const deploymentDate = contract?.deploymentTimestamp
     ? new Date(contract.deploymentTimestamp).toLocaleDateString("en-US", {
@@ -143,19 +149,36 @@ export default async function OGImage({ params }: { params: Promise<{ address: s
               <span style={{ fontSize: 18, color: "#52525b" }}>Deployed {deploymentDate}</span>
             )}
           </div>
-          {eraLabel && (
-            <span
-              style={{
-                fontSize: 16,
-                color: accentColor,
-                border: `1px solid ${accentColor}40`,
-                padding: "4px 12px",
-                borderRadius: 6,
-              }}
-            >
-              {eraLabel}
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {rankResult && (
+              <span
+                style={{
+                  fontSize: 16,
+                  color: "#a78bfa",
+                  background: "#a78bfa18",
+                  border: "1px solid #a78bfa40",
+                  padding: "4px 12px",
+                  borderRadius: 6,
+                  fontWeight: 600,
+                }}
+              >
+                {rankResult.rankTag}
+              </span>
+            )}
+            {eraLabel && (
+              <span
+                style={{
+                  fontSize: 16,
+                  color: accentColor,
+                  border: `1px solid ${accentColor}40`,
+                  padding: "4px 12px",
+                  borderRadius: 6,
+                }}
+              >
+                {eraLabel}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>,

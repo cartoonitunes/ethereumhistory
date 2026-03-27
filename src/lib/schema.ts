@@ -35,6 +35,8 @@ export const contracts = pgTable(
     deploymentTxHash: text("deployment_tx_hash"),
     deploymentBlock: integer("deployment_block"),
     deploymentTimestamp: timestamp("deployment_timestamp"),
+    deploymentTxIndex: integer("deployment_tx_index"),
+    deploymentTraceIndex: integer("deployment_trace_index"),
 
     // Decompiled code
     decompiledCode: text("decompiled_code"),
@@ -102,6 +104,11 @@ export const contracts = pgTable(
     // Indexes for common queries
     eraIdx: index("contracts_era_idx").on(table.eraId),
     deploymentIdx: index("contracts_deployment_idx").on(table.deploymentTimestamp),
+    deploymentOrderIdx: index("idx_contracts_deployment_order").on(
+      table.deploymentBlock,
+      table.deploymentTxIndex,
+      table.deploymentTraceIndex
+    ),
     typeIdx: index("contracts_type_idx").on(table.contractType),
     decompiledIdx: index("contracts_decompiled_idx").on(table.decompilationSuccess),
     featuredIdx: index("contracts_featured_idx").on(table.shortDescription),
