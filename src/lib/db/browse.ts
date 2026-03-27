@@ -375,7 +375,7 @@ export async function getDocumentedContractsFromDb(params: {
       .orderBy(sql`${txCountSubquery} DESC`)
       .limit(limit)
       .offset(offset);
-    return enrichContractsWithRank(results.map(dbRowToContract));
+    return results.map(dbRowToContract);
   }
 
   const orderBy = params.sort === "newest"
@@ -389,7 +389,7 @@ export async function getDocumentedContractsFromDb(params: {
     .limit(limit)
     .offset(offset);
 
-  return enrichContractsWithRank(results.map(dbRowToContract));
+  return results.map(dbRowToContract);
 }
 
 /**
@@ -598,7 +598,7 @@ export async function getUndocumentedContractsFromDb(params: {
       .orderBy(sql`${txCountSubquery} DESC`)
       .limit(limit)
       .offset(offset);
-    return enrichContractsWithRank(results.map(dbRowToContract));
+    return results.map(dbRowToContract);
   }
 
   const orderBy = params.sort === "newest"
@@ -612,7 +612,7 @@ export async function getUndocumentedContractsFromDb(params: {
     .limit(limit)
     .offset(offset);
 
-  return enrichContractsWithRank(results.map(dbRowToContract));
+  return results.map(dbRowToContract);
 }
 
 /**

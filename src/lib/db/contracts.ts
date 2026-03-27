@@ -263,7 +263,7 @@ export async function getContractsByEra(
     .limit(limit)
     .offset(offset);
 
-  return enrichContractsWithRank(results.map(dbRowToContract));
+  return results.map(dbRowToContract);
 }
 
 /**
@@ -433,7 +433,7 @@ export async function getRecentContractsFromDb(
     .orderBy(desc(schema.contracts.deploymentTimestamp))
     .limit(limit);
 
-  return enrichContractsWithRank(results.map(dbRowToContract));
+  return results.map(dbRowToContract);
 }
 
 /**
@@ -497,7 +497,7 @@ export async function getFeaturedContracts(
     .orderBy(asc(schema.contracts.deploymentTimestamp))
     .limit(limit);
 
-  return enrichContractsWithRank(results.map(dbRowToContract));
+  return results.map(dbRowToContract);
 }
 
 /**
