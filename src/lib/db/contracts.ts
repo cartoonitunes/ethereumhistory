@@ -647,40 +647,48 @@ export async function enrichContractsWithRank(
 ): Promise<AppContract[]> {
   if (contractList.length === 0) return contractList;
 
-  const database = getDb();
-  const addresses = contractList
-    .filter(c => c.deploymentTxIndex !== null && c.codeSizeBytes && c.codeSizeBytes > 0)
-    .map(c => c.address);
+  try {
+    const database = getDb();
+    const addresses = contractList
+      .filter(c => c.deploymentTxIndex !== null && c.codeSizeBytes && c.codeSizeBytes > 0)
+      .map(c => c.address);
 
-  if (addresses.length === 0) return contractList;
+    if (addresses.length === 0) return contractList;
 
-  // Single query: compute rank for each address via correlated COUNT subquery
-  const rows = await database.execute<{ address: string; rank: number }>(sql`
-    SELECT
-      c1.address,
-      (
-        SELECT COUNT(*)::int FROM contracts c2
-        WHERE
-          c2.code_size_bytes > 0
-          AND c2.runtime_bytecode IS NOT NULL
-          AND c2.runtime_bytecode NOT IN ('0x', '')
-          AND c2.deployment_tx_index IS NOT NULL
-          AND (
-            c2.deployment_block < c1.deployment_block
-            OR (c2.deployment_block = c1.deployment_block AND c2.deployment_tx_index < c1.deployment_tx_index)
-          )
-      ) + 1 AS rank
-    FROM contracts c1
-    WHERE c1.address = ANY(${addresses})
-  `);
+    // Single query: compute rank for each address via correlated COUNT subquery
+    // Use explicit cast to avoid Drizzle ANY() issues
+    const addrList = addresses.map(a => `'${a}'`).join(",");
+    const rows = await database.execute(sql.raw(`
+      SELECT
+        c1.address,
+        (
+          SELECT COUNT(*)::int FROM contracts c2
+          WHERE
+            c2.code_size_bytes > 0
+            AND c2.runtime_bytecode IS NOT NULL
+            AND c2.runtime_bytecode NOT IN ('0x', '')
+            AND c2.deployment_tx_index IS NOT NULL
+            AND (
+              c2.deployment_block < c1.deployment_block
+              OR (c2.deployment_block = c1.deployment_block AND c2.deployment_tx_index < c1.deployment_tx_index)
+            )
+        ) + 1 AS rank
+      FROM contracts c1
+      WHERE c1.address IN (${addrList})
+    `));
 
-  const rankMap = new Map<string, number>();
-  for (const row of rows as any[]) {
-    rankMap.set(row.address, Number(row.rank));
+    const rankMap = new Map<string, number>();
+    for (const row of rows as any[]) {
+      rankMap.set(row.address, Number(row.rank));
+    }
+
+    return contractList.map(c => {
+      const rank = rankMap.get(c.address) ?? null;
+      return rank !== null ? { ...c, deploymentRank: rank } : c;
+    });
+  } catch (err) {
+    // Rank enrichment is non-critical — never crash a listing page over it
+    console.warn("[enrichContractsWithRank] failed, returning without ranks:", err);
+    return contractList;
   }
-
-  return contractList.map(c => {
-    const rank = rankMap.get(c.address) ?? null;
-    return rank !== null ? { ...c, deploymentRank: rank } : c;
-  });
 }
