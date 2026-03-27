@@ -92,6 +92,9 @@ export async function GET(): Promise<NextResponse> {
         shortDescription: schema.contracts.shortDescription,
         eraId: schema.contracts.eraId,
         deploymentTimestamp: schema.contracts.deploymentTimestamp,
+        deploymentBlock: schema.contracts.deploymentBlock,
+        deploymentTxIndex: schema.contracts.deploymentTxIndex,
+        codeSizeBytes: schema.contracts.codeSizeBytes,
         canonicalAddress: schema.contracts.canonicalAddress,
         verificationMethod: schema.contracts.verificationMethod,
         sourceCode: sql<boolean>`(${schema.contracts.sourceCode} IS NOT NULL AND length(${schema.contracts.sourceCode}) > 0)`,
@@ -152,14 +155,46 @@ export async function GET(): Promise<NextResponse> {
         verificationMethod,
         isVerified: !!verificationMethod || hasSource,
         isSibling: !!row.canonicalAddress,
+        _block: row.deploymentBlock,
+        _txIndex: row.deploymentTxIndex,
+        _codeSize: row.codeSizeBytes,
       };
     });
+
+    // Batch-compute deployment ranks for this-week contracts
+    const rankableAddresses = contracts
+      .filter(c => c._txIndex !== null && c._codeSize && c._codeSize > 0)
+      .map(c => c.address);
+
+    const rankMap = new Map<string, number>();
+    if (rankableAddresses.length > 0) {
+      const rankRows = await db.execute<{ address: string; rank: number }>(sql`
+        SELECT c1.address,
+          (SELECT COUNT(*)::int FROM contracts c2
+           WHERE c2.code_size_bytes > 0
+             AND c2.runtime_bytecode IS NOT NULL
+             AND c2.runtime_bytecode NOT IN ('0x', '')
+             AND c2.deployment_tx_index IS NOT NULL
+             AND (c2.deployment_block < c1.deployment_block
+               OR (c2.deployment_block = c1.deployment_block AND c2.deployment_tx_index < c1.deployment_tx_index))
+          ) + 1 AS rank
+        FROM contracts c1
+        WHERE c1.address = ANY(${rankableAddresses})
+      `);
+      for (const r of rankRows as any[]) rankMap.set(r.address, Number(r.rank));
+    }
+
+    const contractsWithRank = contracts.map(({ _block, _txIndex, _codeSize, ...c }) => ({
+      ...c,
+      deploymentRank: rankMap.get(c.address) ?? null,
+      codeSizeBytes: _codeSize ?? null,
+    }));
 
     return NextResponse.json(
       {
         data: {
           weekRange,
-          contracts,
+          contracts: contractsWithRank,
         },
       },
       {

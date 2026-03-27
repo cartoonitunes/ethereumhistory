@@ -263,7 +263,7 @@ export async function getContractsByEra(
     .limit(limit)
     .offset(offset);
 
-  return results.map(dbRowToContract);
+  return enrichContractsWithRank(results.map(dbRowToContract));
 }
 
 /**
@@ -433,7 +433,7 @@ export async function getRecentContractsFromDb(
     .orderBy(desc(schema.contracts.deploymentTimestamp))
     .limit(limit);
 
-  return results.map(dbRowToContract);
+  return enrichContractsWithRank(results.map(dbRowToContract));
 }
 
 /**
@@ -497,7 +497,7 @@ export async function getFeaturedContracts(
     .orderBy(asc(schema.contracts.deploymentTimestamp))
     .limit(limit);
 
-  return results.map(dbRowToContract);
+  return enrichContractsWithRank(results.map(dbRowToContract));
 }
 
 /**
@@ -631,4 +631,56 @@ export function formatRankTag(rank: number): string {
   if (rank <= 9_999)   return `#${rank.toLocaleString()}`;
   if (rank <= 999_999) return `#${Math.floor(rank / 1000)}K`;
   return `#${(rank / 1_000_000).toFixed(1)}M`;
+}
+
+// =============================================================================
+// Batch Rank Enrichment (for list pages — one query for all cards)
+// =============================================================================
+
+/**
+ * Enrich an array of contracts with their deployment ranks in a single query.
+ * Uses a correlated subquery — one DB round-trip regardless of list size.
+ * Contracts without tx_index or with empty bytecode get rank = null.
+ */
+export async function enrichContractsWithRank(
+  contractList: AppContract[]
+): Promise<AppContract[]> {
+  if (contractList.length === 0) return contractList;
+
+  const database = getDb();
+  const addresses = contractList
+    .filter(c => c.deploymentTxIndex !== null && c.codeSizeBytes && c.codeSizeBytes > 0)
+    .map(c => c.address);
+
+  if (addresses.length === 0) return contractList;
+
+  // Single query: compute rank for each address via correlated COUNT subquery
+  const rows = await database.execute<{ address: string; rank: number }>(sql`
+    SELECT
+      c1.address,
+      (
+        SELECT COUNT(*)::int FROM contracts c2
+        WHERE
+          c2.code_size_bytes > 0
+          AND c2.runtime_bytecode IS NOT NULL
+          AND c2.runtime_bytecode NOT IN ('0x', '')
+          AND c2.deployment_tx_index IS NOT NULL
+          AND (
+            c2.deployment_block < c1.deployment_block
+            OR (c2.deployment_block = c1.deployment_block AND c2.deployment_tx_index < c1.deployment_tx_index)
+          )
+      ) + 1 AS rank
+    FROM contracts c1
+    WHERE c1.address = ANY(${addresses})
+  `);
+
+  const rankMap = new Map<string, number>();
+  for (const row of rows as any[]) {
+    rankMap.set(row.address, Number(row.rank));
+  }
+
+  return contractList.map(c => {
+    const rank = rankMap.get(c.address) ?? null;
+    return rank !== null ? { ...c, deploymentRank: rank } : c;
+  });
 }

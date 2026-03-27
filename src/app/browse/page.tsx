@@ -23,9 +23,11 @@ interface BrowseContract {
   contractType: string | null;
   tokenName: string | null;
   tokenSymbol: string | null;
+  deploymentRank?: number | null;
+  codeSizeBytes?: number | null;
 }
 
-function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: string | null } {
+function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: string | null; deploymentRank: number | null; codeSizeBytes: number | null } {
   return {
     address: c.address,
     name: c.name,
@@ -34,6 +36,8 @@ function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: 
     deploymentDate: c.deploymentDate || "Unknown",
     significance: "",
     tokenName: c.tokenName,
+    deploymentRank: c.deploymentRank ?? null,
+    codeSizeBytes: c.codeSizeBytes ?? null,
   };
 }
 

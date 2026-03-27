@@ -159,6 +159,15 @@ export default function ThisWeekPage() {
                               {contract.deploymentYear}
                             </span>
                           )}
+                          {(contract as any).codeSizeBytes === 0 ? (
+                            <span className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-medium">Failed</span>
+                          ) : (contract as any).deploymentRank != null && (contract as any).deploymentRank <= 1_000_000 ? (
+                            <span className="text-xs px-2 py-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono font-medium">
+                              {(contract as any).deploymentRank <= 9_999
+                                ? `#${(contract as any).deploymentRank.toLocaleString()}`
+                                : `#${Math.floor((contract as any).deploymentRank / 1000)}K`}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
