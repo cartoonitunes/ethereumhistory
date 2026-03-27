@@ -2,7 +2,7 @@
  * Contract queries — core CRUD and update helpers.
  */
 
-import { eq, and, asc, desc, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, isNotNull, ne, sql, lt, or } from "drizzle-orm";
 import * as schema from "../schema";
 import crypto from "crypto";
 import type {
@@ -33,6 +33,9 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     deploymentTxHash: row.deploymentTxHash,
     deploymentBlock: row.deploymentBlock,
     deploymentTimestamp: row.deploymentTimestamp?.toISOString() || null,
+    deploymentTxIndex: row.deploymentTxIndex ?? null,
+    deploymentTraceIndex: row.deploymentTraceIndex ?? null,
+    deploymentRank: null, // populated separately via getDeploymentRank()
     decompiledCode: row.decompiledCode,
     decompilationSuccess: row.decompilationSuccess || false,
     currentBalanceWei: null,
@@ -537,4 +540,95 @@ export async function insertContractIfMissing(
 ): Promise<void> {
   const database = getDb();
   await database.insert(schema.contracts).values(contract).onConflictDoNothing();
+}
+
+// =============================================================================
+// Deployment Rank
+// =============================================================================
+
+export interface DeploymentRankResult {
+  rank: number;
+  ogSnippet: string | null;
+  rankTag: string;
+}
+
+/**
+ * Compute global deployment rank for a contract.
+ * Never stored — always derived from (block, tx_index, trace_index).
+ * Fixing one contract's ordering data auto-corrects all downstream ranks.
+ *
+ * Returns null if ordering columns haven't been backfilled yet.
+ */
+export async function getDeploymentRank(
+  address: string
+): Promise<DeploymentRankResult | null> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      deploymentBlock: schema.contracts.deploymentBlock,
+      deploymentTxIndex: schema.contracts.deploymentTxIndex,
+      deploymentTraceIndex: schema.contracts.deploymentTraceIndex,
+    })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, address.toLowerCase()))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.deploymentTxIndex === null || row.deploymentBlock === null) return null;
+
+  // Don't rank failed/empty deploys
+  const codeCheck = await database
+    .select({ codeSizeBytes: schema.contracts.codeSizeBytes, runtimeBytecode: schema.contracts.runtimeBytecode })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, address.toLowerCase()))
+    .limit(1);
+  const code = codeCheck[0];
+  if (!code || !code.codeSizeBytes || code.codeSizeBytes === 0) return null;
+  if (!code.runtimeBytecode || code.runtimeBytecode === '0x' || code.runtimeBytecode === '') return null;
+
+  const { deploymentBlock: block, deploymentTxIndex: txIdx, deploymentTraceIndex: traceIdx } = row;
+
+  // Count contracts strictly deployed before this one.
+  // Exclude empty-code entries (failed deploys or bad seed data) from rank count.
+  const result = await database.execute<{ count: string }>(sql`
+    SELECT COUNT(*)::int AS count FROM contracts
+    WHERE
+      code_size_bytes > 0
+      AND runtime_bytecode IS NOT NULL
+      AND runtime_bytecode NOT IN ('0x', '')
+      AND (
+        deployment_block < ${block}
+        OR (deployment_block = ${block} AND deployment_tx_index < ${txIdx})
+        OR (
+          deployment_block = ${block}
+          AND deployment_tx_index = ${txIdx}
+          AND deployment_trace_index IS NOT NULL
+          AND deployment_trace_index < ${traceIdx ?? 0}
+        )
+      )
+  `);
+
+  const rank = Number((result as any)[0]?.count ?? 0) + 1;
+
+  return {
+    rank,
+    ogSnippet: buildOgSnippet(rank),
+    rankTag: formatRankTag(rank),
+  };
+}
+
+/** Tiered social copy — returns null above 1M (too noisy for OG) */
+export function buildOgSnippet(rank: number): string | null {
+  if (rank <= 1_000)     return `One of Ethereum's first 1,000 contracts ever deployed`;
+  if (rank <= 10_000)    return `One of Ethereum's first 10,000 contracts`;
+  if (rank <= 100_000)   return `Deployed when Ethereum had fewer than 100,000 contracts`;
+  if (rank <= 1_000_000) return `One of Ethereum's first million contracts`;
+  return null;
+}
+
+/** Short form for card tag chips */
+export function formatRankTag(rank: number): string {
+  if (rank <= 9_999)   return `#${rank.toLocaleString()}`;
+  if (rank <= 999_999) return `#${Math.floor(rank / 1000)}K`;
+  return `#${(rank / 1_000_000).toFixed(1)}M`;
 }

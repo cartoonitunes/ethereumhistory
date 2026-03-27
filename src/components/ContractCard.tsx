@@ -177,12 +177,23 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
             )}
           </div>
 
-          {/* Era badge */}
-          {eraId && (
-            <div>
-              <EraCompact eraId={eraId} />
-            </div>
-          )}
+          {/* Era badge + rank tag */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {eraId && <EraCompact eraId={eraId} />}
+            {fullContract.codeSizeBytes === 0 || fullContract.runtimeBytecode === '0x' || fullContract.runtimeBytecode === '' ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-medium">
+                Failed Deploy
+              </span>
+            ) : fullContract.deploymentRank != null && fullContract.deploymentRank <= 1_000_000 ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono font-medium">
+                {fullContract.deploymentRank <= 9_999
+                  ? `#${fullContract.deploymentRank.toLocaleString()}`
+                  : fullContract.deploymentRank <= 999_999
+                  ? `#${Math.floor(fullContract.deploymentRank / 1000)}K`
+                  : `#${(fullContract.deploymentRank / 1_000_000).toFixed(1)}M`}
+              </span>
+            ) : null}
+          </div>
         </div>
       </motion.div>
     </Link>
