@@ -12,7 +12,7 @@ import type {
 } from "@/types";
 import { FRONTIER_REGISTRAR_NAMES, type RegistrarType } from "../frontier-registrar";
 import { getDb } from "./connection";
-import { dbRowToContract } from "./contracts";
+import { dbRowToContract, enrichContractsWithRank } from "./contracts";
 
 // =============================================================================
 // Agent Discovery
@@ -375,7 +375,7 @@ export async function getDocumentedContractsFromDb(params: {
       .orderBy(sql`${txCountSubquery} DESC`)
       .limit(limit)
       .offset(offset);
-    return results.map(dbRowToContract);
+    return enrichContractsWithRank(results.map(dbRowToContract));
   }
 
   const orderBy = params.sort === "newest"
@@ -389,7 +389,7 @@ export async function getDocumentedContractsFromDb(params: {
     .limit(limit)
     .offset(offset);
 
-  return results.map(dbRowToContract);
+  return enrichContractsWithRank(results.map(dbRowToContract));
 }
 
 /**
@@ -598,7 +598,7 @@ export async function getUndocumentedContractsFromDb(params: {
       .orderBy(sql`${txCountSubquery} DESC`)
       .limit(limit)
       .offset(offset);
-    return results.map(dbRowToContract);
+    return enrichContractsWithRank(results.map(dbRowToContract));
   }
 
   const orderBy = params.sort === "newest"
@@ -612,7 +612,7 @@ export async function getUndocumentedContractsFromDb(params: {
     .limit(limit)
     .offset(offset);
 
-  return results.map(dbRowToContract);
+  return enrichContractsWithRank(results.map(dbRowToContract));
 }
 
 /**

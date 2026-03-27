@@ -102,6 +102,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     contractType: c.heuristics?.contractType ?? null,
     tokenName: c.tokenName,
     tokenSymbol: c.tokenSymbol,
+    deploymentRank: c.deploymentRank ?? null,
+    codeSizeBytes: c.codeSizeBytes ?? null,
   }));
 
   return NextResponse.json(

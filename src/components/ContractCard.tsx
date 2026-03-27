@@ -75,8 +75,19 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
           whileHover={{ y: -4 }}
           className="group relative p-6 rounded-xl bg-obsidian-900/50 border border-obsidian-800 hover:border-ether-500/30 transition-all duration-300 card-hover h-full"
         >
-          {/* Era indicator */}
-          <div className="absolute top-4 right-4">
+          {/* Era indicator + rank */}
+          <div className="absolute top-4 right-4 flex items-center gap-1.5">
+            {(featured as any).codeSizeBytes === 0 ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-medium">Failed</span>
+            ) : (featured as any).deploymentRank != null && (featured as any).deploymentRank <= 1_000_000 ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono font-medium">
+                {(featured as any).deploymentRank <= 9_999
+                  ? `#${(featured as any).deploymentRank.toLocaleString()}`
+                  : (featured as any).deploymentRank <= 999_999
+                  ? `#${Math.floor((featured as any).deploymentRank / 1000)}K`
+                  : `#${((featured as any).deploymentRank / 1_000_000).toFixed(1)}M`}
+              </span>
+            ) : null}
             <EraCompact eraId={featured.eraId} />
           </div>
 
