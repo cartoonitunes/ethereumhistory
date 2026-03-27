@@ -385,6 +385,41 @@ export default function ApiDocsPage() {
               />
             </Section>
 
+            {/* ABI API */}
+            <Section title="ABI API" id="abi">
+              <p className="text-obsidian-300 mb-4">
+                Returns the machine-readable ABI for a contract. Covers verified contracts and their bytecode siblings.
+              </p>
+              <p className="text-obsidian-400 text-sm mb-4">
+                Ethereum History is the only ABI reference for contracts predating Solidity v0.4.7 (December 2016) — the era that Sourcify and other metadata-based services don&apos;t support. For contracts from this early period, ABIs are derived directly from compiler archaeology and bytecode verification.
+              </p>
+              <Endpoint method="GET" path="/api/contract/{address}/abi" />
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Example request</h4>
+              <CodeBlock
+                code={`GET ${BASE_URL}/api/contract/0x283f1161c2d4ff33fd5d5d4486fc0675732cea11/abi`}
+                id="abi-req"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+              />
+              <h4 className="text-obsidian-200 font-semibold mt-4 mb-2">Response (200)</h4>
+              <CodeBlock
+                code={`{
+  "data": {
+    "abi": "[{\\"type\\":\\"function\\",\\"name\\":\\"sendCoin\\",\\"inputs\\":[...],\\"outputs\\":[...]}]",
+    "source": "direct",        // "direct" | "sibling"
+    "siblingAddress": null     // address of verified sibling if source="sibling"
+  },
+  "error": null
+}
+
+// Returns { "data": null, "error": null } when no ABI is available`}
+                id="abi-res"
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+                language="json"
+              />
+            </Section>
+
             {/* Verification Methods */}
             <Section title="Verification Methods" id="verification-methods">
               <p className="text-obsidian-300 mb-4">
