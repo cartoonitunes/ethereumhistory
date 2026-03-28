@@ -35,7 +35,7 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     deploymentTimestamp: row.deploymentTimestamp?.toISOString() || null,
     deploymentTxIndex: row.deploymentTxIndex ?? null,
     deploymentTraceIndex: row.deploymentTraceIndex ?? null,
-    deploymentRank: null, // populated separately via getDeploymentRank()
+    deploymentRank: row.deploymentRank ?? null, // stored, refreshed on backfill
     deployStatus: row.deployStatus ?? null,
     decompiledCode: row.decompiledCode,
     decompilationSuccess: row.decompilationSuccess || false,
@@ -563,53 +563,16 @@ export interface DeploymentRankResult {
 export async function getDeploymentRank(
   address: string
 ): Promise<DeploymentRankResult | null> {
+  // Read from the precomputed column — fast single index lookup, no correlated subquery
   const database = getDb();
   const rows = await database
-    .select({
-      deploymentBlock: schema.contracts.deploymentBlock,
-      deploymentTxIndex: schema.contracts.deploymentTxIndex,
-      deploymentTraceIndex: schema.contracts.deploymentTraceIndex,
-    })
+    .select({ deploymentRank: schema.contracts.deploymentRank })
     .from(schema.contracts)
     .where(eq(schema.contracts.address, address.toLowerCase()))
     .limit(1);
 
-  const row = rows[0];
-  if (!row || row.deploymentTxIndex === null || row.deploymentBlock === null) return null;
-
-  // Don't rank failed/empty deploys
-  const codeCheck = await database
-    .select({ codeSizeBytes: schema.contracts.codeSizeBytes, runtimeBytecode: schema.contracts.runtimeBytecode })
-    .from(schema.contracts)
-    .where(eq(schema.contracts.address, address.toLowerCase()))
-    .limit(1);
-  const code = codeCheck[0];
-  if (!code || !code.codeSizeBytes || code.codeSizeBytes === 0) return null;
-  if (!code.runtimeBytecode || code.runtimeBytecode === '0x' || code.runtimeBytecode === '') return null;
-
-  const { deploymentBlock: block, deploymentTxIndex: txIdx, deploymentTraceIndex: traceIdx } = row;
-
-  // Count contracts strictly deployed before this one.
-  // Exclude empty-code entries (failed deploys or bad seed data) from rank count.
-  const result = await database.execute<{ count: string }>(sql`
-    SELECT COUNT(*)::int AS count FROM contracts
-    WHERE
-      code_size_bytes > 0
-      AND runtime_bytecode IS NOT NULL
-      AND runtime_bytecode NOT IN ('0x', '')
-      AND (
-        deployment_block < ${block}
-        OR (deployment_block = ${block} AND deployment_tx_index < ${txIdx})
-        OR (
-          deployment_block = ${block}
-          AND deployment_tx_index = ${txIdx}
-          AND deployment_trace_index IS NOT NULL
-          AND deployment_trace_index < ${traceIdx ?? 0}
-        )
-      )
-  `);
-
-  const rank = Number((result as any)[0]?.count ?? 0) + 1;
+  const rank = rows[0]?.deploymentRank ?? null;
+  if (rank === null) return null;
 
   return {
     rank,

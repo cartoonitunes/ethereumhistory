@@ -173,6 +173,13 @@ export default function HomePageClient({
                         {contractOfTheDay.name}
                       </h3>
                       {contractOfTheDay.eraId && <EraCompact eraId={contractOfTheDay.eraId} />}
+                      {contractOfTheDay.deploymentRank != null && contractOfTheDay.deploymentRank <= 1_000_000 && (
+                        <span className="px-2 py-0.5 rounded-md text-xs font-medium font-mono bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                          {contractOfTheDay.deploymentRank <= 9_999
+                            ? `Contract #${contractOfTheDay.deploymentRank.toLocaleString()}`
+                            : `Contract #${Math.floor(contractOfTheDay.deploymentRank / 1000)}K`}
+                        </span>
+                      )}
                     </div>
                     {contractOfTheDay.shortDescription && (
                       <p className="text-obsidian-300 mb-3 line-clamp-2">{contractOfTheDay.shortDescription}</p>
