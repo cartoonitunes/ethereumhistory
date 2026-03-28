@@ -145,6 +145,7 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
   deploymentTxIndex: null,
   deploymentTraceIndex: null,
   deploymentRank: null,
+  deployStatus: null,
   },
   "0xd1ceeeefa68a6af0a5f6046132d986066c7f9426": {
     address: "0xd1ceeeefa68a6af0a5f6046132d986066c7f9426",
@@ -202,6 +203,7 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
   deploymentTxIndex: null,
   deploymentTraceIndex: null,
   deploymentRank: null,
+  deployStatus: null,
   },
   "0xc0ee9db1a9e07ca63e4ff0d5fb6f86bf68d47b89": {
     address: "0xc0ee9db1a9e07ca63e4ff0d5fb6f86bf68d47b89",
@@ -259,6 +261,7 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
   deploymentTxIndex: null,
   deploymentTraceIndex: null,
   deploymentRank: null,
+  deployStatus: null,
   },
   "0x48c80f1f4d53d5951e5d5438b54cba84f29f32a5": {
     address: "0x48c80f1f4d53d5951e5d5438b54cba84f29f32a5",
@@ -316,6 +319,7 @@ export const MOCK_CONTRACTS: Record<string, Contract> = {
   deploymentTxIndex: null,
   deploymentTraceIndex: null,
   deploymentRank: null,
+  deployStatus: null,
   },
   "0xafc3cebb24f2b7a7e84052c90d0f6cd8cadd7591": {
     address: "0xafc3cebb24f2b7a7e84052c90d0f6cd8cadd7591",
@@ -389,6 +393,7 @@ def kill() payable:
   deploymentTxIndex: null,
   deploymentTraceIndex: null,
   deploymentRank: null,
+  deployStatus: null,
   },
 };
 

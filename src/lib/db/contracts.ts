@@ -36,6 +36,7 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     deploymentTxIndex: row.deploymentTxIndex ?? null,
     deploymentTraceIndex: row.deploymentTraceIndex ?? null,
     deploymentRank: null, // populated separately via getDeploymentRank()
+    deployStatus: row.deployStatus ?? null,
     decompiledCode: row.decompiledCode,
     decompilationSuccess: row.decompilationSuccess || false,
     currentBalanceWei: null,

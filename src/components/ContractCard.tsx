@@ -77,7 +77,9 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
         >
           {/* Era indicator + rank */}
           <div className="absolute top-4 right-4 flex items-center gap-1.5">
-            {(featured as any).codeSizeBytes === 0 ? (
+            {(featured as any).codeSizeBytes === 0 && (featured as any).deployStatus === 'success' ? (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">Zombie</span>
+            ) : (featured as any).codeSizeBytes === 0 ? (
               <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-medium">Failed</span>
             ) : (featured as any).deploymentRank != null && (featured as any).deploymentRank <= 1_000_000 ? (
               <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 font-mono font-medium">
@@ -191,7 +193,11 @@ export function ContractCard({ contract, variant = "default" }: ContractCardProp
           {/* Era badge + rank tag */}
           <div className="flex items-center gap-2 flex-wrap">
             {eraId && <EraCompact eraId={eraId} />}
-            {fullContract.codeSizeBytes === 0 || fullContract.runtimeBytecode === '0x' || fullContract.runtimeBytecode === '' ? (
+            {(fullContract.codeSizeBytes === 0 || fullContract.runtimeBytecode === '0x' || fullContract.runtimeBytecode === '') && fullContract.deployStatus === 'success' ? (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium" title="Zombie Account — Yellow Paper §7.1">
+                Zombie Account
+              </span>
+            ) : fullContract.codeSizeBytes === 0 || fullContract.runtimeBytecode === '0x' || fullContract.runtimeBytecode === '' ? (
               <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-medium">
                 Failed Deploy
               </span>

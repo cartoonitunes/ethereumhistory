@@ -629,6 +629,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     deploymentTxIndex: null,
     deploymentTraceIndex: null,
     deploymentRank: null,
+  deployStatus: null,
   };
 
   // Persist whenever DB is enabled (regardless of year).

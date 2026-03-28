@@ -128,6 +128,7 @@ function transformContract(raw: RawContract): Contract {
     deploymentTxIndex: null,
     deploymentTraceIndex: null,
     deploymentRank: null,
+  deployStatus: null,
   };
 }
 
