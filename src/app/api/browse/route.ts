@@ -104,6 +104,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     tokenSymbol: c.tokenSymbol,
     deploymentRank: c.deploymentRank ?? null,
     codeSizeBytes: c.codeSizeBytes ?? null,
+    deployStatus: c.deployStatus ?? null,
   }));
 
   return NextResponse.json(

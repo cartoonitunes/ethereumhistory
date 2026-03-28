@@ -25,9 +25,10 @@ interface BrowseContract {
   tokenSymbol: string | null;
   deploymentRank?: number | null;
   codeSizeBytes?: number | null;
+  deployStatus?: string | null;
 }
 
-function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: string | null; deploymentRank: number | null; codeSizeBytes: number | null } {
+function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: string | null; deploymentRank: number | null; codeSizeBytes: number | null; deployStatus: string | null } {
   return {
     address: c.address,
     name: c.name,
@@ -38,6 +39,7 @@ function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: 
     tokenName: c.tokenName,
     deploymentRank: c.deploymentRank ?? null,
     codeSizeBytes: c.codeSizeBytes ?? null,
+    deployStatus: c.deployStatus ?? null,
   };
 }
 
