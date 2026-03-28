@@ -161,27 +161,18 @@ export async function GET(): Promise<NextResponse> {
       };
     });
 
-    // Batch-compute deployment ranks for this-week contracts
-    const rankableAddresses = contracts
-      .filter(c => c._txIndex !== null && c._codeSize && c._codeSize > 0)
-      .map(c => c.address);
-
+    // Read precomputed deployment ranks from the stored column (migration 057)
+    const allAddresses = contracts.map(c => c.address);
     const rankMap = new Map<string, number>();
-    if (rankableAddresses.length > 0) {
-      const rankRows = await db.execute<{ address: string; rank: number }>(sql`
-        SELECT c1.address,
-          (SELECT COUNT(*)::int FROM contracts c2
-           WHERE c2.code_size_bytes > 0
-             AND c2.runtime_bytecode IS NOT NULL
-             AND c2.runtime_bytecode NOT IN ('0x', '')
-             AND c2.deployment_tx_index IS NOT NULL
-             AND (c2.deployment_block < c1.deployment_block
-               OR (c2.deployment_block = c1.deployment_block AND c2.deployment_tx_index < c1.deployment_tx_index))
-          ) + 1 AS rank
-        FROM contracts c1
-        WHERE c1.address = ANY(${rankableAddresses})
+    if (allAddresses.length > 0) {
+      const rankRows = await db.execute(sql`
+        SELECT address, deployment_rank FROM contracts
+        WHERE address = ANY(ARRAY[${sql.join(allAddresses.map(a => sql`${a}`), sql`, `)}]::text[])
+          AND deployment_rank IS NOT NULL
       `);
-      for (const r of rankRows as any[]) rankMap.set(r.address, Number(r.rank));
+      for (const r of rankRows as any[]) {
+        if (r.deployment_rank != null) rankMap.set(r.address, Number(r.deployment_rank));
+      }
     }
 
     const contractsWithRank = contracts.map(({ _block, _txIndex, _codeSize, ...c }) => ({
@@ -204,9 +195,10 @@ export async function GET(): Promise<NextResponse> {
       }
     );
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error("[this-week] Error:", error);
     return NextResponse.json(
-      { data: null, error: "Failed to fetch this week in Ethereum history" },
+      { data: null, error: "Failed to fetch this week in Ethereum history", detail: message },
       { status: 500 }
     );
   }
