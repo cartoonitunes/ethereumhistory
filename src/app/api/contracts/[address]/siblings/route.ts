@@ -75,6 +75,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         verificationMethod: contracts.verificationMethod,
         canonicalAddress: contracts.canonicalAddress,
         codeSizeBytes: contracts.codeSizeBytes,
+        deployStatus: contracts.deployStatus,
+        isSelfDestructed: contracts.isSelfDestructed,
         shortDescription: contracts.shortDescription,
       })
       .from(contracts)
@@ -88,9 +90,24 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .limit(PAGE_SIZE)
       .offset(offset);
 
+    // Lifecycle counts (including the current contract)
+    const [lifecycle] = await db
+      .select({
+        liveCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.codeSizeBytes} > 0 AND (${contracts.isSelfDestructed} IS NULL OR ${contracts.isSelfDestructed} = false))::int`,
+        selfDestructedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.isSelfDestructed} = true OR (${contracts.codeSizeBytes} = 0 AND ${contracts.deployStatus} = 'success'))::int`,
+        failedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.deployStatus} = 'failed')::int`,
+      })
+      .from(contracts)
+      .where(eq(hashColumn, hash));
+
     return NextResponse.json({
       hash,
       count: totalCount,
+      lifecycle: {
+        live: lifecycle?.liveCount ?? 0,
+        selfDestructed: lifecycle?.selfDestructedCount ?? 0,
+        failed: lifecycle?.failedCount ?? 0,
+      },
       // Group-level info: if ANY sibling is verified, all share the same bytecode
       groupVerified: (groupInfo?.verifiedCount ?? 0) > 0,
       groupVerificationMethod: groupInfo?.groupVerificationMethod ?? null,
