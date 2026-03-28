@@ -1464,6 +1464,16 @@ function ReadContractPanel({
         </div>
       )}
 
+      {/* Self-destructed notice */}
+      {isSelfDestructed && (
+        <div className="rounded-xl border border-obsidian-600 bg-obsidian-800/50 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-obsidian-400 flex-shrink-0 mt-0.5" />
+          <span className="text-sm text-obsidian-400">
+            This contract has self-destructed. Read calls will return empty data and write transactions will not execute any code, though they will still be recorded on-chain.
+          </span>
+        </div>
+      )}
+
       {/* Read Functions */}
       {readFunctions.length > 0 && (
         <div className="space-y-3">
@@ -1699,6 +1709,25 @@ function SiblingBytecodeTab({
           <p className="mt-1 text-xs text-obsidian-600 font-mono">
             bytecode md5: {siblings.hash}
           </p>
+        )}
+        {(siblings as any).lifecycle && (
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            {(siblings as any).lifecycle.live > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs text-green-400">
+                🟢 {(siblings as any).lifecycle.live} live
+              </span>
+            )}
+            {(siblings as any).lifecycle.selfDestructed > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-obsidian-600 bg-obsidian-800 px-2 py-0.5 text-xs text-obsidian-400">
+                💀 {(siblings as any).lifecycle.selfDestructed} self-destructed
+              </span>
+            )}
+            {(siblings as any).lifecycle.failed > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
+                ❌ {(siblings as any).lifecycle.failed} failed
+              </span>
+            )}
+          </div>
         )}
         {siblings.groupVerified && (
           <div className="mt-2 flex items-center gap-2">
