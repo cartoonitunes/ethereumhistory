@@ -1565,6 +1565,80 @@ function ReadContractPanel({
           )}
         </div>
       )}
+      {/* I Was Here */}
+      <IWasHereButton address={address} />
+    </div>
+  );
+}
+
+function IWasHereButton({ address }: { address: string }) {
+  const [status, setStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const sendIWasHere = async () => {
+    if (!window.ethereum) {
+      setErrorMsg("No Ethereum wallet detected. Please install MetaMask.");
+      setStatus("error");
+      return;
+    }
+    setStatus("pending");
+    setErrorMsg(null);
+    try {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
+      if (!accounts.length) throw new Error("No account connected");
+      const hash = await window.ethereum.request({
+        method: "eth_sendTransaction",
+        params: [{
+          from: accounts[0],
+          to: address,
+          data: "0x39ae461f", // iWasHere()
+          value: "0x0",
+        }],
+      }) as string;
+      setTxHash(hash);
+      setStatus("success");
+    } catch (err: unknown) {
+      const e = err as { message?: string; code?: number };
+      if (e.code === 4001) {
+        setStatus("idle");
+      } else {
+        setErrorMsg(e.message || "Transaction failed");
+        setStatus("error");
+      }
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-4 border-t border-obsidian-800">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={sendIWasHere}
+          disabled={status === "pending"}
+          className="px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 border border-obsidian-600 text-obsidian-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {status === "pending" ? "Confirming..." : "✍️ I was here"}
+        </button>
+        <span className="text-xs text-obsidian-600">
+          Leave a permanent on-chain mark on this historic contract
+        </span>
+      </div>
+      {status === "success" && txHash && (
+        <p className="mt-2 text-xs text-green-400">
+          You left your mark!{" "}
+          <a
+            href={`https://etherscan.io/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-green-300"
+          >
+            View transaction
+          </a>
+        </p>
+      )}
+      {status === "error" && errorMsg && (
+        <p className="mt-2 text-xs text-red-400">{errorMsg}</p>
+      )}
     </div>
   );
 }
