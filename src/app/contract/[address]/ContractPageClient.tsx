@@ -668,7 +668,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
           )}
           {activeTab === "interact" && abiData && (
-            <ReadContractPanel address={address} abiData={abiData} currentBalanceWei={contract.currentBalanceWei} />
+            <ReadContractPanel address={address} abiData={abiData} currentBalanceWei={contract.currentBalanceWei} isSelfDestructed={contract.codeSizeBytes === 0 && contract.deployStatus === 'success'} />
           )}
         </motion.div>
       </div>
@@ -932,10 +932,12 @@ function FunctionRow({
   fn,
   address,
   autoCall,
+  isSelfDestructed,
 }: {
   fn: AbiItem;
   address: string;
   autoCall: boolean;
+  isSelfDestructed?: boolean;
 }) {
   const [inputValues, setInputValues] = useState<string[]>(
     fn.inputs.map((i) => (i.type === "bool" ? "true" : ""))
@@ -979,7 +981,9 @@ function FunctionRow({
 
       const rawResult = rpcJson.result as `0x${string}`;
       if (!rawResult || rawResult === "0x") {
-        setError("No response from contract — it may have self-destructed or not yet been deployed.");
+        setError(isSelfDestructed
+          ? "This contract has self-destructed and is no longer executable on-chain."
+          : "No data returned by this function.");
         return;
       }
 
@@ -1313,6 +1317,7 @@ function ReadContractPanel({
   address,
   abiData,
   currentBalanceWei,
+  isSelfDestructed,
 }: {
   address: string;
   abiData: {
@@ -1321,6 +1326,7 @@ function ReadContractPanel({
     siblingAddress?: string;
   };
   currentBalanceWei?: string | null;
+  isSelfDestructed?: boolean;
 }) {
   const [autoCallDone, setAutoCallDone] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -1472,6 +1478,7 @@ function ReadContractPanel({
               fn={fn}
               address={address}
               autoCall={autoCallDone}
+              isSelfDestructed={isSelfDestructed}
             />
           ))}
         </div>
