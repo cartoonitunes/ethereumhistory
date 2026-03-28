@@ -14,8 +14,8 @@ export const metadata: Metadata = {
     "The people who keep Ethereum History running. View our donors and support the free, open archive.",
 };
 
-// Revalidate every 5 minutes
-export const revalidate = 300;
+// Revalidate every 30 minutes — external API calls are expensive
+export const revalidate = 1800;
 
 const HISTORY_TOKEN = "0xD67A9266D0ae84839f62197713B2D2A9f3a62Ba3";
 const HISTORY_FEE_SENDER = "0xdbd69cb44135a96474de7d28a6e4cbfc2aacef7f";
@@ -32,7 +32,7 @@ async function fetchHistoryFeesEth(): Promise<number> {
       const url =
         `https://api.etherscan.io/v2/api?chainid=1&module=account&action=txlistinternal` +
         `&address=${DONATION_WALLET_ADDRESS}&sort=asc&apikey=${ETHERSCAN_API_KEY}`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { next: { revalidate: 1800 } });
       const json = await res.json();
       if (json.status !== "1" || !Array.isArray(json.result)) return 0;
       const total = json.result
@@ -70,7 +70,7 @@ async function fetchHistoryFeesEth(): Promise<number> {
           }],
           id: 1,
         }),
-        cache: "no-store",
+        next: { revalidate: 1800 },
       });
       const json = await res.json();
       const transfers: Record<string, unknown>[] = json?.result?.transfers ?? [];
@@ -100,7 +100,7 @@ async function fetchWmeatFeesEth(): Promise<number> {
         `https://api.etherscan.io/v2/api?chainid=1&module=logs&action=getLogs` +
         `&address=${WMEAT_POOL_MAINNET}&topic0=${SWAP_TOPIC}&fromBlock=0&toBlock=latest` +
         `&apikey=${ETHERSCAN_API_KEY}`;
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { next: { revalidate: 1800 } });
       const json = await res.json();
       const logs: Record<string, string>[] = Array.isArray(json.result) ? json.result : [];
       let totalWeth = BigInt(0);
