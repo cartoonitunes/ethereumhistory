@@ -326,14 +326,26 @@ export async function POST(
 
     const verificationPatch: Record<string, string | null> = {};
     if (contractPatch.sourceCode !== undefined) {
-      const isBeingVerified = contractPatch.verificationStatus === "verified";
-      const alreadyVerified = currentContract?.verificationStatus === "verified";
-      if (!isBeingVerified && !alreadyVerified) {
+      // Source code is a verification field — block non-admins from overwriting on already-verified contracts
+      if (alreadyVerified && !isAdmin) {
         return NextResponse.json(
           {
             data: null,
             error:
-              "Source code can only be added to verified contracts. Set verification_status to 'verified' in the same request, or verify the contract first.",
+              "This contract already has a verified proof. Source code is locked and can only be updated by an admin.",
+          },
+          { status: 403 }
+        );
+      }
+      // For unverified contracts, source code may only be added alongside a verification submission
+      const isBeingVerified = !!contractPatch.verificationMethod;
+      const isAlreadyVerified = !!currentContract?.verificationMethod;
+      if (!isBeingVerified && !isAlreadyVerified) {
+        return NextResponse.json(
+          {
+            data: null,
+            error:
+              "Source code can only be added to verified contracts. Submit a verificationMethod in the same request, or verify the contract first.",
           },
           { status: 403 }
         );
