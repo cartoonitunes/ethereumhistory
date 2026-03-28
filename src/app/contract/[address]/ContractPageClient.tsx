@@ -979,7 +979,7 @@ function FunctionRow({
 
       const rawResult = rpcJson.result as `0x${string}`;
       if (!rawResult || rawResult === "0x") {
-        setResult(null);
+        setError("No response from contract — it may have self-destructed or not yet been deployed.");
         return;
       }
 
