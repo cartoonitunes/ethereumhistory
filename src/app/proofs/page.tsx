@@ -1,11 +1,18 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ShieldCheck, ExternalLink } from "lucide-react";
-import { isDatabaseConfigured, getVerifiedContractsFromDb, getSiblingCountsForAddresses } from "@/lib/db-client";
+import { ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  isDatabaseConfigured,
+  getVerifiedContractsFromDb,
+  getVerifiedContractsCountFromDb,
+  getSiblingCountsForAddresses,
+} from "@/lib/db-client";
 import { formatAddress, formatDate } from "@/lib/utils";
 import { Header } from "@/components/Header";
 
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 20;
 
 const LANGUAGE_LABELS: Record<string, string> = {
   serpent: "Serpent",
@@ -85,7 +92,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function VerifiedPage() {
+export default async function VerifiedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   if (!isDatabaseConfigured()) {
     return (
       <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
@@ -97,8 +108,17 @@ export default async function VerifiedPage() {
     );
   }
 
-  const contracts = await getVerifiedContractsFromDb();
+  const resolvedParams = await searchParams;
+  const page = Math.max(1, parseInt(resolvedParams.page || "1", 10));
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const [contracts, total] = await Promise.all([
+    getVerifiedContractsFromDb({ limit: PAGE_SIZE, offset }),
+    getVerifiedContractsCountFromDb(),
+  ]);
   const siblingCounts = await getSiblingCountsForAddresses(contracts.map((c) => c.address));
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
@@ -206,9 +226,46 @@ export default async function VerifiedPage() {
           </div>
         )}
 
-        {/* Count */}
-        <div className="mt-8 text-center text-sm text-obsidian-500">
-          {contracts.length} {contracts.length === 1 ? "proof" : "proofs"}
+        {/* Pagination + count */}
+        <div className="mt-8 flex flex-col items-center gap-4">
+          <p className="text-sm text-obsidian-500">
+            {total} {total === 1 ? "proof" : "proofs"} — page {page} of {totalPages}
+          </p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              {page > 1 ? (
+                <Link
+                  href={`/proofs?page=${page - 1}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 text-sm transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-obsidian-800 bg-obsidian-950 text-obsidian-700 text-sm cursor-not-allowed">
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </span>
+              )}
+              <span className="text-sm text-obsidian-500 px-2">
+                {page} / {totalPages}
+              </span>
+              {page < totalPages ? (
+                <Link
+                  href={`/proofs?page=${page + 1}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 text-sm transition-colors"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-obsidian-800 bg-obsidian-950 text-obsidian-700 text-sm cursor-not-allowed">
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

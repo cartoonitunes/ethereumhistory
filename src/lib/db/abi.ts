@@ -93,42 +93,49 @@ export async function getContractAbiFromDb(address: string): Promise<AbiResult> 
 // Verified Contracts
 // =============================================================================
 
-export async function getVerifiedContractsFromDb(): Promise<AppContract[]> {
+export async function getVerifiedContractsCountFromDb(): Promise<number> {
   const database = getDb();
+  const rows = await database.execute(sql`
+    SELECT COUNT(*) AS total FROM (
+      SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address
+      FROM contracts
+      WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'near_exact_match', 'source_reconstructed', 'author_published')
+        AND source_code IS NOT NULL
+    ) sub
+  `);
+  const row = (rows as unknown as Array<{ total: string | number }>)[0];
+  return row ? parseInt(String(row.total), 10) : 0;
+}
 
-  // Step 1: Get one address per unique bytecode (earliest documented+verified deployment).
-  // Using a subquery so we can join back through Drizzle ORM and get properly typed rows.
+export async function getVerifiedContractsFromDb(opts?: { limit?: number; offset?: number }): Promise<AppContract[]> {
+  const database = getDb();
+  const limit = opts?.limit ?? 9999;
+  const offset = opts?.offset ?? 0;
+
+  // Get one address per unique bytecode (earliest verified deployment), paginated.
   const dedupedAddresses = await database.execute(sql`
-    SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address
-    FROM contracts
-    WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'near_exact_match', 'source_reconstructed', 'author_published')
-      AND source_code IS NOT NULL
-    ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
+    SELECT address FROM (
+      SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address, deployment_timestamp
+      FROM contracts
+      WHERE verification_method IN ('exact_bytecode_match', 'author_published_source', 'near_exact_match', 'source_reconstructed', 'author_published')
+        AND source_code IS NOT NULL
+      ORDER BY COALESCE(runtime_bytecode_hash, address), deployment_timestamp ASC NULLS LAST
+    ) sub
+    ORDER BY deployment_timestamp ASC NULLS LAST
+    LIMIT ${limit} OFFSET ${offset}
   `);
 
   const addresses = (dedupedAddresses as unknown as Array<{ address: string }>).map((r) => r.address);
   if (addresses.length === 0) return [];
 
-  // Step 2: Fetch full rows via Drizzle ORM so dbRowToContract gets properly mapped fields.
+  // Fetch full rows via Drizzle ORM so dbRowToContract gets properly mapped fields.
   const results = await database
     .select()
     .from(schema.contracts)
     .where(inArray(schema.contracts.address, addresses))
     .orderBy(asc(schema.contracts.deploymentTimestamp));
 
-  // Deduplicate by bytecode hash: only keep the earliest deploy per bytecode family.
-  // Results are already ordered by deploymentTimestamp asc, so the first seen is the earliest.
-  // Contracts without a hash are always included individually.
-  const seenHashes = new Set<string>();
-  const deduped = results.filter((row) => {
-    const hash = row.runtimeBytecodeHash;
-    if (!hash) return true;
-    if (seenHashes.has(hash)) return false;
-    seenHashes.add(hash);
-    return true;
-  });
-
-  return deduped.map(dbRowToContract);
+  return results.map(dbRowToContract);
 }
 
 // =============================================================================
