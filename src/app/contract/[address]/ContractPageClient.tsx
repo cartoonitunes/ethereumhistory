@@ -1620,35 +1620,52 @@ function IWasHereButton({ address }: { address: string }) {
   };
 
   return (
-    <div className="mt-6 pt-4 border-t border-obsidian-800">
+    <div className="mt-6 space-y-3">
       <div className="flex items-center gap-3">
-        <button
-          onClick={sendIWasHere}
-          disabled={status === "pending"}
-          className="px-4 py-2 rounded-lg bg-obsidian-800 hover:bg-obsidian-700 border border-obsidian-600 text-obsidian-300 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {status === "pending" ? "Confirming..." : "✍️ I was here"}
-        </button>
-        <span className="text-xs text-obsidian-600">
-          Leave a permanent on-chain mark on this historic contract
+        <h3 className="text-sm font-semibold text-obsidian-300">Leave Your Mark</h3>
+        <span className="text-xs px-1.5 py-0.5 rounded bg-ether-500/15 border border-ether-500/30 text-ether-400">
+          EthereumHistory
         </span>
       </div>
-      {status === "success" && txHash && (
-        <p className="mt-2 text-xs text-green-400">
-          You left your mark!{" "}
-          <a
-            href={`https://etherscan.io/tx/${txHash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-green-300"
-          >
-            View transaction
-          </a>
+      <div className="rounded-xl border border-ether-500/20 bg-obsidian-900/30 p-4">
+        <div className="font-mono text-sm text-obsidian-200 font-medium mb-2 flex flex-wrap items-center gap-1.5">
+          iWasHere()
+          <span className="text-xs px-1.5 py-0.5 rounded bg-obsidian-700 border border-obsidian-600 text-obsidian-400">
+            write
+          </span>
+          <span className="text-xs text-obsidian-500 font-sans font-normal">
+            0x39ae461f
+          </span>
+        </div>
+        <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
+          Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent and no contract code is executed. Costs only the base gas fee (~21,000 gas).
         </p>
-      )}
-      {status === "error" && errorMsg && (
-        <p className="mt-2 text-xs text-red-400">{errorMsg}</p>
-      )}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={sendIWasHere}
+            disabled={status === "pending"}
+            className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-white font-medium transition-colors"
+          >
+            {status === "pending" ? "Confirming..." : "✍️ Leave your mark"}
+          </button>
+          {status === "success" && txHash && (
+            <span className="text-xs text-green-400">
+              Marked!{" "}
+              <a
+                href={`https://etherscan.io/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-green-300"
+              >
+                View on Etherscan
+              </a>
+            </span>
+          )}
+          {status === "error" && errorMsg && (
+            <span className="text-xs text-red-400">{errorMsg}</span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
