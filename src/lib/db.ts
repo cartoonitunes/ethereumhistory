@@ -1295,6 +1295,9 @@ export async function getFeaturedContracts(): Promise<FeaturedContract[]> {
         eraId: c.eraId || "frontier",
         deploymentDate: c.deploymentTimestamp?.split("T")[0] || "Unknown",
         significance: c.historicalSignificance || "Historical early Ethereum contract.",
+        deploymentRank: c.deploymentRank ?? null,
+        codeSizeBytes: c.codeSizeBytes ?? null,
+        deployStatus: c.deployStatus ?? null,
       }));
     } catch (error) {
       console.error("[db] Database featured query failed, falling back:", error);

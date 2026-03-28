@@ -37,6 +37,9 @@ async function getContractOfTheDay(): Promise<FeaturedContract | null> {
             eraId: schema.contracts.eraId,
             deploymentTimestamp: schema.contracts.deploymentTimestamp,
             historicalSignificance: schema.contracts.historicalSignificance,
+            deploymentRank: schema.contracts.deploymentRank,
+            codeSizeBytes: schema.contracts.codeSizeBytes,
+            deployStatus: schema.contracts.deployStatus,
           })
           .from(schema.contracts)
           .where(and(isNotNull(schema.contracts.shortDescription), ne(schema.contracts.shortDescription, "")))
@@ -55,6 +58,9 @@ async function getContractOfTheDay(): Promise<FeaturedContract | null> {
       eraId: c.eraId || "",
       deploymentDate: c.deploymentTimestamp?.toISOString().split("T")[0] || "",
       significance: c.historicalSignificance || "",
+      deploymentRank: c.deploymentRank ?? null,
+      codeSizeBytes: c.codeSizeBytes ?? null,
+      deployStatus: c.deployStatus ?? null,
     };
   } catch {
     return null;

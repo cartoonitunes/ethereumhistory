@@ -416,6 +416,9 @@ export interface FeaturedContract {
   eraId: string;
   deploymentDate: string;
   significance: string;
+  deploymentRank?: number | null;
+  codeSizeBytes?: number | null;
+  deployStatus?: string | null;
 }
 
 export interface HistoricalLink {
