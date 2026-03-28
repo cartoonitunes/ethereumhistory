@@ -475,7 +475,11 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             {/* Badges */}
             <div className="flex items-center gap-3 flex-wrap">
               {contract.eraId && <EraCompact eraId={contract.eraId} showLabel />}
-              {contract.codeSizeBytes === 0 || contract.runtimeBytecode === '0x' || contract.runtimeBytecode === '' ? (
+              {(contract.codeSizeBytes === 0 || contract.runtimeBytecode === '0x' || contract.runtimeBytecode === '') && contract.deployStatus === 'success' ? (
+                <span className="px-2 py-1 rounded-md text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20" title="A zombie account — deployed with empty init code (input=0x). The tx succeeded but no bytecode was written. Per Ethereum Yellow Paper §7.1.">
+                  Zombie Account
+                </span>
+              ) : (contract.codeSizeBytes === 0 || contract.runtimeBytecode === '0x' || contract.runtimeBytecode === '') ? (
                 <span className="px-2 py-1 rounded-md text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20" title="The deployment transaction failed — no contract code was written to this address">
                   Failed Deploy
                 </span>

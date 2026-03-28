@@ -115,6 +115,7 @@ export interface Contract {
   deploymentTxIndex: number | null;
   deploymentTraceIndex: number | null;
   deploymentRank: number | null; // computed live, not stored
+  deployStatus: string | null;   // 'success' | 'failed' | null (not yet fetched)
 
   // Decompiled code (from Panoramix/Palkeoramix or similar)
   decompiledCode: string | null;
