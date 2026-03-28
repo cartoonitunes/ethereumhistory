@@ -93,6 +93,11 @@ export const contracts = pgTable(
     deployedBytecode: text("deployed_bytecode"),
     deployedBytecodeHash: text("deployed_bytecode_hash"),
 
+    // Selfdestruct tracking
+    liveCodeCheckedAt: timestamp("live_code_checked_at", { withTimezone: true }),
+    isSelfDestructed: boolean("is_self_destructed"),
+    selfDestructDetectedBlock: integer("self_destruct_detected_block"),
+
     // Verification proof data (compiler archaeology)
     compilerLanguage: text("compiler_language"),
     compilerCommit: text("compiler_commit"),
