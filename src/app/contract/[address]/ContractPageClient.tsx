@@ -597,6 +597,9 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               icon={<FileCode className="w-4 h-4" />}
             >
               Code
+              {(contract.sourcifyMatch || contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.verificationMethod === "exact_bytecode_match" || contract.verificationMethod === "near_exact_match" || contract.verificationMethod === "author_published_source") && (
+                <span className="ml-1 text-green-400" title="Verified source available">✓</span>
+              )}
             </TabButton>
             {siblings && siblings.count > 0 && (
               <TabButton
@@ -651,6 +654,45 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             </div>
           )}
           {activeTab === "code" && (
+            <>
+              {/* Inline verification badges — visible immediately on mobile */}
+              {(contract.sourcifyMatch || contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourceCode) && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified") && (
+                    <a
+                      href={`https://etherscan.io/address/${contract.address}#code`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                    >
+                      <Check className="w-3 h-3" />
+                      Verified on Etherscan
+                    </a>
+                  )}
+                  {contract.sourcifyMatch && (
+                    <a
+                      href={`https://repo.sourcify.dev/1/${contract.address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                    >
+                      <Check className="w-3 h-3" />
+                      Verified on Sourcify
+                    </a>
+                  )}
+                  {contract.verificationProofUrl && (
+                    <a
+                      href={contract.verificationProofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-ether-500/10 text-ether-400 border border-ether-500/20 hover:bg-ether-500/20 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      View Proof
+                    </a>
+                  )}
+                </div>
+              )}
             <CodeTab
               bytecode={contract.runtimeBytecode}
               analysis={bytecodeAnalysis}
@@ -663,6 +705,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               isInheritedVerification={contract.isInheritedVerification}
               proxyInfo={proxyInfo}
             />
+            </>
           )}
           {activeTab === "siblings" && siblings && siblings.count > 0 && (
             <SiblingBytecodeTab siblings={siblings} currentAddress={address} onLoadMore={loadMoreSiblings} loadingMore={siblingsLoading} />
