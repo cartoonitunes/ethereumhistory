@@ -80,6 +80,7 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     verificationMethod: row.verificationMethod ?? null,
     verificationProofUrl: row.verificationProofUrl ?? null,
     verificationNotes: row.verificationNotes ?? null,
+    sourcifyMatch: row.sourcifyMatch ?? null,
     verificationStatus: row.sourceCode
       ? "verified"
       : row.decompilationSuccess
