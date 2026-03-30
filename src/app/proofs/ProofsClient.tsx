@@ -130,26 +130,31 @@ interface Props {
 export function ProofsClient({ initialContracts, initialTotal, initialHasMore }: Props) {
   const [contracts, setContracts] = useState<ProofContract[]>(initialContracts);
   const [hasMore, setHasMore] = useState(initialHasMore);
-  const [cursor, setCursor] = useState(initialContracts.length);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef(initialContracts.length);
+  const hasMoreRef = useRef(initialHasMore);
+  const loadingRef = useRef(false);
 
   const loadMore = useCallback(async () => {
-    if (loading || !hasMore) return;
+    if (loadingRef.current || !hasMoreRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
-      const res = await fetch(`/api/proofs?cursor=${cursor}&limit=${PAGE_SIZE}`);
+      const res = await fetch(`/api/proofs?cursor=${cursorRef.current}&limit=${PAGE_SIZE}`);
       if (!res.ok) return;
       const data = await res.json();
       setContracts((prev) => [...prev, ...data.contracts]);
+      hasMoreRef.current = data.hasMore;
       setHasMore(data.hasMore);
-      setCursor(data.nextCursor);
+      cursorRef.current = data.nextCursor;
     } catch {
       // silent — retry on next scroll
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [cursor, hasMore, loading]);
+  }, []); // stable — uses refs instead of closure state
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -162,7 +167,7 @@ export function ProofsClient({ initialContracts, initialTotal, initialHasMore }:
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [loadMore]);
+  }, [loadMore]); // loadMore is now stable, observer created once
 
   return (
     <>
