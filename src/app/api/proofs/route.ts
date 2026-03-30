@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       COALESCE(c.etherscan_contract_name, c.token_name, c.ens_name) AS name,
       c.deployment_timestamp,
       c.compiler_language,
-      c.compiler_version,
+      c.compiler_commit AS compiler_version,
       c.compiler_commit,
       c.verification_method,
       c.verification_notes,
