@@ -181,6 +181,7 @@ export interface Contract {
   verificationMethod: string | null;
   verificationProofUrl: string | null;
   verificationNotes: string | null;
+  sourcifyMatch: string | null;
   isInheritedVerification?: boolean;
   canonicalContractName?: string | null;
 

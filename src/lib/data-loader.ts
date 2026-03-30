@@ -124,6 +124,7 @@ function transformContract(raw: RawContract): Contract {
     verificationMethod: null,
     verificationProofUrl: null,
     verificationNotes: null,
+    sourcifyMatch: null,
     verificationStatus: raw.decompilation_success ? "decompiled" : "bytecode_only",
     deploymentTxIndex: null,
     deploymentTraceIndex: null,

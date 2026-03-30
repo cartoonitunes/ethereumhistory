@@ -2299,6 +2299,10 @@ function OverviewTab({
               {contract.verificationMethod
                 ? contract.verificationMethod === "exact_bytecode_match"
                   ? "Source verified through compiler archaeology and exact bytecode matching."
+                  : contract.verificationMethod === "near_exact_match"
+                  ? "Source verified through compiler archaeology (near-exact bytecode match)."
+                  : contract.verificationMethod === "author_published_source"
+                  ? "Source code published by the original contract author."
                   : contract.verificationMethod === "author_published"
                   ? "Source code published by the original contract author."
                   : contract.verificationMethod === "etherscan_verified"
@@ -2306,7 +2310,34 @@ function OverviewTab({
                   : "This contract has verified source code."
                 : "This contract has verified source code on Etherscan."}
             </p>
-            {contract.verificationProofUrl ? (
+
+            {/* Verification badges */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified") && (
+                <a
+                  href={`https://etherscan.io/address/${contract.address}#code`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                >
+                  <Check className="w-3 h-3" />
+                  Verified on Etherscan
+                </a>
+              )}
+              {contract.sourcifyMatch && (
+                <a
+                  href={`https://repo.sourcify.dev/1/${contract.address}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                >
+                  <Check className="w-3 h-3" />
+                  Verified on Sourcify
+                </a>
+              )}
+            </div>
+
+            {contract.verificationProofUrl && (
               <a
                 href={contract.verificationProofUrl}
                 target="_blank"
@@ -2316,17 +2347,7 @@ function OverviewTab({
                 View Verification Proof
                 <ExternalLink className="w-3 h-3" />
               </a>
-            ) : contract.verificationMethod === "etherscan_verified" ? (
-              <a
-                href={`https://etherscan.io/address/${contract.address}#code`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
-              >
-                View on Etherscan
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            ) : null}
+            )}
             {verifiedBy && (
               <p className="text-xs text-obsidian-500 mt-2">
                 Verified by <span className="text-obsidian-300">{verifiedBy.name}</span> · {formatRelativeTime(verifiedBy.editedAt)}

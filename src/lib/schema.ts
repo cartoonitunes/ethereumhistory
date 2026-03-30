@@ -105,6 +105,7 @@ export const contracts = pgTable(
     verificationMethod: text("verification_method"),
     verificationProofUrl: text("verification_proof_url"),
     verificationNotes: text("verification_notes"),
+    sourcifyMatch: text("sourcify_match"),
 
     // Timestamps
     createdAt: timestamp("created_at").defaultNow(),
