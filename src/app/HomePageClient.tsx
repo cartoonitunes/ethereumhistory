@@ -291,7 +291,7 @@ export default function HomePageClient({
               MCP integration. REST API. Agent skills. Let your bot query historical contract data.
             </p>
             <pre className="bg-obsidian-900/80 border border-obsidian-700 rounded-lg px-4 py-2.5 text-sm font-mono text-obsidian-300 mb-5 overflow-x-auto">
-              npx @anthropic/agent-skills install ethereum-history
+              https://ethereumhistory.com/mcp
             </pre>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <Link
@@ -308,14 +308,6 @@ export default function HomePageClient({
                 <Plug className="w-4 h-4" />
                 MCP Setup
               </Link>
-              <a
-                href="https://github.com/cartoonitunes/inlay-skills"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
-              >
-                Agent Skills
-              </a>
             </div>
           </motion.div>
         </div>
