@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as d3 from "d3";
-import { Header } from "@/components/Header";
+import Link from "next/link";
 
 interface ContractNode {
   id: string;
@@ -59,7 +59,7 @@ export default function NetworkPage() {
     async function load() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/visualizations/contracts?era=${activeEra}&limit=15000`);
+        const res = await fetch(`/api/visualizations/contracts?era=${activeEra}&min=3&limit=10000`);
         const json = await res.json();
         const data = json.contracts ?? [];
 
@@ -181,36 +181,36 @@ export default function NetworkPage() {
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-50 flex flex-col">
-      <Header />
-      <div className="px-6 py-4 border-b border-obsidian-800">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-bold">Deployer Network</h1>
-            <p className="text-xs text-obsidian-500 mt-1">
-              {loading ? "Loading..." : `${eraLabel} era - ${contractCount} contracts`}{!loading && eraDesc && <span className="ml-2 text-obsidian-600">({eraDesc})</span>}
-              <span className="ml-3 text-obsidian-600">Drag nodes, scroll to zoom, click to explore</span>
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {ERAS.map((e) => (
-              <button key={e.key} onClick={() => setActiveEra(e.key)}
-                className={`px-3 py-1 rounded text-xs border transition-colors ${
-                  activeEra === e.key
-                    ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
-                    : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
-                }`}
-                title={e.desc}>{e.label}</button>
-            ))}
-            <div className="w-px bg-obsidian-800 mx-1" />
-            {VER_FILTERS.map((f) => (
-              <button key={f.key} onClick={() => setVerFilter(f.key)}
-                className={`px-3 py-1 rounded text-xs border transition-colors ${
-                  verFilter === f.key
-                    ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
-                    : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
-                }`}>{f.label}</button>
-            ))}
-          </div>
+      {/* Compact header bar */}
+      <div className="px-3 sm:px-6 py-2 border-b border-obsidian-800 flex items-center gap-3 flex-wrap">
+        <Link href="/" className="text-sm font-semibold text-obsidian-400 hover:text-ether-400 transition-colors shrink-0">
+          EH
+        </Link>
+        <span className="text-obsidian-700">|</span>
+        <span className="text-sm font-semibold text-obsidian-100 shrink-0">Network</span>
+        <span className="text-xs text-obsidian-600 hidden sm:inline">
+          {loading ? "Loading..." : `${contractCount} contracts`}
+          {!loading && eraDesc ? ` (${eraDesc})` : ""}
+        </span>
+        <div className="flex gap-1.5 ml-auto flex-wrap">
+          {ERAS.map((e) => (
+            <button key={e.key} onClick={() => setActiveEra(e.key)}
+              className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${
+                activeEra === e.key
+                  ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
+                  : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
+              }`}
+              title={e.desc}>{e.label}</button>
+          ))}
+          <span className="w-px bg-obsidian-800 mx-0.5" />
+          {VER_FILTERS.map((f) => (
+            <button key={f.key} onClick={() => setVerFilter(f.key)}
+              className={`px-2 py-0.5 rounded text-[11px] border transition-colors ${
+                verFilter === f.key
+                  ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
+                  : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
+              }`}>{f.label}</button>
+          ))}
         </div>
       </div>
 

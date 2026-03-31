@@ -31,7 +31,16 @@ export async function GET(req: NextRequest) {
       ? sql.raw(`AND EXTRACT(YEAR FROM c.deployment_timestamp) IN (${years.join(",")})`)
       : sql`AND c.era_id = 'frontier'`;
 
+  const minContracts = Math.max(1, parseInt(searchParams.get("min") ?? "3", 10));
+
   const rows = await db.execute(sql`
+    WITH deployer_counts AS (
+      SELECT deployer_address, COUNT(*) AS cnt
+      FROM contracts
+      WHERE deployment_timestamp IS NOT NULL ${rangeFilter}
+      GROUP BY deployer_address
+      HAVING COUNT(*) >= ${minContracts}
+    )
     SELECT
       c.address,
       COALESCE(c.etherscan_contract_name, c.token_name) AS name,
@@ -41,6 +50,7 @@ export async function GET(req: NextRequest) {
       c.verification_method,
       c.era_id
     FROM contracts c
+    INNER JOIN deployer_counts dc ON dc.deployer_address = c.deployer_address
     LEFT JOIN people p ON LOWER(c.deployer_address) = LOWER(p.address)
     WHERE c.deployment_timestamp IS NOT NULL
     ${rangeFilter}
