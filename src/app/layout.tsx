@@ -110,6 +110,12 @@ export default function RootLayout({
           <main className="relative z-10">{children}</main>
         </div>
         <Analytics />
+        {/* Server-rendered footer for crawler visibility (Google OAuth verification requires privacy link in raw HTML) */}
+        <footer className="border-t border-obsidian-900 py-4 text-center text-xs text-obsidian-600">
+          <a href="/privacy" className="hover:text-obsidian-400 transition-colors">Privacy Policy</a>
+          <span className="mx-2">·</span>
+          <a href="/terms" className="hover:text-obsidian-400 transition-colors">Terms of Service</a>
+        </footer>
       </body>
     </html>
   );
