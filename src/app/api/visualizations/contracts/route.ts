@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const db = getDb();
 
   const yearFilter = years.length > 0
-    ? sql`AND EXTRACT(YEAR FROM deployment_timestamp) = ANY(${years})`
+    ? sql.raw(`AND EXTRACT(YEAR FROM deployment_timestamp) IN (${years.join(",")})`)
     : sql`AND EXTRACT(YEAR FROM deployment_timestamp) BETWEEN 2015 AND 2017`;
 
   const rows = await db.execute(sql`
