@@ -190,7 +190,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 <>
                   <Link href={loginUrl} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
                     <LogIn className="w-4 h-4" />
-                    Sign in
+                    Sign in / Join
                   </Link>
                 </>
               )}
@@ -321,7 +321,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                   <>
                     <Link href={loginUrl} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
                       <LogIn className="w-4 h-4" />
-                      Sign in
+                      Sign in / Join
                     </Link>
                   </>
                 )}
