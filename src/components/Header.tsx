@@ -188,14 +188,10 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 </>
               ) : (
                 <>
-                  <Link href={loginUrl} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
+                  <Link href={loginUrl} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
                     <LogIn className="w-4 h-4" />
                     Sign in
                   </Link>
-                  <a href="/api/auth/github" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
-                    <Github className="w-4 h-4" />
-                    Sign up with GitHub
-                  </a>
                 </>
               )}
             </div>
@@ -323,14 +319,10 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                   </Link>
                 ) : (
                   <>
-                    <Link href={loginUrl} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-obsidian-300 text-sm font-medium transition-colors">
+                    <Link href={loginUrl} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
                       <LogIn className="w-4 h-4" />
                       Sign in
                     </Link>
-                    <a href="/api/auth/github" className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
-                      <Github className="w-4 h-4" />
-                      Sign up with GitHub
-                    </a>
                   </>
                 )}
               </div>

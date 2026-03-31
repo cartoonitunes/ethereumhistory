@@ -558,15 +558,15 @@ export default function HomePageClient({
             </h2>
             <p className="text-obsidian-400 max-w-2xl mx-auto mb-6">
               Join our community of historians documenting the earliest smart contracts
-              ever deployed. Sign up with GitHub, start editing, and build your contributor profile.
+              ever deployed. Sign up, start editing, and build your contributor profile.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
-                href="/api/auth/github"
+                href="/historian/login"
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-ether-600 hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30"
               >
                 <Users className="w-4 h-4" />
-                Sign up with GitHub
+                Become a historian
               </Link>
               <Link
                 href="/browse?undocumented=1"
