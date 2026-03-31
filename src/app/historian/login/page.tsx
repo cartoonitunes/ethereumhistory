@@ -53,8 +53,13 @@ function HistorianLoginInner() {
         setError(String(json?.error || "Login failed."));
         return;
       }
-      router.push(next);
-      router.refresh();
+      // Use window.location for hash-based redirects (router.push strips the hash)
+      if (next.includes("#")) {
+        window.location.href = next;
+      } else {
+        router.push(next);
+        router.refresh();
+      }
     } catch {
       setError("Login failed.");
     } finally {
