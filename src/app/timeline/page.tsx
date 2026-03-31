@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import * as d3 from "d3";
 import { Header } from "@/components/Header";
 
 interface Contract {
   address: string;
-  name: string;
-  ts: string;
-  deployer: string;
+  name: string | null;
+  ts: string | null;
+  deployer: string | null;
   method: string;
   date: Date;
 }
@@ -18,7 +18,6 @@ const COLOR_MAP: Record<string, string> = {
   near_exact_match: "#fbbf24",
   etherscan_verified: "#60a5fa",
   author_published_source: "#818cf8",
-  source_identified: "#c084fc",
   unverified: "#374151",
 };
 
@@ -27,48 +26,61 @@ const METHOD_LABEL: Record<string, string> = {
   near_exact_match: "Near-exact match",
   etherscan_verified: "Etherscan verified",
   author_published_source: "Author published",
-  source_identified: "Source identified",
   unverified: "Unverified",
 };
 
-const FILTERS = [
+const VERIFICATION_FILTERS = [
   { key: "all", label: "All" },
   { key: "exact_bytecode_match", label: "Verified" },
+  { key: "near_exact_match", label: "Near-exact" },
   { key: "unverified", label: "Unverified" },
 ];
+
+const YEARS = [2015, 2016, 2017];
 
 export default function TimelinePage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [filter, setFilter] = useState("all");
+  const [activeYears, setActiveYears] = useState<Set<number>>(new Set(YEARS));
   const [tooltip, setTooltip] = useState<{ x: number; y: number; d: Contract } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const toggleYear = useCallback((year: number) => {
+    setActiveYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) {
+        if (next.size > 1) next.delete(year);
+      } else {
+        next.add(year);
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/agent/contracts?limit=500");
+        const yearParams = Array.from(activeYears).map((y) => `year=${y}`).join("&");
+        const res = await fetch(`/api/visualizations/contracts?${yearParams}&limit=3000`);
         const json = await res.json();
-        const data = (json.data ?? json) as Array<Record<string, string>>;
-        const parsed = data
-          .filter((c) => c.deployment_timestamp)
-          .map((c) => ({
-            address: c.address,
-            name: c.etherscan_contract_name ?? c.token_name ?? "unnamed",
-            ts: c.deployment_timestamp,
-            deployer: c.deployer_address ?? "",
-            method: c.verification_method ?? "unverified",
-            date: new Date(c.deployment_timestamp),
+        const parsed = (json.contracts ?? [])
+          .filter((c: Record<string, string>) => c.ts)
+          .map((c: Record<string, string>) => ({
+            ...c,
+            name: c.name ?? "unnamed",
+            method: c.method ?? "unverified",
+            date: new Date(c.ts),
           }))
-          .filter((c) => !isNaN(c.date.getTime()))
-          .sort((a, b) => a.date.getTime() - b.date.getTime());
+          .filter((c: Contract) => !isNaN(c.date.getTime()));
         setContracts(parsed);
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, []);
+  }, [activeYears]);
 
   useEffect(() => {
     if (!svgRef.current || contracts.length === 0) return;
@@ -76,7 +88,7 @@ export default function TimelinePage() {
     const el = svgRef.current;
     const margin = { top: 30, right: 40, bottom: 70, left: 170 };
     const W = el.clientWidth || 900;
-    const H = 420;
+    const H = 440;
     const iW = W - margin.left - margin.right;
     const iH = H - margin.top - margin.bottom;
 
@@ -86,8 +98,10 @@ export default function TimelinePage() {
 
     const filtered = filter === "all" ? contracts : contracts.filter((c) => c.method === filter);
 
+    if (filtered.length === 0) return;
+
     const xExt = d3.extent(filtered, (d) => d.date) as [Date, Date];
-    const pad = (xExt[1].getTime() - xExt[0].getTime()) * 0.02;
+    const pad = Math.max((xExt[1].getTime() - xExt[0].getTime()) * 0.02, 86400000);
     const xScale = d3
       .scaleTime()
       .domain([new Date(xExt[0].getTime() - pad), new Date(xExt[1].getTime() + pad)])
@@ -98,60 +112,40 @@ export default function TimelinePage() {
 
     // Grid
     g.append("g")
-      .attr("class", "grid")
-      .call(
-        d3
-          .axisLeft(yScale)
-          .tickSize(-iW)
-          .tickFormat(() => "")
-      )
-      .selectAll("line")
-      .attr("stroke", "#1a1a2e")
-      .attr("stroke-dasharray", "2,4");
-    g.select(".grid path").remove();
+      .call(d3.axisLeft(yScale).tickSize(-iW).tickFormat(() => ""))
+      .selectAll("line").attr("stroke", "#1a1a2e").attr("stroke-dasharray", "2,4");
+    g.select(".domain").remove();
 
     // X axis
     g.append("g")
       .attr("transform", `translate(0,${iH})`)
-      .call(d3.axisBottom(xScale).ticks(7).tickFormat(d3.timeFormat("%b %Y") as (v: Date | d3.NumberValue) => string))
-      .selectAll("text")
-      .attr("fill", "#555")
-      .attr("transform", "rotate(-30)")
-      .attr("text-anchor", "end")
-      .attr("dx", "-6")
-      .attr("dy", "6");
+      .call(d3.axisBottom(xScale).ticks(8).tickFormat(d3.timeFormat("%b '%y") as (v: Date | d3.NumberValue) => string))
+      .selectAll("text").attr("fill", "#555").attr("transform", "rotate(-30)")
+      .attr("text-anchor", "end").attr("dx", "-6").attr("dy", "6");
 
     // Y axis
     g.append("g")
       .call(d3.axisLeft(yScale).tickFormat((m) => METHOD_LABEL[m as string] ?? m))
-      .selectAll("text")
-      .attr("fill", "#666")
-      .attr("font-size", "11");
-
+      .selectAll("text").attr("fill", "#666").attr("font-size", "11");
     g.selectAll(".domain, .tick line").attr("stroke", "#222");
 
-    // Dots
-    const jitter = () => (Math.random() - 0.5) * 20;
+    // Dots with jitter
+    const jitter = () => (Math.random() - 0.5) * 18;
     g.selectAll(".dot")
       .data(filtered)
       .join("circle")
-      .attr("class", "dot")
       .attr("cx", (d) => xScale(d.date) + jitter())
       .attr("cy", (d) => (yScale(d.method) ?? 0) + jitter())
-      .attr("r", (d) => (d.method === "exact_bytecode_match" ? 6 : 5))
+      .attr("r", (d) => (d.method === "exact_bytecode_match" ? 5.5 : 4))
       .attr("fill", (d) => COLOR_MAP[d.method] ?? "#555")
-      .attr("fill-opacity", 0.85)
+      .attr("fill-opacity", 0.8)
       .attr("stroke", (d) => COLOR_MAP[d.method] ?? "#555")
-      .attr("stroke-opacity", 0.3)
+      .attr("stroke-opacity", 0.25)
       .attr("stroke-width", 1.5)
       .style("cursor", "pointer")
-      .on("mousemove", (event, d) => {
-        setTooltip({ x: event.clientX, y: event.clientY, d });
-      })
+      .on("mousemove", (event: MouseEvent, d: Contract) => setTooltip({ x: event.clientX, y: event.clientY, d }))
       .on("mouseleave", () => setTooltip(null))
-      .on("click", (_, d) => {
-        window.open(`/contract/${d.address}`, "_blank");
-      });
+      .on("click", (_: MouseEvent, d: Contract) => window.open(`/contract/${d.address}`, "_blank"));
   }, [contracts, filter]);
 
   return (
@@ -165,15 +159,31 @@ export default function TimelinePage() {
           </p>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          {FILTERS.map((f) => (
+        <div className="flex flex-wrap gap-2 mb-4">
+          <span className="text-xs text-obsidian-600 self-center mr-1">Year:</span>
+          {YEARS.map((y) => (
+            <button
+              key={y}
+              onClick={() => toggleYear(y)}
+              className={`px-3 py-1 rounded text-xs tracking-wide border transition-colors ${
+                activeYears.has(y)
+                  ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
+                  : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+          <div className="w-px bg-obsidian-800 mx-2" />
+          <span className="text-xs text-obsidian-600 self-center mr-1">Status:</span>
+          {VERIFICATION_FILTERS.map((f) => (
             <button
               key={f.key}
               onClick={() => setFilter(f.key)}
-              className={`px-4 py-1.5 rounded text-xs tracking-wide border transition-colors ${
+              className={`px-3 py-1 rounded text-xs tracking-wide border transition-colors ${
                 filter === f.key
                   ? "bg-ether-900/40 text-ether-400 border-ether-500/40"
-                  : "bg-obsidian-800/50 text-obsidian-500 border-obsidian-700 hover:text-obsidian-300"
+                  : "bg-obsidian-800/50 text-obsidian-600 border-obsidian-700 hover:text-obsidian-400"
               }`}
             >
               {f.label}
@@ -191,10 +201,7 @@ export default function TimelinePage() {
         <div className="flex flex-wrap gap-4 mt-4">
           {Object.entries(METHOD_LABEL).map(([key, label]) => (
             <div key={key} className="flex items-center gap-2 text-xs text-obsidian-500">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ background: COLOR_MAP[key] ?? "#555" }}
-              />
+              <div className="w-3 h-3 rounded-full" style={{ background: COLOR_MAP[key] ?? "#555" }} />
               {label}
             </div>
           ))}
@@ -207,9 +214,7 @@ export default function TimelinePage() {
           style={{ left: tooltip.x + 14, top: tooltip.y - 10, maxWidth: 260 }}
         >
           <div className="text-ether-400 font-semibold mb-1">{tooltip.d.name}</div>
-          <div className="text-obsidian-500 mb-2">
-            {tooltip.d.address.slice(0, 6)}...{tooltip.d.address.slice(-4)}
-          </div>
+          <div className="text-obsidian-500 mb-2">{tooltip.d.address.slice(0, 6)}...{tooltip.d.address.slice(-4)}</div>
           <div className="flex justify-between gap-4">
             <span className="text-obsidian-500">deployed</span>
             <span className="text-obsidian-300">
