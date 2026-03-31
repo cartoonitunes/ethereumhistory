@@ -63,7 +63,7 @@ export default function TimelinePage() {
       setLoading(true);
       try {
         const yearParams = Array.from(activeYears).map((y) => `year=${y}`).join("&");
-        const res = await fetch(`/api/visualizations/contracts?${yearParams}&limit=3000`);
+        const res = await fetch(`/api/visualizations/contracts?${yearParams}&limit=5000`);
         const json = await res.json();
         const parsed = (json.contracts ?? [])
           .filter((c: Record<string, string>) => c.ts)

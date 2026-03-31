@@ -65,7 +65,7 @@ export default function NetworkPage() {
       setLoading(true);
       try {
         const yearParams = Array.from(activeYears).map((y) => `year=${y}`).join("&");
-        const res = await fetch(`/api/visualizations/contracts?${yearParams}&limit=3000`);
+        const res = await fetch(`/api/visualizations/contracts?${yearParams}&limit=5000`);
         const json = await res.json();
         const data = json.contracts ?? [];
 
@@ -85,7 +85,7 @@ export default function NetworkPage() {
           if (!dep) return;
           if (!deployers[dep]) {
             // Priority: deployer ENS name from API, then truncated address
-            const deployerLabel = c.deployerEns || dep.slice(0, 6) + "..." + dep.slice(-4);
+            const deployerLabel = c.deployerName || dep.slice(0, 6) + "..." + dep.slice(-4);
             deployers[dep] = {
               id: "d_" + dep,
               type: "deployer",
