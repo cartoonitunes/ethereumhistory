@@ -219,9 +219,13 @@ export const historians = pgTable(
     trusted: boolean("trusted").notNull().default(false),
     trustedOverride: boolean("trusted_override"), // NULL = auto, TRUE/FALSE = manual
     role: text("role"), // NULL or "historian" = standard, "trusted" = established, "admin" = full access
+    // Auth provider tracking ('token', 'google', 'ethereum', 'github')
+    authProvider: text("auth_provider"),
     // GitHub OAuth
     githubId: text("github_id"),
     githubUsername: text("github_username"),
+    // Google OAuth
+    googleId: text("google_id"),
     // Profile personalization
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
@@ -237,6 +241,7 @@ export const historians = pgTable(
     activeIdx: index("historians_active_idx").on(table.active),
     trustedIdx: index("historians_trusted_idx").on(table.trusted),
     githubIdIdx: uniqueIndex("historians_github_id_unique").on(table.githubId),
+    googleIdIdx: uniqueIndex("historians_google_id_unique").on(table.googleId),
   })
 );
 

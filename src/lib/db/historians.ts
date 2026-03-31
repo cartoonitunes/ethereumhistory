@@ -67,6 +67,90 @@ export function historianRowToMe(row: schema.Historian): HistorianMe {
 }
 
 /**
+ * Find historian by Google ID (for Google OAuth login).
+ */
+export async function getHistorianByGoogleIdFromDb(googleId: string): Promise<schema.Historian | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historians)
+    .where(eq(schema.historians.googleId, googleId))
+    .limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Find historian by Ethereum address (for SIWE login).
+ */
+export async function getHistorianByEthereumAddressFromDb(address: string): Promise<schema.Historian | null> {
+  const database = getDb();
+  const rows = await database
+    .select()
+    .from(schema.historians)
+    .where(sql`lower(${schema.historians.ethereumAddress}) = ${address.toLowerCase()}`)
+    .limit(1);
+  return rows[0] || null;
+}
+
+/**
+ * Create a historian from OAuth provider (Google or Ethereum).
+ * New OAuth users are untrusted by default.
+ */
+export async function createHistorianFromOAuth(params: {
+  email: string;
+  name: string;
+  authProvider: string;
+  googleId?: string;
+  ethereumAddress?: string;
+}): Promise<schema.Historian> {
+  const database = getDb();
+  const [result] = await database
+    .insert(schema.historians)
+    .values({
+      email: params.email.trim().toLowerCase(),
+      name: params.name.trim(),
+      authProvider: params.authProvider,
+      googleId: params.googleId || null,
+      ethereumAddress: params.ethereumAddress || null,
+      active: true,
+      trusted: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
+  return result;
+}
+
+/**
+ * Link Google ID to an existing historian (e.g., found by email).
+ */
+export async function linkGoogleIdToHistorianFromDb(historianId: number, googleId: string): Promise<void> {
+  const database = getDb();
+  await database
+    .update(schema.historians)
+    .set({
+      googleId,
+      authProvider: "google",
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.historians.id, historianId));
+}
+
+/**
+ * Link Ethereum address to an existing historian for SIWE.
+ */
+export async function linkEthereumAddressToHistorianFromDb(historianId: number, address: string): Promise<void> {
+  const database = getDb();
+  await database
+    .update(schema.historians)
+    .set({
+      ethereumAddress: address.toLowerCase(),
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.historians.id, historianId));
+}
+
+/**
  * Find historian by GitHub ID (for OAuth login).
  */
 export async function getHistorianByGithubIdFromDb(githubId: string): Promise<schema.Historian | null> {
