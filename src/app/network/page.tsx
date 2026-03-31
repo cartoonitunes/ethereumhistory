@@ -32,11 +32,11 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 const ERAS = [
-  { key: "frontier", label: "Frontier", desc: "Jul-Sep 2015" },
-  { key: "homestead", label: "Homestead", desc: "Mar-Jul 2016" },
-  { key: "dao", label: "DAO Fork", desc: "Jul 2016" },
-  { key: "tangerine", label: "Tangerine", desc: "Oct 2016" },
-  { key: "spurious", label: "Spurious Dragon", desc: "Nov 2016+" },
+  { key: "frontier", label: "Frontier", desc: "Jul 30, 2015 - Mar 14, 2016" },
+  { key: "homestead", label: "Homestead", desc: "Mar 14, 2016 - Jul 20, 2016" },
+  { key: "dao", label: "DAO Fork", desc: "Jul 20, 2016 - Oct 18, 2016" },
+  { key: "tangerine", label: "Tangerine", desc: "Oct 18, 2016 - Nov 22, 2016" },
+  { key: "spurious", label: "Spurious Dragon", desc: "Nov 22, 2016 - Oct 16, 2017" },
 ];
 
 const VER_FILTERS = [
@@ -177,7 +177,7 @@ export default function NetworkPage() {
     });
   }
 
-  const eraLabel = ERAS.find((e) => e.key === activeEra)?.label ?? activeEra;
+  const eraInfo = ERAS.find((e) => e.key === activeEra); const eraLabel = eraInfo?.label ?? activeEra; const eraDesc = eraInfo?.desc ?? "";
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-50 flex flex-col">
@@ -187,7 +187,7 @@ export default function NetworkPage() {
           <div>
             <h1 className="text-xl font-bold">Deployer Network</h1>
             <p className="text-xs text-obsidian-500 mt-1">
-              {loading ? "Loading..." : `${eraLabel} era - ${contractCount} contracts`}
+              {loading ? "Loading..." : `${eraLabel} era - ${contractCount} contracts`}{!loading && eraDesc && <span className="ml-2 text-obsidian-600">({eraDesc})</span>}
               <span className="ml-3 text-obsidian-600">Drag nodes, scroll to zoom, click to explore</span>
             </p>
           </div>

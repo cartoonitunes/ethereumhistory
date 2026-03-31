@@ -287,9 +287,12 @@ export default function HomePageClient({
             className="rounded-2xl border border-obsidian-700 bg-obsidian-900/40 p-8 md:p-10"
           >
             <h2 className="text-2xl font-bold mb-2">For agents</h2>
-            <p className="text-obsidian-400 mb-6 max-w-2xl">
-              MCP integration. REST API. Let your bot query historical contract data.
+            <p className="text-obsidian-400 mb-4 max-w-2xl">
+              MCP integration. REST API. Agent skills. Let your bot query historical contract data.
             </p>
+            <pre className="bg-obsidian-900/80 border border-obsidian-700 rounded-lg px-4 py-2.5 text-sm font-mono text-obsidian-300 mb-5 overflow-x-auto">
+              npx @anthropic/agent-skills install ethereum-history
+            </pre>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <Link
                 href="/api-docs"
@@ -305,7 +308,38 @@ export default function HomePageClient({
                 <Plug className="w-4 h-4" />
                 MCP Setup
               </Link>
+              <a
+                href="https://github.com/cartoonitunes/inlay-skills"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
+              >
+                Agent Skills
+              </a>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Network exploration */}
+      <section className="py-16 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <Link href="/network" className="block group">
+              <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/40 p-8 md:p-10 hover:border-ether-500/30 transition-colors">
+                <h2 className="text-2xl font-bold mb-2 group-hover:text-ether-400 transition-colors">Deployer Network</h2>
+                <p className="text-obsidian-400 mb-4 max-w-2xl">
+                  Interactive force graph of Ethereum&apos;s earliest builders and their contracts. See who deployed what, when, and how they connect.
+                </p>
+                <span className="text-sm text-ether-500 group-hover:text-ether-400 transition-colors">
+                  Explore the network &rarr;
+                </span>
+              </div>
+            </Link>
           </motion.div>
         </div>
       </section>
