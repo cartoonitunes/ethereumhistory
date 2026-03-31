@@ -2,42 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { sql } from "drizzle-orm";
 
-export const revalidate = 600; // 10-minute cache
+export const revalidate = 600;
 
-/**
- * GET /api/visualizations/contracts?era=frontier&limit=5000
- * GET /api/visualizations/contracts?year=2015&year=2016&limit=5000
- *
- * Lightweight endpoint for timeline/network visualizations.
- * Returns minimal fields. Supports era or year filtering.
- * Joins people table for deployer names.
- */
 export async function GET(req: NextRequest) {
   if (!isDatabaseConfigured()) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
   const { searchParams } = req.nextUrl;
-  const era = searchParams.get("era");
-  const years = searchParams.getAll("year").map(Number).filter(Boolean);
+  const era = searchParams.get("era") ?? "frontier";
+  const minContracts = Math.max(1, parseInt(searchParams.get("min") ?? "3", 10));
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "5000", 10) || 5000, 1), 50000);
 
   const db = getDb();
-
-  // Filter by era (preferred) or year range
-  const rangeFilter = era
-    ? sql`AND c.era_id = ${era}`
-    : years.length > 0
-      ? sql.raw(`AND EXTRACT(YEAR FROM c.deployment_timestamp) IN (${years.join(",")})`)
-      : sql`AND c.era_id = 'frontier'`;
-
-  const minContracts = Math.max(1, parseInt(searchParams.get("min") ?? "3", 10));
 
   const rows = await db.execute(sql`
     WITH deployer_counts AS (
       SELECT deployer_address, COUNT(*) AS cnt
       FROM contracts
-      WHERE deployment_timestamp IS NOT NULL ${rangeFilter}
+      WHERE deployment_timestamp IS NOT NULL
+        AND era_id = ${era}
       GROUP BY deployer_address
       HAVING COUNT(*) >= ${minContracts}
     )
@@ -53,7 +37,7 @@ export async function GET(req: NextRequest) {
     INNER JOIN deployer_counts dc ON dc.deployer_address = c.deployer_address
     LEFT JOIN people p ON LOWER(c.deployer_address) = LOWER(p.address)
     WHERE c.deployment_timestamp IS NOT NULL
-    ${rangeFilter}
+      AND c.era_id = ${era}
     ORDER BY c.deployment_timestamp ASC
     LIMIT ${limit}
   `);
@@ -76,8 +60,5 @@ export async function GET(req: NextRequest) {
     era: r.era_id ?? null,
   }));
 
-  return NextResponse.json({
-    contracts,
-    total: contracts.length,
-  });
+  return NextResponse.json({ contracts, total: contracts.length });
 }
