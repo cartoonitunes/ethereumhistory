@@ -499,6 +499,17 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               >
                 {getVerificationStatusLabel(contract.verificationStatus, contract.verificationMethod)}
               </span>
+
+              {/* Edit CTA — visible to logged-out users only */}
+              {!me && (
+                <Link
+                  href={`/historian/login?next=${encodeURIComponent(`/contract/${address}#history`)}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-ether-900/30 text-ether-400 border border-ether-500/30 hover:bg-ether-900/50 hover:text-ether-300 transition-colors"
+                >
+                  <LogIn className="w-3 h-3" />
+                  Edit this contract
+                </Link>
+              )}
             </div>
           </div>
 
