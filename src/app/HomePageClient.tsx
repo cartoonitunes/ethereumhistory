@@ -647,9 +647,11 @@ export default function HomePageClient({
               <span className="text-obsidian-400">ethereumhistory.com</span>
             </div>
 
-            <p className="text-sm text-obsidian-500">
-              A preservation project for Ethereum's historical smart contracts.
-            </p>
+            <div className="flex items-center gap-4 text-sm text-obsidian-500">
+              <span>A preservation project for Ethereum&apos;s historical smart contracts.</span>
+              <Link href="/privacy" className="hover:text-obsidian-300 transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-obsidian-300 transition-colors">Terms</Link>
+            </div>
           </div>
         </div>
       </footer>
