@@ -1,14 +1,5 @@
 import { Metadata } from "next";
-import dynamic from "next/dynamic";
-
-const NetworkClient = dynamic(() => import("./NetworkClient"), {
-  ssr: false,
-  loading: () => (
-    <div className="min-h-screen bg-obsidian-950 flex items-center justify-center">
-      <span className="text-sm text-obsidian-400 animate-pulse">Loading network...</span>
-    </div>
-  ),
-});
+import NetworkWrapper from "./NetworkWrapper";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
@@ -26,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const metadataBase = getMetadataBaseUrl();
   const title = "Contract Network - Ethereum History";
   const description =
-    "Explore 187,905 early Ethereum contracts as a force-directed network. Every deployer, every cluster — from Frontier through Spurious Dragon. Filter by era, click any contract, help document history.";
+    "Explore 187,905 early Ethereum contracts as a force-directed network. Every deployer, every cluster - from Frontier through Spurious Dragon. Filter by era, click any contract, help document history.";
   const ogImage = new URL("/og-network.png", metadataBase).toString();
 
   return {
@@ -46,7 +37,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: ogImage,
           width: 1200,
           height: 630,
-          alt: "Ethereum Contract Network — 187,905 early contracts visualized by deployer cluster",
+          alt: "Ethereum Contract Network - 187,905 early contracts visualized by deployer cluster",
         },
       ],
     },
@@ -60,5 +51,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function NetworkPage() {
-  return <NetworkClient />;
+  return <NetworkWrapper />;
 }
