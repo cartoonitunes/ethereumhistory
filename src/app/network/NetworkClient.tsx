@@ -95,10 +95,10 @@ export default function NetworkClient() {
     Object.entries(deployers).forEach(([addr, info]) => {
       graph.addNode("d_" + addr, {
         label: info.name,
-        size: Math.min(3 + info.count * 0.6, 16),
+        size: Math.min(2 + Math.sqrt(info.count) * 1.2, 10),
         color: "#a78bfa",
-        x: (Math.random() - 0.5) * 200,
-        y: (Math.random() - 0.5) * 200,
+        x: (Math.random() - 0.5) * 500,
+        y: (Math.random() - 0.5) * 500,
         _type: "deployer",
         _addr: addr,
         _count: info.count,
@@ -111,35 +111,35 @@ export default function NetworkClient() {
       const m = c.method ?? "unverified";
       graph.addNode("c_" + i, {
         label: c.name && c.name !== "unnamed" ? c.name : "",
-        size: 1.5,
+        size: 1,
         color: COLOR_MAP[m] ?? "#555",
-        x: (Math.random() - 0.5) * 200,
-        y: (Math.random() - 0.5) * 200,
+        x: (Math.random() - 0.5) * 500,
+        y: (Math.random() - 0.5) * 500,
         _type: "contract",
         _addr: c.address,
         _method: m,
       });
-      graph.addEdge("d_" + d, "c_" + i, { color: "#111118", size: 0.2 });
+      graph.addEdge("d_" + d, "c_" + i, { color: "#0a0a12", size: 0.15 });
     });
 
     if (graph.order === 0) return;
 
     // Layout
-    const iters = Math.min(80, Math.max(20, 3000 / graph.order));
+    const iters = Math.min(120, Math.max(40, 5000 / graph.order));
     forceAtlas2.assign(graph, {
       iterations: iters,
-      settings: { gravity: 2, scalingRatio: 8, barnesHutOptimize: graph.order > 500, strongGravityMode: true, slowDown: 3 },
+      settings: { gravity: 0.5, scalingRatio: 30, barnesHutOptimize: graph.order > 500, strongGravityMode: true, slowDown: 3 },
     });
 
     const s = new Sigma(graph, el, {
       renderEdgeLabels: false,
       enableEdgeEvents: false,
-      labelRenderedSizeThreshold: 6,
-      labelColor: { color: "#666" },
+      labelRenderedSizeThreshold: 5,
+      labelColor: { color: "#aaa" },
       labelFont: "monospace",
-      labelSize: 10,
+      labelSize: 9,
       defaultEdgeColor: "#111118",
-      stagePadding: 30,
+      stagePadding: 50,
     });
 
     s.on("enterNode", ({ node, event }) => {
