@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@react-sigma/core": "^5.0.6",
     "@tailwindcss/typography": "^0.5.15",
     "@types/d3": "^7.4.3",
     "@vercel/analytics": "^1.6.1",
@@ -32,6 +33,10 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "framer-motion": "^11.2.10",
+    "graphology": "^0.26.0",
+    "graphology-layout-force": "^0.2.4",
+    "graphology-layout-forceatlas2": "^0.10.1",
+    "graphology-types": "^0.24.8",
     "lucide-react": "^0.378.0",
     "next": "16.1.4",
     "postgres": "^3.4.8",
@@ -41,6 +46,7 @@
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
     "sevm": "^0.7.4",
+    "sigma": "^3.0.2",
     "viem": "^2.45.1"
   },
   "devDependencies": {
