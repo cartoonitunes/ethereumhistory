@@ -629,6 +629,41 @@ export default function HomePageClient({
         </div>
       </section>
 
+      {/* Partners & Sponsors */}
+      <section className="py-12 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center"
+          >
+            <p className="text-xs uppercase tracking-widest text-obsidian-600 mb-6 font-medium">
+              Partners &amp; Sponsors
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-8">
+              {/* Sourcify */}
+              <a
+                href="https://sourcify.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-2.5 opacity-50 hover:opacity-100 transition-opacity"
+                title="Sourcify — Decentralized Smart Contract Verification"
+              >
+                <img
+                  src="/partners/sourcify-logo.svg"
+                  alt="Sourcify"
+                  className="h-7 w-7"
+                />
+                <span className="text-sm font-semibold text-obsidian-300 group-hover:text-obsidian-100 transition-colors tracking-tight">
+                  Sourcify
+                </span>
+              </a>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Footer */}
       <footer className="py-12 border-t border-obsidian-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
