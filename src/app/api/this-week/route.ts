@@ -3,7 +3,7 @@
  *
  * GET /api/this-week
  * Returns contracts deployed during the same calendar week (month/day range)
- * in previous years (2015-2017).
+ * in previous years (2015-2018).
  */
 
 import { NextResponse } from "next/server";
@@ -104,7 +104,7 @@ export async function GET(): Promise<NextResponse> {
         and(
           isNotNull(schema.contracts.deploymentTimestamp),
           dateCondition,
-          sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 2015 AND 2017`
+          sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 2015 AND 2018`
         )
       )
       .orderBy(sql`${schema.contracts.deploymentTimestamp} ASC`)

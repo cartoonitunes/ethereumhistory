@@ -17,7 +17,7 @@ const spec = {
     title: "Ethereum History API",
     version: "1.0.0",
     description:
-      "A historical archive and analysis API for early Ethereum smart contracts (2015–2017). " +
+      "A historical archive and analysis API for early Ethereum smart contracts (2015–2018). " +
       "Provides contract metadata, bytecode analysis, similarity search, documentation progress, " +
       "and community-contributed historical context.",
     contact: {
@@ -139,7 +139,7 @@ const spec = {
           {
             name: "year",
             in: "query",
-            schema: { type: "integer", minimum: 2015, maximum: 2017 },
+            schema: { type: "integer", minimum: 2015, maximum: 2018 },
             description: "Filter by deployment year",
           },
           {
@@ -316,7 +316,7 @@ const spec = {
         operationId: "getThisWeek",
         summary: "Get this week in Ethereum history",
         description:
-          "Returns contracts deployed during this calendar week in Ethereum's early years (2015–2017).",
+          "Returns contracts deployed during this calendar week in Ethereum's early years (2015–2018).",
         tags: ["Featured"],
         responses: {
           "200": { description: "This week in history" },

@@ -75,8 +75,36 @@ async function getProgressStats(): Promise<ProgressStats | null> {
       CACHE_TTL.MEDIUM,
       async () => {
         const db = getDb();
-        const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
-        const YEARS = [2015, 2016, 2017] as const;
+        const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+        const YEARS = [2015, 2016, 2017, 2018] as const;
+        const DOCUMENTED_CONDITION = sql`(
+          (short_description IS NOT NULL AND short_description != '')
+          OR verification_method IS NOT NULL
+          OR (
+            canonical_address IS NOT NULL
+            AND canonical_address IN (
+              SELECT address FROM contracts
+              WHERE (short_description IS NOT NULL AND short_description != '')
+                 OR verification_method IS NOT NULL
+            )
+          )
+          OR (
+            deployed_bytecode_hash IS NOT NULL
+            AND deployed_bytecode_hash IN (
+              SELECT DISTINCT deployed_bytecode_hash FROM contracts
+              WHERE (short_description IS NOT NULL AND short_description != '')
+                 OR verification_method IS NOT NULL
+            )
+          )
+          OR (
+            runtime_bytecode_hash IS NOT NULL
+            AND runtime_bytecode_hash IN (
+              SELECT DISTINCT runtime_bytecode_hash FROM contracts
+              WHERE (short_description IS NOT NULL AND short_description != '')
+                 OR verification_method IS NOT NULL
+            )
+          )
+        )`;
 
         const [
           overallTotalResult,
@@ -88,29 +116,7 @@ async function getProgressStats(): Promise<ProgressStats | null> {
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
             ,
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-            .where(sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`),
+            .where(DOCUMENTED_CONDITION),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.historians)
             .where(eq(schema.historians.active, true)),
           db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contractEdits),
@@ -118,57 +124,13 @@ async function getProgressStats(): Promise<ProgressStats | null> {
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
               .where(and(eq(schema.contracts.eraId, eraId))),
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(eq(schema.contracts.eraId, eraId), sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`)),
+              .where(and(eq(schema.contracts.eraId, eraId), DOCUMENTED_CONDITION)),
           ]),
           ...YEARS.flatMap((year) => [
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
               .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`)),
             db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`, sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`)),
+              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`, DOCUMENTED_CONDITION)),
           ]),
         ]);
 

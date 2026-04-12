@@ -18,6 +18,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../src/lib/schema";
 import * as dotenv from "dotenv";
+import { createInterface } from "readline";
 dotenv.config({ path: ".env.local" });
 
 const T7_DIR = path.join(
@@ -46,6 +47,40 @@ function sanitize(v: string | null | undefined): string | null {
   return v.replace(/\u0000/g, "");
 }
 
+async function* readJsonl(file: string): AsyncGenerator<any> {
+  const rl = createInterface({
+    input: fs.createReadStream(file),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    yield JSON.parse(line);
+  }
+}
+
+async function buildEnrichmentMap(file: string): Promise<Map<string, any>> {
+  const enrichMap = new Map<string, any>();
+  if (!fs.existsSync(file)) return enrichMap;
+
+  for await (const obj of readJsonl(file)) {
+    if (!obj.error) enrichMap.set(obj.address, obj);
+  }
+
+  return enrichMap;
+}
+
+async function buildSiblingMap(file: string): Promise<Map<string, string[]>> {
+  const siblingMap = new Map<string, string[]>();
+  if (!fs.existsSync(file)) return siblingMap;
+
+  for await (const obj of readJsonl(file)) {
+    siblingMap.set(obj.canonical_address, obj.siblings.map((s: any) => s.address));
+  }
+
+  return siblingMap;
+}
+
 async function main() {
   const canonicalFile = path.join(T7_DIR, "contracts_canonical.jsonl");
   const enrichedFile = path.join(T7_DIR, "etherscan_enriched.jsonl");
@@ -58,30 +93,15 @@ async function main() {
     }
   }
 
-  const canonicals = fs.readFileSync(canonicalFile, "utf-8")
-    .split("\n").filter(Boolean).map(l => JSON.parse(l));
+  const enrichMap = await buildEnrichmentMap(enrichedFile);
+  const siblingMap = await buildSiblingMap(siblingsFile);
 
-  // Build enrichment lookup
-  const enrichMap = new Map<string, any>();
-  if (fs.existsSync(enrichedFile)) {
-    fs.readFileSync(enrichedFile, "utf-8").split("\n").filter(Boolean).forEach(l => {
-      const obj = JSON.parse(l);
-      if (!obj.error) enrichMap.set(obj.address, obj);
-    });
-  }
-
-  // Build sibling groups lookup
-  const siblingMap = new Map<string, string[]>(); // canonical → sibling addresses
-  if (fs.existsSync(siblingsFile)) {
-    fs.readFileSync(siblingsFile, "utf-8").split("\n").filter(Boolean).forEach(l => {
-      const obj = JSON.parse(l);
-      siblingMap.set(obj.canonical_address, obj.siblings.map((s: any) => s.address));
-    });
-  }
+  let canonicalCount = 0;
+  for await (const _ of readJsonl(canonicalFile)) canonicalCount++;
 
   console.log("=== EH 2018 DB Import ===");
   console.log(`Mode: ${isDryRun ? "DRY RUN" : "LIVE"}`);
-  console.log(`Canonical contracts: ${canonicals.length}`);
+  console.log(`Canonical contracts: ${canonicalCount}`);
   console.log(`Enrichment records: ${enrichMap.size}`);
   console.log(`Sibling groups: ${siblingMap.size}`);
 
@@ -92,15 +112,16 @@ async function main() {
   let skipped = 0;
   let siblingsImported = 0;
 
-  const toProcess = canonicals.slice(0, maxRows);
-
   // Batch insert canonicals
   const BATCH_SIZE = 100;
-  for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
-    const batch = toProcess.slice(i, i + BATCH_SIZE);
+  let processedCanonicalRows = 0;
+  let batchIndex = 0;
+  let batch: any[] = [];
+
+  async function handleBatch(batchRows: any[]) {
     const rows: schema.NewContract[] = [];
 
-    for (const c of batch) {
+    for (const c of batchRows) {
       // Validate essential fields
       if (!c.address || !/^0x[0-9a-f]{40}$/i.test(c.address)) {
         console.warn(`  Skipping invalid address: ${c.address}`);
@@ -119,13 +140,14 @@ async function main() {
       rows.push({
         address: c.address.toLowerCase(),
         runtimeBytecode: sanitize(c.runtime_bytecode),
+        runtimeBytecodeHash: sanitize(c.runtime_bytecode_hash),
         deployerAddress: sanitize(c.deployer_address),
         deploymentTxHash: sanitize(c.deployment_tx_hash),
         deploymentBlock: c.deployment_block ?? null,
-        deploymentTimestamp: null, // backfilled separately via backfill-completeness
+        deploymentTimestamp: null, // backfilled separately via block metadata
         decompiledCode: null,      // post-process via decompile-missing.py
         decompilationSuccess: false,
-        gasUsed: null,
+        gasUsed: c.gas_used ? parseInt(c.gas_used, 16) : null,
         gasPrice: null,
         codeSizeBytes: c.code_size_bytes ?? null,
         eraId: c.era_id ?? getEraId(c.deployment_block),
@@ -140,20 +162,21 @@ async function main() {
         tokenName: null,
         tokenSymbol: null,
         tokenDecimals: null,
+        deployStatus: c.deploy_status === "0x1" ? "success" : c.deploy_status === "0x0" ? "failed" : null,
       });
     }
 
     if (isDryRun) {
-      console.log(`  [DRY RUN] Would insert batch ${Math.floor(i / BATCH_SIZE) + 1}: ${rows.length} rows`);
+      console.log(`  [DRY RUN] Would insert batch ${batchIndex}: ${rows.length} rows`);
       imported += rows.length;
-      continue;
+      return;
     }
 
     try {
       await db.insert(schema.contracts).values(rows).onConflictDoNothing();
       imported += rows.length;
     } catch (err) {
-      console.error(`  Batch error at ${i}:`, err);
+      console.error(`  Batch error at row ${processedCanonicalRows}:`, err);
       // Row-by-row fallback
       for (const row of rows) {
         try {
@@ -165,9 +188,26 @@ async function main() {
       }
     }
 
-    if ((i + BATCH_SIZE) % 1000 === 0) {
-      console.log(`  Progress: ${imported}/${toProcess.length} imported`);
+    if (processedCanonicalRows % 1000 === 0) {
+      console.log(`  Progress: ${imported}/${Math.min(canonicalCount, maxRows)} imported`);
     }
+  }
+
+  for await (const c of readJsonl(canonicalFile)) {
+    if (processedCanonicalRows >= maxRows) break;
+    batch.push(c);
+    processedCanonicalRows++;
+
+    if (batch.length >= BATCH_SIZE) {
+      batchIndex++;
+      await handleBatch(batch);
+      batch = [];
+    }
+  }
+
+  if (batch.length > 0) {
+    batchIndex++;
+    await handleBatch(batch);
   }
 
   console.log(`\nCanonicals: ${imported} imported, ${skipped} skipped`);

@@ -167,70 +167,124 @@ export async function searchUnifiedFromDb(
   const q = query.trim();
   const pattern = `%${q}%`;
   const qLower = q.toLowerCase();
+  const fetchLimit = Math.max(limit + offset + 40, 80);
 
-  const matchTypeExpr = sql<UnifiedMatchType>`CASE
-    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN 'address'
-    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN 'token_name'
-    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN 'token_symbol'
-    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN 'contract_name'
-    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN 'decompiled_code'
-    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN 'source_code'
-    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN 'abi'
-    ELSE 'address'
-  END`;
-
-  const matchRankExpr = sql<number>`CASE
-    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN 1
-    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN 2
-    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN 3
-    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN 4
-    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN 5
-    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN 6
-    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN 7
-    ELSE 99
-  END`;
-
-  const snippetExpr = sql<string | null>`CASE
-    WHEN ${schema.contracts.tokenName} ILIKE ${pattern} THEN ${schema.contracts.tokenName}
-    WHEN ${schema.contracts.tokenSymbol} ILIKE ${pattern} THEN ${schema.contracts.tokenSymbol}
-    WHEN ${schema.contracts.etherscanContractName} ILIKE ${pattern} THEN ${schema.contracts.etherscanContractName}
-    WHEN ${schema.contracts.decompiledCode} ILIKE ${pattern} THEN substring(${schema.contracts.decompiledCode} from greatest(strpos(lower(${schema.contracts.decompiledCode}), ${qLower}) - 40, 1) for 140)
-    WHEN ${schema.contracts.sourceCode} ILIKE ${pattern} THEN substring(${schema.contracts.sourceCode} from greatest(strpos(lower(${schema.contracts.sourceCode}), ${qLower}) - 40, 1) for 140)
-    WHEN ${schema.contracts.abi} ILIKE ${pattern} THEN substring(${schema.contracts.abi} from greatest(strpos(lower(${schema.contracts.abi}), ${qLower}) - 40, 1) for 140)
-    WHEN ${schema.contracts.address} ILIKE ${pattern} THEN ${schema.contracts.address}
-    ELSE NULL
-  END`;
-
-  const rows = await database
-    .select({
-      address: schema.contracts.address,
-      deploymentTimestamp: schema.contracts.deploymentTimestamp,
-      eraId: schema.contracts.eraId,
-      contractType: schema.contracts.contractType,
-      tokenName: schema.contracts.tokenName,
-      tokenSymbol: schema.contracts.tokenSymbol,
-      etherscanContractName: schema.contracts.etherscanContractName,
-      hasSourceCode: sql<boolean>`(${schema.contracts.sourceCode} is not null and length(${schema.contracts.sourceCode}) > 0)`,
-      decompilationSuccess: schema.contracts.decompilationSuccess,
-      matchType: matchTypeExpr,
-      matchSnippet: snippetExpr,
-      matchRank: matchRankExpr,
-    })
-    .from(schema.contracts)
-    .where(
-      or(
-        ilike(schema.contracts.address, pattern),
-        ilike(schema.contracts.tokenName, pattern),
-        ilike(schema.contracts.tokenSymbol, pattern),
-        ilike(schema.contracts.etherscanContractName, pattern),
-        ilike(schema.contracts.decompiledCode, pattern),
-        ilike(schema.contracts.sourceCode, pattern),
-        ilike(schema.contracts.abi, pattern)
-      )
+  const identifierCandidates = await database.execute(sql`
+    WITH ranked AS (
+      SELECT
+        c.address,
+        c.deployment_timestamp,
+        c.era_id,
+        c.contract_type,
+        c.token_name,
+        c.token_symbol,
+        c.etherscan_contract_name,
+        (c.source_code IS NOT NULL AND length(c.source_code) > 0) as has_source_code,
+        c.decompilation_success,
+        CASE
+          WHEN c.token_name ILIKE ${pattern} THEN 'token_name'
+          WHEN c.token_symbol ILIKE ${pattern} THEN 'token_symbol'
+          WHEN c.etherscan_contract_name ILIKE ${pattern} THEN 'contract_name'
+          WHEN c.address ILIKE ${pattern} THEN 'address'
+          ELSE 'address'
+        END as match_type,
+        CASE
+          WHEN c.token_name ILIKE ${pattern} THEN c.token_name
+          WHEN c.token_symbol ILIKE ${pattern} THEN c.token_symbol
+          WHEN c.etherscan_contract_name ILIKE ${pattern} THEN c.etherscan_contract_name
+          WHEN c.address ILIKE ${pattern} THEN c.address
+          ELSE NULL
+        END as match_snippet,
+        CASE
+          WHEN c.token_name ILIKE ${pattern} THEN 1
+          WHEN c.token_symbol ILIKE ${pattern} THEN 2
+          WHEN c.etherscan_contract_name ILIKE ${pattern} THEN 3
+          WHEN c.address ILIKE ${pattern} THEN 7
+          ELSE 99
+        END as match_rank
+      FROM contracts c
+      WHERE c.address ILIKE ${pattern}
+         OR c.token_name ILIKE ${pattern}
+         OR c.token_symbol ILIKE ${pattern}
+         OR c.etherscan_contract_name ILIKE ${pattern}
     )
-    .orderBy(asc(matchRankExpr), asc(schema.contracts.deploymentTimestamp), asc(schema.contracts.address))
-    .limit(limit)
-    .offset(offset);
+    SELECT * FROM ranked
+    ORDER BY match_rank ASC, deployment_timestamp ASC, address ASC
+    LIMIT ${fetchLimit}
+  `) as any[];
+
+  const identifierRows = (identifierCandidates as any).rows ?? identifierCandidates;
+  const seen = new Set<string>();
+  const combined: any[] = [];
+
+  for (const row of identifierRows) {
+    const addr = String(row.address).toLowerCase();
+    if (seen.has(addr)) continue;
+    seen.add(addr);
+    combined.push(row);
+  }
+
+  if (combined.length < fetchLimit) {
+    const textCandidates = await database.execute(sql`
+      WITH ranked AS (
+        SELECT
+          c.address,
+          c.deployment_timestamp,
+          c.era_id,
+          c.contract_type,
+          c.token_name,
+          c.token_symbol,
+          c.etherscan_contract_name,
+          (c.source_code IS NOT NULL AND length(c.source_code) > 0) as has_source_code,
+          c.decompilation_success,
+          CASE
+            WHEN c.decompiled_code ILIKE ${pattern} THEN 'decompiled_code'
+            WHEN c.source_code ILIKE ${pattern} THEN 'source_code'
+            WHEN c.abi ILIKE ${pattern} THEN 'abi'
+            ELSE 'address'
+          END as match_type,
+          CASE
+            WHEN c.decompiled_code ILIKE ${pattern} THEN substring(c.decompiled_code from greatest(strpos(lower(c.decompiled_code), ${qLower}) - 40, 1) for 140)
+            WHEN c.source_code ILIKE ${pattern} THEN substring(c.source_code from greatest(strpos(lower(c.source_code), ${qLower}) - 40, 1) for 140)
+            WHEN c.abi ILIKE ${pattern} THEN substring(c.abi from greatest(strpos(lower(c.abi), ${qLower}) - 40, 1) for 140)
+            ELSE NULL
+          END as match_snippet,
+          CASE
+            WHEN c.decompiled_code ILIKE ${pattern} THEN 4
+            WHEN c.source_code ILIKE ${pattern} THEN 5
+            WHEN c.abi ILIKE ${pattern} THEN 6
+            ELSE 99
+          END as match_rank
+        FROM contracts c
+        WHERE c.decompiled_code ILIKE ${pattern}
+           OR c.source_code ILIKE ${pattern}
+           OR c.abi ILIKE ${pattern}
+      )
+      SELECT * FROM ranked
+      ORDER BY match_rank ASC, deployment_timestamp ASC, address ASC
+      LIMIT ${fetchLimit}
+    `) as any[];
+
+    const textRows = (textCandidates as any).rows ?? textCandidates;
+    for (const row of textRows) {
+      const addr = String(row.address).toLowerCase();
+      if (seen.has(addr)) continue;
+      seen.add(addr);
+      combined.push(row);
+      if (combined.length >= fetchLimit) break;
+    }
+  }
+
+  combined.sort((a, b) => {
+    const rankDiff = Number(a.match_rank) - Number(b.match_rank);
+    if (rankDiff !== 0) return rankDiff;
+    const aTs = a.deployment_timestamp ? new Date(a.deployment_timestamp).getTime() : Number.MAX_SAFE_INTEGER;
+    const bTs = b.deployment_timestamp ? new Date(b.deployment_timestamp).getTime() : Number.MAX_SAFE_INTEGER;
+    if (aTs !== bTs) return aTs - bTs;
+    return String(a.address).localeCompare(String(b.address));
+  });
+
+  const rows = combined.slice(offset, offset + limit);
 
   return rows.map((r) => {
     const title =

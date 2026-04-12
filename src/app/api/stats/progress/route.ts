@@ -10,12 +10,40 @@
 import { NextResponse } from "next/server";
 import { isDatabaseConfigured, getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
-import { sql, eq, and, isNotNull, ne } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
-const YEARS = [2015, 2016, 2017] as const;
+const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+const YEARS = [2015, 2016, 2017, 2018] as const;
+const DOCUMENTED_CONDITION = sql`(
+  (short_description IS NOT NULL AND short_description != '')
+  OR verification_method IS NOT NULL
+  OR (
+    canonical_address IS NOT NULL
+    AND canonical_address IN (
+      SELECT address FROM contracts
+      WHERE (short_description IS NOT NULL AND short_description != '')
+         OR verification_method IS NOT NULL
+    )
+  )
+  OR (
+    deployed_bytecode_hash IS NOT NULL
+    AND deployed_bytecode_hash IN (
+      SELECT DISTINCT deployed_bytecode_hash FROM contracts
+      WHERE (short_description IS NOT NULL AND short_description != '')
+         OR verification_method IS NOT NULL
+    )
+  )
+  OR (
+    runtime_bytecode_hash IS NOT NULL
+    AND runtime_bytecode_hash IN (
+      SELECT DISTINCT runtime_bytecode_hash FROM contracts
+      WHERE (short_description IS NOT NULL AND short_description != '')
+         OR verification_method IS NOT NULL
+    )
+  )
+)`;
 
 export async function GET(): Promise<NextResponse> {
   if (!isDatabaseConfigured()) {
@@ -42,54 +70,24 @@ export async function GET(): Promise<NextResponse> {
       totalEditsResult,
       ...rest
     ] = await Promise.all([
-      // Overall total (contracts with recorded bytecode only)
+      db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(schema.contracts),
+
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contracts)
-        ,
+        .where(DOCUMENTED_CONDITION),
 
-      // Overall documented: has description, is verified (any method), or is a verified sibling
-      db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contracts)
-        .where(
-          sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`
-        ),
-
-      // Active historian count
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.historians)
         .where(eq(schema.historians.active, true)),
 
-      // Total edits
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.contractEdits),
 
-      // Per-era: total then documented for each era (total = contracts with recorded bytecode)
       ...ERA_IDS.flatMap((eraId) => [
         db
           .select({ count: sql<number>`COUNT(*)::int` })
@@ -98,73 +96,21 @@ export async function GET(): Promise<NextResponse> {
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
-          .where(
-            and(
-              eq(schema.contracts.eraId, eraId),
-              sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`
-            )
-          ),
+          .where(and(eq(schema.contracts.eraId, eraId), DOCUMENTED_CONDITION)),
       ]),
 
-      // Per-year: total then documented for each year (total = contracts with recorded bytecode)
       ...YEARS.flatMap((year) => [
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
-          .where(
-            sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`
-          ),
+          .where(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`),
         db
           .select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.contracts)
           .where(
             and(
               sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
-              sql`(
-                (short_description IS NOT NULL AND short_description != '')
-                OR verification_method IS NOT NULL
-                OR canonical_address IS NOT NULL
-                OR (
-                  deployed_bytecode_hash IS NOT NULL
-                  AND deployed_bytecode_hash IN (
-                    SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-                OR (
-                  runtime_bytecode_hash IS NOT NULL
-                  AND runtime_bytecode_hash IN (
-                    SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                    WHERE (short_description IS NOT NULL AND short_description != '')
-                       OR verification_method IS NOT NULL
-                       OR canonical_address IS NOT NULL
-                  )
-                )
-              )`
+              DOCUMENTED_CONDITION
             )
           ),
       ]),
@@ -180,7 +126,6 @@ export async function GET(): Promise<NextResponse> {
       totalEdits: totalEditsResult[0]?.count ?? 0,
     };
 
-    // Parse era results (first 10 items in rest)
     const eraResults = rest.slice(0, ERA_IDS.length * 2);
     const byEra: Record<string, { total: number; documented: number }> = {};
     ERA_IDS.forEach((eraId, i) => {
@@ -192,7 +137,6 @@ export async function GET(): Promise<NextResponse> {
       };
     });
 
-    // Parse year results (next 6 items in rest)
     const yearResults = rest.slice(ERA_IDS.length * 2);
     const byYear: Record<number, { total: number; documented: number }> = {};
     YEARS.forEach((year, i) => {
