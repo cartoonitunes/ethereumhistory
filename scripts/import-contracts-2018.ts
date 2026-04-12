@@ -220,15 +220,11 @@ async function main() {
         // Siblings get minimal rows — block/deployer data from sibling_groups.jsonl
         // The canonical_address links them for sibling detection
         try {
-          await db.execute(
-            schema.contracts.address
-              ? client`
-                  UPDATE contracts
-                  SET canonical_address = ${canonical}
-                  WHERE address = ${sibAddr}
-                `
-              : client`SELECT 1` // no-op if column doesn't exist yet
-          );
+          await client`
+            UPDATE contracts
+            SET canonical_address = ${canonical}
+            WHERE address = ${sibAddr}
+          `;
           siblingsImported++;
         } catch {
           // Sibling may not be in DB yet — that's OK
