@@ -552,7 +552,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
 
   const outOfRange = year != null && year >= 2018;
   let archiveNotice = outOfRange
-    ? "This contract appears to have been deployed in 2018 or later. Ethereum History is currently logging 2015–2017; newer years will be added in the future."
+    ? "This contract appears to have been deployed after 2018. Ethereum History currently covers 2015–2018, with newer years to be added in the future."
     : null;
 
   const era = deploymentBlock != null ? getEraFromBlock(deploymentBlock) : null;

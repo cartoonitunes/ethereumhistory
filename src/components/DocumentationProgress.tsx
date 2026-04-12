@@ -19,8 +19,8 @@ interface DocumentationProgressProps {
   filterYear?: string;
 }
 
-const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
-const YEARS = ["2015", "2016", "2017"] as const;
+const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+const YEARS = ["2015", "2016", "2017", "2018"] as const;
 
 const ERA_COLORS: Record<string, string> = {
   frontier: "#8b5cf6",
@@ -28,12 +28,14 @@ const ERA_COLORS: Record<string, string> = {
   dao: "#ef4444",
   tangerine: "#f97316",
   spurious: "#eab308",
+  byzantium: "#10b981",
 };
 
 const YEAR_COLORS: Record<string, string> = {
   "2015": "#8b5cf6",
   "2016": "#3b82f6",
   "2017": "#f97316",
+  "2018": "#10b981",
 };
 
 function percentage(documented: number, total: number): number {
@@ -150,7 +152,7 @@ function HomepageProgress({ stats }: { stats: ProgressStats }) {
                 if (!yearStats) return null;
                 const yPct = percentage(yearStats.documented, yearStats.total);
                 return (
-                  <div key={year}>
+                  <div key={year} data-year-row={year}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: YEAR_COLORS[year] }} />
@@ -300,6 +302,7 @@ function BrowseProgress({
               return (
                 <div
                   key={year}
+                  data-year-row={year}
                   className={
                     isHighlighted
                       ? "bg-obsidian-800/40 rounded-lg p-3 -mx-1"

@@ -57,8 +57,9 @@ const YEAR_COLORS: Record<string, string> = {
   "2015": "#8b5cf6",
   "2016": "#3b82f6",
   "2017": "#f97316",
+  "2018": "#10b981",
 };
-const YEARS = ["2015", "2016", "2017"] as const;
+const YEARS = ["2015", "2016", "2017", "2018"] as const;
 
 function percentage(documented: number, total: number): number {
   if (total === 0) return 0;
@@ -384,7 +385,7 @@ export default function HomePageClient({
                       This Week in Ethereum History
                     </h3>
                     <p className="text-xs text-obsidian-500">
-                      Contracts deployed this same week in 2015-2017
+                      Contracts deployed this same week in 2015-2018
                     </p>
                   </div>
                 </div>
@@ -593,7 +594,7 @@ export default function HomePageClient({
             <div className="prose prose-invert mx-auto text-obsidian-400">
               <p className="text-lg mb-4">
                 ethereumhistory.com is a historical archive and analysis tool for
-                Ethereum smart contracts, with a focus on the 2015-2017 era when
+                Ethereum smart contracts, with a focus on the 2015-2018 era when
                 standards were still forming.
               </p>
 

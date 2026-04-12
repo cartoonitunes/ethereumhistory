@@ -12,7 +12,7 @@ import { ERAS, CAPABILITY_CATEGORIES } from "@/types";
 import { getContractTypeLabel } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
 
-const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
+const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
 
 interface BrowseContract {
   address: string;
@@ -245,6 +245,7 @@ function BrowseContent() {
                               <option value="2015">2015</option>
                               <option value="2016">2016</option>
                               <option value="2017">2017</option>
+                              <option value="2018">2018</option>
                             </select>
                           </label>
                           <label className="flex flex-col gap-1.5 text-sm">

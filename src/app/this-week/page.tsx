@@ -89,7 +89,7 @@ export default function ThisWeekPage() {
                 <span className="text-obsidian-200 font-medium">
                   {data.weekRange}
                 </span>{" "}
-                in 2015-2017
+                in 2015-2018
               </p>
             )}
             {loading && (
@@ -119,7 +119,7 @@ export default function ThisWeekPage() {
             >
               <Clock className="w-10 h-10 text-obsidian-600 mx-auto mb-4" />
               <p className="text-obsidian-400 mb-2">
-                No contracts were deployed during this week in 2015-2017.
+                No contracts were deployed during this week in 2015-2018.
               </p>
               <p className="text-sm text-obsidian-500">
                 Check back next week for a different slice of Ethereum history.

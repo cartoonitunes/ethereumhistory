@@ -195,7 +195,7 @@ export default function ApiDocsPage() {
                   </thead>
                   <tbody className="text-obsidian-300">
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">q</td><td>string</td><td>Text search across contract name, token name, symbol, address, and decompiled code</td></tr>
-                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">era_id</td><td>string</td><td>frontier, homestead, dao, tangerine, spurious</td></tr>
+                    <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">era_id</td><td>string</td><td>frontier, homestead, dao, tangerine, spurious, byzantium</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">featured</td><td>string</td><td>true or 1 = featured only</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">undocumented_only</td><td>string</td><td>true or 1 = no short_description yet</td></tr>
                     <tr className="border-b border-obsidian-800/80"><td className="py-2 px-4 font-mono text-ether-300">unverified</td><td>string</td><td>1 = only contracts with no verification method set (prioritize crack candidates)</td></tr>

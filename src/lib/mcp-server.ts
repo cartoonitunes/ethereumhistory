@@ -63,7 +63,7 @@ export function createMcpServer(): McpServer {
           content: [
             {
               type: "text" as const,
-              text: `Contract ${address} not found in our historical archive (2015-2017 era contracts).`,
+              text: `Contract ${address} not found in our historical archive (2015-2018 era contracts).`,
             },
           ],
           isError: true,
@@ -208,7 +208,7 @@ export function createMcpServer(): McpServer {
   // Tool: Browse contracts with filters
   server.tool(
     "browse_contracts",
-    "Browse documented historical Ethereum contracts with filters. Filter by era (frontier, homestead, dao-fork, etc.), contract type (token, multisig, crowdsale, dao, etc.), or deployment year (2015-2017).",
+    "Browse documented historical Ethereum contracts with filters. Filter by era (frontier, homestead, dao-fork, byzantium, etc.), contract type (token, multisig, crowdsale, dao, etc.), or deployment year (2015-2018).",
     {
       era: z
         .enum(["frontier", "homestead", "dao-fork", "tangerine-whistle", "spurious-dragon"])
@@ -222,7 +222,7 @@ export function createMcpServer(): McpServer {
         .number()
         .int()
         .min(2015)
-        .max(2017)
+        .max(2018)
         .optional()
         .describe("Filter by deployment year"),
       page: z.number().int().min(1).default(1).optional().describe("Page number"),

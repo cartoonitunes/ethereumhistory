@@ -63,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     eraId: era || null,
     contractType: type || null,
     codeQuery: q || null,
-    year: year && year >= 2015 && year <= 2017 ? year : null,
+    year: year && year >= 2015 && year <= 2018 ? year : null,
     capabilityKeys: capabilityKeys.length > 0 ? capabilityKeys : null,
     verification: verification || null,
     registrar: (registrar as "any" | "GlobalRegistrar" | "LinageeRegistrar" | "NameRegistry" | null) || null,

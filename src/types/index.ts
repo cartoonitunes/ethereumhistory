@@ -72,6 +72,26 @@ export const ERAS: Record<string, EthereumEra> = {
     description: "Continued DoS protection. State trie clearing.",
     color: "#eab308",
   },
+  byzantium: {
+    id: "byzantium",
+    name: "Byzantium",
+    startBlock: 4370000,
+    endBlock: 7279999,
+    startDate: "2017-10-16",
+    endDate: "2019-02-28",
+    description: "First Metropolis hard fork. Added zk-SNARK precompiles, REVERT opcode, and staticcall.",
+    color: "#10b981",
+  },
+  constantinople: {
+    id: "constantinople",
+    name: "Constantinople",
+    startBlock: 7280000,
+    endBlock: null,
+    startDate: "2019-02-28",
+    endDate: null,
+    description: "Second Metropolis hard fork. Added CREATE2, bitwise shifting opcodes, and cheaper SSTORE.",
+    color: "#6366f1",
+  },
 };
 
 export function getEraFromBlock(blockNumber: number): EthereumEra | null {
