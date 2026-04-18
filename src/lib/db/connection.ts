@@ -29,9 +29,14 @@ export function getDb() {
       throw new Error("POSTGRES_URL (or DATABASE_URL) not configured");
     }
 
-    // In serverless, keep pool tiny to avoid connection explosion
+    // In serverless, use a very small pool to avoid connection explosion across lambdas.
     // For Neon pooler/pgbouncer, disable prepared statements.
-    const client = postgres(dbUrl, { max: 10, prepare: !isPoolerUrl(dbUrl) });
+    const client = postgres(dbUrl, {
+      max: 1,
+      idle_timeout: 5,
+      connect_timeout: 10,
+      prepare: !isPoolerUrl(dbUrl),
+    });
     db = drizzlePostgres(client, { schema });
   }
   return db;
