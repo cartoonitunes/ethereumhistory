@@ -75,8 +75,17 @@ ANALYZE _doc_seed;
 
 -- The full set of addresses that should have is_documented=TRUE. Populated by
 -- expanding the seed along each of the 6 "sibling" paths from the trigger.
+--
+-- `processed` is flipped to TRUE as each address is applied by the batched
+-- UPDATE below. Flagging (rather than deleting) keeps the full set available
+-- to the safety-sweep step, which needs to know every "should be TRUE"
+-- address to correctly reset rows that shouldn't be TRUE anymore.
 DROP TABLE IF EXISTS _doc_addresses;
-CREATE TEMP TABLE _doc_addresses (address TEXT PRIMARY KEY);
+CREATE TEMP TABLE _doc_addresses (
+  address TEXT PRIMARY KEY,
+  processed BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX ON _doc_addresses (processed) WHERE processed = FALSE;
 
 -- P1: self-documented (seed itself)
 INSERT INTO _doc_addresses (address)
@@ -85,10 +94,15 @@ ON CONFLICT DO NOTHING;
 
 -- P2: contracts whose canonical_address points to a self-documented contract
 --     ( trigger path: s.address = c.canonical_address )
+-- Uses EXISTS (semi-join) rather than INNER JOIN to avoid a row explosion
+-- when the same hash/address appears in _doc_seed multiple times. JOIN would
+-- produce N×M duplicate rows that all funnel through ON CONFLICT; the
+-- semi-join dedupes upfront so we only INSERT each contract row once.
 INSERT INTO _doc_addresses (address)
 SELECT c.address
 FROM contracts c
-INNER JOIN _doc_seed s ON c.canonical_address = s.address
+WHERE c.canonical_address IS NOT NULL
+  AND EXISTS (SELECT 1 FROM _doc_seed s WHERE s.address = c.canonical_address)
 ON CONFLICT DO NOTHING;
 
 -- P3: the canonical_address referenced BY a self-documented contract
@@ -104,45 +118,108 @@ ON CONFLICT DO NOTHING;
 INSERT INTO _doc_addresses (address)
 SELECT c.address
 FROM contracts c
-INNER JOIN _doc_seed s
-  ON c.canonical_address = s.canonical_address
 WHERE c.canonical_address IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM _doc_seed s
+    WHERE s.canonical_address = c.canonical_address
+  )
 ON CONFLICT DO NOTHING;
 
 -- P5: bytecode siblings by deployed_bytecode_hash
 INSERT INTO _doc_addresses (address)
 SELECT c.address
 FROM contracts c
-INNER JOIN _doc_seed s
-  ON c.deployed_bytecode_hash = s.deployed_bytecode_hash
 WHERE c.deployed_bytecode_hash IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM _doc_seed s
+    WHERE s.deployed_bytecode_hash = c.deployed_bytecode_hash
+  )
 ON CONFLICT DO NOTHING;
 
 -- P6: bytecode siblings by runtime_bytecode_hash
 INSERT INTO _doc_addresses (address)
 SELECT c.address
 FROM contracts c
-INNER JOIN _doc_seed s
-  ON c.runtime_bytecode_hash = s.runtime_bytecode_hash
 WHERE c.runtime_bytecode_hash IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM _doc_seed s
+    WHERE s.runtime_bytecode_hash = c.runtime_bytecode_hash
+  )
 ON CONFLICT DO NOTHING;
 
 ANALYZE _doc_addresses;
 
--- Apply the flag. Only touches rows that actually need to flip (keeps WAL
--- small, and makes re-runs cheap if a prior attempt partially succeeded).
-UPDATE contracts
-SET is_documented = TRUE
-WHERE is_documented = FALSE
-  AND address IN (SELECT address FROM _doc_addresses);
+-- Apply the flag in batches with per-batch COMMITs. On Neon (separated
+-- storage), a single UPDATE touching hundreds of thousands of rows with 4
+-- indexes apiece takes far too long as one statement — the WAL, locks, and
+-- page-server I/O all accumulate. Batching keeps each UPDATE small so
+-- progress is visible (the stats widget will climb during the run) and the
+-- site stays responsive.
+--
+-- Each iteration flags 50k not-yet-processed addresses in _doc_addresses and
+-- UPDATEs the matching contracts rows. Using a `processed` flag rather than
+-- draining the table keeps the full source available for the safety-sweep
+-- step below. The partial index `WHERE processed = FALSE` makes each batch's
+-- LIMIT pick up fresh rows in O(batch_size).
+DO $$
+DECLARE
+  batch_size INT := 50000;
+  rows_flipped INT;
+  total_flipped INT := 0;
+  batch_num INT := 0;
+BEGIN
+  LOOP
+    batch_num := batch_num + 1;
+    WITH batch AS (
+      UPDATE _doc_addresses
+      SET processed = TRUE
+      WHERE ctid IN (
+        SELECT ctid FROM _doc_addresses WHERE processed = FALSE LIMIT batch_size
+      )
+      RETURNING address
+    )
+    UPDATE contracts
+    SET is_documented = TRUE
+    FROM batch
+    WHERE contracts.address = batch.address
+      AND contracts.is_documented = FALSE;
+    GET DIAGNOSTICS rows_flipped = ROW_COUNT;
+    total_flipped := total_flipped + rows_flipped;
+    RAISE NOTICE 'Batch %: flipped %, running total %', batch_num, rows_flipped, total_flipped;
+    COMMIT;
+    EXIT WHEN rows_flipped = 0;
+  END LOOP;
+  RAISE NOTICE 'Done — % rows flipped to TRUE across % batches', total_flipped, batch_num;
+END $$;
 
 -- Safety sweep for re-runs: if a previous run marked rows TRUE that are no
 -- longer in the computed set (e.g. a description was cleared), reset them.
--- Uses NOT EXISTS for an index-friendly anti-join instead of NOT IN.
-UPDATE contracts c
-SET is_documented = FALSE
-WHERE c.is_documented = TRUE
-  AND NOT EXISTS (SELECT 1 FROM _doc_addresses a WHERE a.address = c.address);
+-- Batched same as above. Expect zero work on a clean first run.
+DO $$
+DECLARE
+  batch_size INT := 50000;
+  rows_flipped INT;
+  total_flipped INT := 0;
+  batch_num INT := 0;
+BEGIN
+  LOOP
+    batch_num := batch_num + 1;
+    UPDATE contracts
+    SET is_documented = FALSE
+    WHERE ctid IN (
+      SELECT c.ctid
+      FROM contracts c
+      WHERE c.is_documented = TRUE
+        AND NOT EXISTS (SELECT 1 FROM _doc_addresses a WHERE a.address = c.address)
+      LIMIT batch_size
+    );
+    GET DIAGNOSTICS rows_flipped = ROW_COUNT;
+    total_flipped := total_flipped + rows_flipped;
+    COMMIT;
+    EXIT WHEN rows_flipped = 0;
+    RAISE NOTICE 'Sweep batch %: cleared %, total %', batch_num, rows_flipped, total_flipped;
+  END LOOP;
+END $$;
 
 -- ============================================================================
 -- Trigger: recompute is_documented for the whole sibling cluster of the row
