@@ -76,88 +76,111 @@ async function getProgressStats(): Promise<ProgressStats | null> {
       CACHE_TTL.MEDIUM,
       async () => {
         const db = getDb();
-        const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
-        const YEARS = [2015, 2016, 2017, 2018] as const;
-        const DOCUMENTED_CONDITION = sql`(
-          (short_description IS NOT NULL AND short_description != '')
-          OR verification_method IS NOT NULL
-          OR (
-            canonical_address IS NOT NULL
-            AND canonical_address IN (
-              SELECT address FROM contracts
-              WHERE (short_description IS NOT NULL AND short_description != '')
-                 OR verification_method IS NOT NULL
-            )
-          )
-          OR (
-            deployed_bytecode_hash IS NOT NULL
-            AND deployed_bytecode_hash IN (
-              SELECT DISTINCT deployed_bytecode_hash FROM contracts
-              WHERE (short_description IS NOT NULL AND short_description != '')
-                 OR verification_method IS NOT NULL
-            )
-          )
-          OR (
-            runtime_bytecode_hash IS NOT NULL
-            AND runtime_bytecode_hash IN (
-              SELECT DISTINCT runtime_bytecode_hash FROM contracts
-              WHERE (short_description IS NOT NULL AND short_description != '')
-                 OR verification_method IS NOT NULL
-            )
-          )
-        )`;
+        const ERA_IDS = new Set([
+          "frontier",
+          "homestead",
+          "dao",
+          "tangerine",
+          "spurious",
+          "byzantium",
+        ]);
+        const YEARS = new Set([2015, 2016, 2017, 2018]);
 
-        const [
-          overallTotalResult,
-          overallDocumentedResult,
-          historianCountResult,
-          totalEditsResult,
-          ...rest
-        ] = await Promise.all([
-          db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-            ,
-          db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-            .where(DOCUMENTED_CONDITION),
-          db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.historians)
+        // One aggregation query with GROUPING SETS replaces the previous 22 count
+        // queries. The pool is sized to max:1 on serverless, so fewer round trips
+        // directly translates to the homepage fitting inside Vercel's function budget.
+        const aggregationRows = await db.execute<{
+          era_id: string | null;
+          year: number | null;
+          total: number;
+          documented: number;
+          grouping_bits: number;
+        }>(sql`
+          WITH documented_addresses AS (
+            SELECT DISTINCT c.address
+            FROM contracts c
+            WHERE (c.short_description IS NOT NULL AND c.short_description <> '')
+               OR c.verification_method IS NOT NULL
+               OR c.canonical_address IN (
+                 SELECT address FROM contracts
+                 WHERE (short_description IS NOT NULL AND short_description <> '')
+                    OR verification_method IS NOT NULL
+               )
+               OR (c.deployed_bytecode_hash IS NOT NULL
+                   AND c.deployed_bytecode_hash IN (
+                     SELECT DISTINCT deployed_bytecode_hash FROM contracts
+                     WHERE deployed_bytecode_hash IS NOT NULL
+                       AND ((short_description IS NOT NULL AND short_description <> '')
+                         OR verification_method IS NOT NULL)
+                   ))
+               OR (c.runtime_bytecode_hash IS NOT NULL
+                   AND c.runtime_bytecode_hash IN (
+                     SELECT DISTINCT runtime_bytecode_hash FROM contracts
+                     WHERE runtime_bytecode_hash IS NOT NULL
+                       AND ((short_description IS NOT NULL AND short_description <> '')
+                         OR verification_method IS NOT NULL)
+                   ))
+          )
+          SELECT
+            c.era_id,
+            EXTRACT(YEAR FROM c.deployment_timestamp)::int AS year,
+            COUNT(*)::int AS total,
+            COUNT(da.address)::int AS documented,
+            GROUPING(c.era_id, EXTRACT(YEAR FROM c.deployment_timestamp))::int AS grouping_bits
+          FROM contracts c
+          LEFT JOIN documented_addresses da ON c.address = da.address
+          GROUP BY GROUPING SETS (
+            (),
+            (c.era_id),
+            (EXTRACT(YEAR FROM c.deployment_timestamp))
+          )
+        `);
+
+        const [historianCountResult, totalEditsResult] = await Promise.all([
+          db.select({ count: sql<number>`COUNT(*)::int` })
+            .from(schema.historians)
             .where(eq(schema.historians.active, true)),
-          db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contractEdits),
-          ...ERA_IDS.flatMap((eraId) => [
-            db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(eq(schema.contracts.eraId, eraId))),
-            db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(eq(schema.contracts.eraId, eraId), DOCUMENTED_CONDITION)),
-          ]),
-          ...YEARS.flatMap((year) => [
-            db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`)),
-            db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contracts)
-              .where(and(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`, DOCUMENTED_CONDITION)),
-          ]),
+          db.select({ count: sql<number>`COUNT(*)::int` })
+            .from(schema.contractEdits),
         ]);
 
-        const eraResults = rest.slice(0, ERA_IDS.length * 2);
+        // GROUPING(era_id, year) returns a bit mask where 1 = aggregated away, 0 = part of grouping.
+        // With the most significant bit = era_id, least significant = year:
+        //   - bits = 0b11 (3) → both aggregated → overall totals
+        //   - bits = 0b01 (1) → era grouped, year aggregated → per-era totals
+        //   - bits = 0b10 (2) → year grouped, era aggregated → per-year totals
+        let overall = { total: 0, documented: 0 };
         const byEra: Record<string, { total: number; documented: number }> = {};
-        ERA_IDS.forEach((eraId, i) => {
-          byEra[eraId] = {
-            total: eraResults[i * 2][0]?.count ?? 0,
-            documented: eraResults[i * 2 + 1][0]?.count ?? 0,
-          };
-        });
-
-        const yearResults = rest.slice(ERA_IDS.length * 2);
         const byYear: Record<string, { total: number; documented: number }> = {};
-        YEARS.forEach((year, i) => {
-          byYear[String(year)] = {
-            total: yearResults[i * 2][0]?.count ?? 0,
-            documented: yearResults[i * 2 + 1][0]?.count ?? 0,
-          };
-        });
+
+        for (const eraId of ERA_IDS) byEra[eraId] = { total: 0, documented: 0 };
+        for (const year of YEARS) byYear[String(year)] = { total: 0, documented: 0 };
+
+        const rows = Array.isArray(aggregationRows)
+          ? aggregationRows
+          : ((aggregationRows as { rows?: typeof aggregationRows }).rows ?? []);
+
+        for (const row of rows as Array<{
+          era_id: string | null;
+          year: number | null;
+          total: number | string;
+          documented: number | string;
+          grouping_bits: number | string;
+        }>) {
+          const total = Number(row.total);
+          const documented = Number(row.documented);
+          const bits = Number(row.grouping_bits);
+          if (bits === 3) {
+            overall = { total, documented };
+          } else if (bits === 1 && row.era_id && ERA_IDS.has(row.era_id)) {
+            byEra[row.era_id] = { total, documented };
+          } else if (bits === 2 && row.year !== null && YEARS.has(Number(row.year))) {
+            byYear[String(row.year)] = { total, documented };
+          }
+        }
 
         return {
-          overall: {
-            total: overallTotalResult[0]?.count ?? 0,
-            documented: overallDocumentedResult[0]?.count ?? 0,
-          },
+          overall,
           byEra,
           byYear,
           community: {
@@ -228,6 +251,28 @@ async function getFeaturedList(): Promise<FeaturedContract[]> {
   }
 }
 
+// Hard cap on any single homepage data fetch. Under the serverless-only pool (max: 1),
+// heavy queries (esp. progressStats) can stall behind each other. If a fetch hasn't
+// returned in this window we give up and render partial content so the page responds
+// instead of tripping Vercel's function timeout.
+const HOMEPAGE_FETCH_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 export default async function HomePage() {
   // Keep the homepage resilient under serverless pressure.
   // If any heavy data source stalls, fall back to partial content instead of timing out the whole site.
@@ -238,23 +283,23 @@ export default async function HomePage() {
     recentEdits,
     contractOfTheDay,
     progressStats,
-  ] = await Promise.allSettled([
-    getFeaturedList(),
-    getMarqueeContracts(),
-    getTopEditorsList(),
-    getRecentEditsList(),
-    getContractOfTheDay(),
-    getProgressStats(),
+  ] = await Promise.all([
+    withTimeout(getFeaturedList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as FeaturedContract[]),
+    withTimeout(getMarqueeContracts(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as MarqueeContract[]),
+    withTimeout(getTopEditorsList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as TopEditor[]),
+    withTimeout(getRecentEditsList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as RecentEdit[]),
+    withTimeout(getContractOfTheDay(), HOMEPAGE_FETCH_TIMEOUT_MS, null as FeaturedContract | null),
+    withTimeout(getProgressStats(), HOMEPAGE_FETCH_TIMEOUT_MS, null as ProgressStats | null),
   ]);
 
   return (
     <HomePageClient
-      featuredContracts={featuredContracts.status === "fulfilled" ? featuredContracts.value : []}
-      marqueeContracts={marqueeContracts.status === "fulfilled" ? marqueeContracts.value : []}
-      topEditors={topEditors.status === "fulfilled" ? topEditors.value : []}
-      recentEdits={recentEdits.status === "fulfilled" ? recentEdits.value : []}
-      contractOfTheDay={contractOfTheDay.status === "fulfilled" ? contractOfTheDay.value : null}
-      progressStats={progressStats.status === "fulfilled" ? progressStats.value : null}
+      featuredContracts={featuredContracts}
+      marqueeContracts={marqueeContracts}
+      topEditors={topEditors}
+      recentEdits={recentEdits}
+      contractOfTheDay={contractOfTheDay}
+      progressStats={progressStats}
     />
   );
 }
