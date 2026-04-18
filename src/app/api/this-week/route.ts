@@ -9,9 +9,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
-import { sql, and, isNotNull } from "drizzle-orm";
+import { sql, or } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
+
+const COVERAGE_YEARS = [2015, 2016, 2017, 2018] as const;
 
 /**
  * Get the Monday and Sunday of the current week.
@@ -41,39 +43,42 @@ function formatShortDate(date: Date): string {
 }
 
 /**
- * Build date range conditions that handle weeks spanning month boundaries.
- * For example, a week from Jan 29 to Feb 4 generates two OR conditions:
- *   (month=1 AND day BETWEEN 29 AND 31) OR (month=2 AND day BETWEEN 1 AND 4)
+ * Project the current week's Mon–Sun date range onto each coverage year,
+ * returning a list of [start, end] timestamp pairs. This gives us a set of
+ * simple `deployment_timestamp BETWEEN start AND end` predicates that the
+ * existing `contracts_deployment_idx` can serve directly — vastly faster
+ * than `EXTRACT(MONTH/DAY/YEAR)` comparisons, which force a full seq scan
+ * because function results aren't indexable.
+ *
+ * Edge case: if the current week spans a year boundary (e.g. Dec 29 – Jan 4),
+ * that produces two disjoint ranges per target year, one anchored at each
+ * end. Handled by returning multiple pairs per year.
  */
-function buildDateRangeConditions(start: Date, end: Date) {
-  const startMonth = start.getMonth() + 1; // 1-indexed
-  const endMonth = end.getMonth() + 1;
-  const startDay = start.getDate();
-  const endDay = end.getDate();
+function buildYearWeekRanges(start: Date, end: Date): Array<{ start: Date; end: Date }> {
+  const ranges: Array<{ start: Date; end: Date }> = [];
+  const spansYearBoundary = end.getMonth() < start.getMonth();
 
-  if (startMonth === endMonth) {
-    // Same month — simple case
-    return sql`(
-      EXTRACT(MONTH FROM ${schema.contracts.deploymentTimestamp}) = ${startMonth}
-      AND EXTRACT(DAY FROM ${schema.contracts.deploymentTimestamp}) BETWEEN ${startDay} AND ${endDay}
-    )`;
+  for (const year of COVERAGE_YEARS) {
+    if (spansYearBoundary) {
+      // Dec tail of this year (start -> Dec 31)
+      const tailStart = new Date(year, start.getMonth(), start.getDate(), 0, 0, 0, 0);
+      const tailEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+      ranges.push({ start: tailStart, end: tailEnd });
+
+      // Jan head of next year (Jan 1 -> end), only if next year still fits
+      // Year boundary weeks are rare, so we just include them here even if
+      // the "next" year is outside coverage — no row matches in that case.
+      const headStart = new Date(year + 1, 0, 1, 0, 0, 0, 0);
+      const headEnd = new Date(year + 1, end.getMonth(), end.getDate(), 23, 59, 59, 999);
+      ranges.push({ start: headStart, end: headEnd });
+    } else {
+      const yearStart = new Date(year, start.getMonth(), start.getDate(), 0, 0, 0, 0);
+      const yearEnd = new Date(year, end.getMonth(), end.getDate(), 23, 59, 59, 999);
+      ranges.push({ start: yearStart, end: yearEnd });
+    }
   }
 
-  // Week spans two months
-  // Get last day of the start month
-  const lastDayOfStartMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
-
-  return sql`(
-    (
-      EXTRACT(MONTH FROM ${schema.contracts.deploymentTimestamp}) = ${startMonth}
-      AND EXTRACT(DAY FROM ${schema.contracts.deploymentTimestamp}) BETWEEN ${startDay} AND ${lastDayOfStartMonth}
-    )
-    OR
-    (
-      EXTRACT(MONTH FROM ${schema.contracts.deploymentTimestamp}) = ${endMonth}
-      AND EXTRACT(DAY FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 1 AND ${endDay}
-    )
-  )`;
+  return ranges;
 }
 
 export async function GET(): Promise<NextResponse> {
@@ -82,7 +87,11 @@ export async function GET(): Promise<NextResponse> {
     const { start, end } = getCurrentWeekRange();
     const weekRange = `${formatShortDate(start)} - ${formatShortDate(end)}`;
 
-    const dateCondition = buildDateRangeConditions(start, end);
+    const yearRanges = buildYearWeekRanges(start, end);
+    const rangeClauses = yearRanges.map(
+      (r) => sql`(${schema.contracts.deploymentTimestamp} >= ${r.start} AND ${schema.contracts.deploymentTimestamp} <= ${r.end})`
+    );
+    const dateCondition = or(...rangeClauses)!;
 
     const rows = await db
       .select({
@@ -100,13 +109,7 @@ export async function GET(): Promise<NextResponse> {
         sourceCode: sql<boolean>`(${schema.contracts.sourceCode} IS NOT NULL AND length(${schema.contracts.sourceCode}) > 0)`,
       })
       .from(schema.contracts)
-      .where(
-        and(
-          isNotNull(schema.contracts.deploymentTimestamp),
-          dateCondition,
-          sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) BETWEEN 2015 AND 2018`
-        )
-      )
+      .where(dateCondition)
       .orderBy(sql`${schema.contracts.deploymentTimestamp} ASC`)
       .limit(20) as any[];
 
