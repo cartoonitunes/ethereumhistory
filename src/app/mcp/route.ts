@@ -42,8 +42,27 @@ export async function POST(req: NextRequest): Promise<Response> {
   return handleMcpRequest(req);
 }
 
-export async function GET(req: NextRequest): Promise<Response> {
-  return handleMcpRequest(req);
+export async function GET(): Promise<Response> {
+  // In stateless mode there is no session to subscribe to, so opening the
+  // server-to-client SSE stream would just hang until Vercel kills the
+  // function. Tell clients this transport only accepts POST.
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      error: {
+        code: -32000,
+        message: "Method Not Allowed: this MCP endpoint is stateless — use POST /mcp",
+      },
+      id: null,
+    }),
+    {
+      status: 405,
+      headers: {
+        "Content-Type": "application/json",
+        Allow: "POST, DELETE",
+      },
+    },
+  );
 }
 
 export async function DELETE(req: NextRequest): Promise<Response> {
