@@ -19,13 +19,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const db = getDb();
 
-    // Get the target contract's runtime bytecode hash.
-    // We group siblings by runtime bytecode only — constructor args differ between deployments
-    // of the same contract code (e.g. same ERC-20 template deployed with different token names/supplies)
-    // and should not split the sibling group.
     const [target] = await db
       .select({
         runtimeBytecodeHash: contracts.runtimeBytecodeHash,
+        canonicalAddress: contracts.canonicalAddress,
       })
       .from(contracts)
       .where(eq(contracts.address, normalizedAddress))
@@ -36,21 +33,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ hash: null, count: 0, contracts: [] });
     }
 
-    const hashColumn = contracts.runtimeBytecodeHash;
+    const canonical = target?.canonicalAddress || normalizedAddress;
 
-    // Get true total count of siblings
+    const siblingFilter = and(
+      eq(contracts.canonicalAddress, canonical),
+      ne(contracts.address, normalizedAddress)
+    );
+
+    const groupFilter = sql`${contracts.address} = ${canonical} OR ${contracts.canonicalAddress} = ${canonical}`;
+
     const [{ totalCount }] = await db
       .select({ totalCount: sql<number>`count(*)::int` })
       .from(contracts)
-      .where(
-        and(
-          eq(hashColumn, hash),
-          ne(contracts.address, normalizedAddress)
-        )
-      );
+      .where(siblingFilter);
 
-    // Check if ANY contract in this bytecode group is verified or documented
-    // This propagates to all siblings automatically
     const [groupInfo] = await db
       .select({
         verifiedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.verificationMethod} IS NOT NULL OR ${contracts.canonicalAddress} IS NOT NULL)::int`,
@@ -61,9 +57,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         groupVerificationMethod: sql<string | null>`MAX(${contracts.verificationMethod})`,
       })
       .from(contracts)
-      .where(eq(hashColumn, hash));
+      .where(groupFilter);
 
-    // Fetch up to 100 siblings for display
     const siblings = await db
       .select({
         address: contracts.address,
@@ -80,17 +75,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         shortDescription: contracts.shortDescription,
       })
       .from(contracts)
-      .where(
-        and(
-          eq(hashColumn, hash),
-          ne(contracts.address, normalizedAddress)
-        )
-      )
+      .where(siblingFilter)
       .orderBy(contracts.deploymentBlock)
       .limit(PAGE_SIZE)
       .offset(offset);
 
-    // Lifecycle counts (including the current contract)
     const [lifecycle] = await db
       .select({
         liveCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.codeSizeBytes} > 0 AND (${contracts.isSelfDestructed} IS NULL OR ${contracts.isSelfDestructed} = false))::int`,
@@ -98,7 +87,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         failedCount: sql<number>`COUNT(*) FILTER (WHERE ${contracts.deployStatus} = 'failed')::int`,
       })
       .from(contracts)
-      .where(eq(hashColumn, hash));
+      .where(groupFilter);
 
     return NextResponse.json({
       hash,
