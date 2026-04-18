@@ -45,7 +45,7 @@ async function getInitialProofs(): Promise<ProofsResponse> {
   const base = getMetadataBaseUrl();
   try {
     const res = await fetch(`${base}api/proofs?cursor=0&limit=20`, {
-      cache: "no-store",
+      next: { revalidate: 300 },
     });
     if (res.ok) return res.json();
   } catch {

@@ -88,7 +88,7 @@ async function fetchAlchemyEthTransfers(
           params: [params],
           id: 1,
         }),
-        cache: "no-store",
+        next: { revalidate: 300 },
       });
 
       const json = await res.json();
@@ -142,7 +142,7 @@ async function fetchUsdcTransfers(
     const url =
       `https://api.etherscan.io/v2/api?chainid=${chainId}&module=account&action=tokentx` +
       `&contractaddress=${contractAddress}&address=${DONATION_WALLET}&sort=desc&apikey=${ETHERSCAN_API_KEY}`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { next: { revalidate: 300 } });
     const json = await res.json();
 
     if (json.status !== "1" || !Array.isArray(json.result)) return [];

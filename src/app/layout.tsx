@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/react";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
@@ -109,7 +108,6 @@ export default function RootLayout({
           {/* Main content */}
           <main className="relative z-10">{children}</main>
         </div>
-        <Analytics />
         {/* Server-rendered footer for crawler visibility (Google OAuth verification requires privacy link in raw HTML) */}
         <footer className="border-t border-obsidian-900 py-4 text-center text-xs text-obsidian-600">
           <a href="/privacy" className="hover:text-obsidian-400 transition-colors">Privacy Policy</a>
