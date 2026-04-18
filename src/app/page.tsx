@@ -15,8 +15,9 @@ import HomePageClient from "./HomePageClient";
 import type { FeaturedContract } from "@/types";
 import type { MarqueeContract, TopEditor, RecentEdit, ProgressStats } from "./HomePageClient";
 
-// Revalidate every 5 minutes — homepage data changes infrequently; reduces Fluid compute
-export const revalidate = 300;
+// Homepage queries are too expensive for static generation on Vercel.
+// Serve dynamically and rely on app-level caching for the underlying data fetches.
+export const dynamic = "force-dynamic";
 
 async function getContractOfTheDay(): Promise<FeaturedContract | null> {
   if (!isDatabaseConfigured()) return null;
