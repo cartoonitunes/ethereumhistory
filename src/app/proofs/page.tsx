@@ -5,7 +5,9 @@ import { Header } from "@/components/Header";
 import { ProofsClient } from "./ProofsClient";
 import type { ProofsResponse } from "@/app/api/proofs/route";
 
-export const dynamic = "force-dynamic";
+// ISR: verified-proof catalogue changes rarely. Cache the rendered page at the
+// CDN for 5 minutes, matching the backing /api/proofs route.
+export const revalidate = 300;
 
 function getMetadataBaseUrl(): URL {
   const explicit =

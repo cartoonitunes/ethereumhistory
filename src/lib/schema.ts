@@ -107,6 +107,11 @@ export const contracts = pgTable(
     verificationNotes: text("verification_notes"),
     sourcifyMatch: text("sourcify_match"),
 
+    // Precomputed "has documentation" flag, maintained by trigger
+    // (migration 067). TRUE when the contract or any bytecode/canonical
+    // sibling has a short_description or verification_method.
+    isDocumented: boolean("is_documented").notNull().default(false),
+
     // Timestamps
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

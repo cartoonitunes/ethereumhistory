@@ -15,9 +15,11 @@ import HomePageClient from "./HomePageClient";
 import type { FeaturedContract } from "@/types";
 import type { MarqueeContract, TopEditor, RecentEdit, ProgressStats } from "./HomePageClient";
 
-// Homepage queries are too expensive for static generation on Vercel.
-// Serve dynamically and rely on app-level caching for the underlying data fetches.
-export const dynamic = "force-dynamic";
+// ISR: cache the rendered homepage at the CDN for 60s. Most visitors get a
+// pre-rendered response with zero DB work; the background revalidation happens
+// at most once per minute per region and can tolerate the per-fetch timeouts
+// below without the user ever seeing a 504.
+export const revalidate = 60;
 
 async function getContractOfTheDay(): Promise<FeaturedContract | null> {
   if (!isDatabaseConfigured()) return null;
@@ -86,9 +88,10 @@ async function getProgressStats(): Promise<ProgressStats | null> {
         ]);
         const YEARS = new Set([2015, 2016, 2017, 2018]);
 
-        // One aggregation query with GROUPING SETS replaces the previous 22 count
-        // queries. The pool is sized to max:1 on serverless, so fewer round trips
-        // directly translates to the homepage fitting inside Vercel's function budget.
+        // Single aggregation powered by the `is_documented` flag (migration 067).
+        // With the partial indexes on (era_id, is_documented) and
+        // (year, is_documented), this is an index-only GROUP BY instead of the
+        // 4-subquery CTE scan we used before.
         const aggregationRows = await db.execute<{
           era_id: string | null;
           year: number | null;
@@ -96,39 +99,13 @@ async function getProgressStats(): Promise<ProgressStats | null> {
           documented: number;
           grouping_bits: number;
         }>(sql`
-          WITH documented_addresses AS (
-            SELECT DISTINCT c.address
-            FROM contracts c
-            WHERE (c.short_description IS NOT NULL AND c.short_description <> '')
-               OR c.verification_method IS NOT NULL
-               OR c.canonical_address IN (
-                 SELECT address FROM contracts
-                 WHERE (short_description IS NOT NULL AND short_description <> '')
-                    OR verification_method IS NOT NULL
-               )
-               OR (c.deployed_bytecode_hash IS NOT NULL
-                   AND c.deployed_bytecode_hash IN (
-                     SELECT DISTINCT deployed_bytecode_hash FROM contracts
-                     WHERE deployed_bytecode_hash IS NOT NULL
-                       AND ((short_description IS NOT NULL AND short_description <> '')
-                         OR verification_method IS NOT NULL)
-                   ))
-               OR (c.runtime_bytecode_hash IS NOT NULL
-                   AND c.runtime_bytecode_hash IN (
-                     SELECT DISTINCT runtime_bytecode_hash FROM contracts
-                     WHERE runtime_bytecode_hash IS NOT NULL
-                       AND ((short_description IS NOT NULL AND short_description <> '')
-                         OR verification_method IS NOT NULL)
-                   ))
-          )
           SELECT
             c.era_id,
             EXTRACT(YEAR FROM c.deployment_timestamp)::int AS year,
             COUNT(*)::int AS total,
-            COUNT(da.address)::int AS documented,
+            COUNT(*) FILTER (WHERE c.is_documented)::int AS documented,
             GROUPING(c.era_id, EXTRACT(YEAR FROM c.deployment_timestamp))::int AS grouping_bits
           FROM contracts c
-          LEFT JOIN documented_addresses da ON c.address = da.address
           GROUP BY GROUPING SETS (
             (),
             (c.era_id),

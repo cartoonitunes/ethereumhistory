@@ -779,39 +779,49 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
 
 const TX_COUNTS_BY_YEAR_METADATA_KEY = "tx_counts_by_year_external_to_v1";
 
-async function getOrFetchTxCountsByYear(address: string): Promise<TxCountsByYear | null> {
-  if (!isDatabaseEnabled()) return null;
+function normalizeCachedTxCounts(raw: unknown): TxCountsByYear | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if ("counts" in obj && typeof obj.counts === "object" && obj.counts !== null) {
+    return obj as TxCountsByYear;
+  }
+  return { counts: obj as Record<string, number>, truncated: false };
+}
 
+/**
+ * DB-only read for tx counts. Never calls Alchemy — this is the version used
+ * on the critical render path. An unpopulated cache means the usage widget
+ * renders empty this request; a background refresh (below) will fill the
+ * cache for next time.
+ */
+async function getCachedTxCountsByYear(address: string): Promise<TxCountsByYear | null> {
+  if (!isDatabaseEnabled()) return null;
   try {
-    const existing = await dbGetContractMetadataJsonByKey(address, TX_COUNTS_BY_YEAR_METADATA_KEY);
-    if (existing) {
-      // Accept either {counts, truncated} or a raw counts record from earlier experiments.
-      if (
-        typeof existing === "object" &&
-        existing !== null &&
-        "counts" in (existing as any) &&
-        typeof (existing as any).counts === "object"
-      ) {
-        return existing as TxCountsByYear;
-      }
-      if (typeof existing === "object" && existing !== null) {
-        return { counts: existing as Record<string, number>, truncated: false };
-      }
-    }
+    const existing = await dbGetContractMetadataJsonByKey(
+      address,
+      TX_COUNTS_BY_YEAR_METADATA_KEY
+    );
+    return normalizeCachedTxCounts(existing);
   } catch (error) {
     console.warn("[db] Failed to read tx counts metadata:", error);
+    return null;
   }
+}
 
+/**
+ * Fire-and-forget: populate the tx counts cache for this contract via
+ * Alchemy. Never awaited from the render path. Silent on failure.
+ */
+function refreshTxCountsByYearInBackground(address: string): void {
+  if (!isDatabaseEnabled()) return;
   const rpcUrl = process.env.ETHEREUM_RPC_URL;
-  if (!rpcUrl) return null;
+  if (!rpcUrl) return;
 
-  try {
-    const txCounts = await fetchTxCountsByYearFromAlchemy(rpcUrl, address, {
-      // Safety valve: early contracts are fine; very active addresses could be huge.
-      maxTransfers: 50_000,
-    });
-
+  void (async () => {
     try {
+      const txCounts = await fetchTxCountsByYearFromAlchemy(rpcUrl, address, {
+        maxTransfers: 50_000,
+      });
       await dbSetContractMetadataJsonByKey(
         address,
         TX_COUNTS_BY_YEAR_METADATA_KEY,
@@ -819,14 +829,9 @@ async function getOrFetchTxCountsByYear(address: string): Promise<TxCountsByYear
         "alchemy_getAssetTransfers"
       );
     } catch (error) {
-      console.warn("[db] Failed to persist tx counts metadata:", error);
+      console.warn("[alchemy] background tx counts refresh failed:", error);
     }
-
-    return txCounts;
-  } catch (error) {
-    console.warn("[alchemy] tx counts lookup failed:", error);
-    return null;
-  }
+  })();
 }
 
 export async function getContractsByDeployer(deployerAddress: string): Promise<Contract[]> {
@@ -1139,39 +1144,36 @@ export async function getContractPageData(address: string): Promise<ContractPage
     }
   }
 
-  // On-the-fly decompilation when no source and no decompiled code
+  // On-the-fly decompilation runs in the background so it never blocks the
+  // page render. If the persisted decompile is missing, the user sees the
+  // page immediately; the decompile output shows up on a subsequent load once
+  // the background task has persisted it.
   if (
     contract.runtimeBytecode &&
     !contract.sourceCode &&
-    !contract.decompiledCode
+    !contract.decompiledCode &&
+    isDatabaseEnabled()
   ) {
-    try {
-      const decompileResult = decompileContract(contract.runtimeBytecode);
-      if (decompileResult.success && decompileResult.decompiledCode) {
-        contract = {
-          ...contract,
+    const bytecodeForDecompile = contract.runtimeBytecode;
+    const addressForDecompile = contract.address;
+    void (async () => {
+      try {
+        const decompileResult = decompileContract(bytecodeForDecompile);
+        if (!decompileResult.success || !decompileResult.decompiledCode) return;
+        await dbUpdateContractDecompiledCode(addressForDecompile, {
           decompiledCode: decompileResult.decompiledCode,
           decompilationSuccess: true,
-        };
-
-        // Persist to DB so future loads are instant (fire-and-forget)
-        if (isDatabaseEnabled()) {
-          dbUpdateContractDecompiledCode(contract.address, {
-            decompiledCode: decompileResult.decompiledCode,
-            decompilationSuccess: true,
-          }).catch((err) =>
-            console.warn("[decompile] Failed to persist decompilation:", err)
-          );
-
-          // Re-classify capabilities now that we have decompiled code
-          persistContractCapabilities(contract).catch((err) =>
-            console.warn("[capabilities] re-classification after decompile failed:", err)
-          );
-        }
+        });
+        await persistContractCapabilities({
+          ...contract,
+          address: addressForDecompile,
+          decompiledCode: decompileResult.decompiledCode,
+          decompilationSuccess: true,
+        });
+      } catch (err) {
+        console.warn("[decompile] background decompilation failed:", err);
       }
-    } catch (err) {
-      console.warn("[decompile] On-the-fly decompilation failed:", err);
-    }
+    })();
   }
 
   const deployerPersonPromise =
@@ -1197,15 +1199,37 @@ export async function getContractPageData(address: string): Promise<ContractPage
     ? getDeploymentRank(address).catch(() => null)
     : Promise.resolve(null);
 
+  // Read tx counts from cache only. If it's missing, kick off a background
+  // Alchemy refresh so the next visit finds it populated; don't block now.
+  const contractAddressForTxCounts = contract.address;
+  const txCountsPromise = getCachedTxCountsByYear(contractAddressForTxCounts).then(
+    (cached) => {
+      if (!cached) refreshTxCountsByYearInBackground(contractAddressForTxCounts);
+      return cached;
+    }
+  );
+
+  // Wrap every parallel fetch in a 4s timeout so a single stalling query
+  // never holds up the whole page. Missing data degrades gracefully — the
+  // sections that depend on it render in a stale/empty state instead.
+  const withTimeout = <T>(p: Promise<T>, fallback: T): Promise<T> =>
+    new Promise<T>((resolve) => {
+      const t = setTimeout(() => resolve(fallback), 4000);
+      p.then(
+        (v) => { clearTimeout(t); resolve(v); },
+        () => { clearTimeout(t); resolve(fallback); },
+      );
+    });
+
   const [bytecodeAnalysis, similarContracts, detectedPatterns, functionSignatures, txCountsByYear, media, rankResult] =
     await Promise.all([
-      getBytecodeAnalysis(address),
-      getSimilarContracts(address),
-      getDetectedPatterns(address),
-      getFunctionSignatures(address),
-      getOrFetchTxCountsByYear(contract.address),
-      mediaPromise,
-      deploymentRankPromise,
+      withTimeout(getBytecodeAnalysis(address), null as BytecodeAnalysis | null),
+      withTimeout(getSimilarContracts(address), [] as ContractSimilarity[]),
+      withTimeout(getDetectedPatterns(address), [] as DetectedPattern[]),
+      withTimeout(getFunctionSignatures(address), [] as FunctionSignature[]),
+      withTimeout(txCountsPromise, null as TxCountsByYear | null),
+      withTimeout(mediaPromise, [] as ContractMedia[]),
+      withTimeout(deploymentRankPromise, null as Awaited<typeof deploymentRankPromise>),
     ]);
 
   if (rankResult) {
