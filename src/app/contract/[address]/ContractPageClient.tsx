@@ -1804,10 +1804,10 @@ function SiblingBytecodeTab({
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
               <Check className="w-3 h-3" />
-              Bytecode Verified
+              Verified Source Code
             </span>
             <span className="text-xs text-obsidian-500">
-              All {(siblings.count + 1).toLocaleString()} contracts share verified source code
+              All {(siblings.count + 1).toLocaleString()} contracts inherit source code from a verified sibling
             </span>
           </div>
         )}
@@ -1838,13 +1838,11 @@ function SiblingBytecodeTab({
                 : c.deploymentBlock
                   ? `Block ${c.deploymentBlock.toLocaleString()}`
                   : "Unknown";
-              // A sibling is verified if it has its own verification, or the group is verified (same bytecode = same source)
-              const isVerified = c.verificationMethod === "exact_bytecode_match" ||
+              const hasDirectVerification = c.verificationMethod === "exact_bytecode_match" ||
                 c.verificationMethod === "near_exact_match" ||
                 c.verificationMethod === "author_published_source" ||
-                c.verificationMethod === "etherscan_verified" ||
-                !!c.canonicalAddress ||
-                !!siblings.groupVerified;
+                c.verificationMethod === "etherscan_verified";
+              const hasInheritedVerification = !hasDirectVerification && !!siblings.groupVerified;
 
               return (
                 <tr key={c.address} className="hover:bg-obsidian-900/30 transition-colors">
@@ -1862,10 +1860,15 @@ function SiblingBytecodeTab({
                   <td className="px-4 py-3 text-obsidian-400 text-xs whitespace-nowrap">{date}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {isVerified ? (
+                      {hasDirectVerification ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-green-500/30 bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
                           <Check className="w-3 h-3" />
-                          Verified
+                          {c.verificationMethod === "etherscan_verified" ? "Etherscan Verified" : "Cracked"}
+                        </span>
+                      ) : hasInheritedVerification ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/30 bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
+                          <Check className="w-3 h-3" />
+                          Inherits Verified Source
                         </span>
                       ) : (
                         <span className="text-xs text-obsidian-600">Unverified</span>
