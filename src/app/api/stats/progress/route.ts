@@ -2,48 +2,29 @@
  * Documentation Progress Stats API Route
  *
  * GET /api/stats/progress
- * Returns total and documented contract counts overall, per era, and per year.
- * Also returns community stats (historian count, total edits).
- * "Documented" = has description OR is verified OR is a bytecode sibling of a documented/verified contract.
+ *
+ * Returns total and documented contract counts overall, per era, and per year,
+ * plus community stats (historian count, total edits).
+ *
+ * "Documented" is served from the precomputed `is_documented` column on
+ * contracts, maintained by the trigger installed in migration 067. That flag
+ * already encodes the sibling-propagation logic (a contract counts as
+ * documented if any canonical/bytecode sibling has a description or
+ * verification_method), so this endpoint is a trivial index-aware aggregate.
  */
 
 import { NextResponse } from "next/server";
 import { isDatabaseConfigured, getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
-import { sql, eq, and } from "drizzle-orm";
-
-export const dynamic = "force-dynamic";
+import { sql, eq } from "drizzle-orm";
 
 const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
 const YEARS = [2015, 2016, 2017, 2018] as const;
-const DOCUMENTED_CONDITION = sql`(
-  (short_description IS NOT NULL AND short_description != '')
-  OR verification_method IS NOT NULL
-  OR (
-    canonical_address IS NOT NULL
-    AND canonical_address IN (
-      SELECT address FROM contracts
-      WHERE (short_description IS NOT NULL AND short_description != '')
-         OR verification_method IS NOT NULL
-    )
-  )
-  OR (
-    deployed_bytecode_hash IS NOT NULL
-    AND deployed_bytecode_hash IN (
-      SELECT DISTINCT deployed_bytecode_hash FROM contracts
-      WHERE (short_description IS NOT NULL AND short_description != '')
-         OR verification_method IS NOT NULL
-    )
-  )
-  OR (
-    runtime_bytecode_hash IS NOT NULL
-    AND runtime_bytecode_hash IN (
-      SELECT DISTINCT runtime_bytecode_hash FROM contracts
-      WHERE (short_description IS NOT NULL AND short_description != '')
-         OR verification_method IS NOT NULL
-    )
-  )
-)`;
+
+// Cache at the Vercel edge for 10 minutes, serve stale while revalidating for
+// another 20. The /api/stats/progress response is identical across users, so
+// this takes the vast majority of requests off the database entirely.
+export const revalidate = 600;
 
 export async function GET(): Promise<NextResponse> {
   if (!isDatabaseConfigured()) {
@@ -63,90 +44,74 @@ export async function GET(): Promise<NextResponse> {
   try {
     const db = getDb();
 
-    const [
-      overallTotalResult,
-      overallDocumentedResult,
-      historianCountResult,
-      totalEditsResult,
-      ...rest
-    ] = await Promise.all([
-      db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contracts),
+    // One aggregation query covers overall + per-era + per-year thanks to
+    // GROUPING SETS. Previously this route fired 18 separate COUNT(*) queries
+    // with correlated subqueries on every request.
+    const aggregationRowsPromise = db.execute<{
+      era_id: string | null;
+      year: number | null;
+      total: number | string;
+      documented: number | string;
+      grouping_bits: number | string;
+    }>(sql`
+      SELECT
+        c.era_id,
+        EXTRACT(YEAR FROM c.deployment_timestamp)::int AS year,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE c.is_documented)::int AS documented,
+        GROUPING(c.era_id, EXTRACT(YEAR FROM c.deployment_timestamp))::int AS grouping_bits
+      FROM contracts c
+      GROUP BY GROUPING SETS (
+        (),
+        (c.era_id),
+        (EXTRACT(YEAR FROM c.deployment_timestamp))
+      )
+    `);
 
-      db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contracts)
-        .where(DOCUMENTED_CONDITION),
+    const historianPromise = db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(schema.historians)
+      .where(eq(schema.historians.active, true));
 
-      db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.historians)
-        .where(eq(schema.historians.active, true)),
+    const editsPromise = db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(schema.contractEdits);
 
-      db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contractEdits),
+    const [aggregationRows, historianCountResult, totalEditsResult] =
+      await Promise.all([aggregationRowsPromise, historianPromise, editsPromise]);
 
-      ...ERA_IDS.flatMap((eraId) => [
-        db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(schema.contracts)
-          .where(and(eq(schema.contracts.eraId, eraId))),
-        db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(schema.contracts)
-          .where(and(eq(schema.contracts.eraId, eraId), DOCUMENTED_CONDITION)),
-      ]),
+    const byEra: Record<string, { total: number; documented: number }> = {};
+    const byYear: Record<number, { total: number; documented: number }> = {};
+    for (const eraId of ERA_IDS) byEra[eraId] = { total: 0, documented: 0 };
+    for (const year of YEARS) byYear[year] = { total: 0, documented: 0 };
 
-      ...YEARS.flatMap((year) => [
-        db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(schema.contracts)
-          .where(sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`),
-        db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(schema.contracts)
-          .where(
-            and(
-              sql`EXTRACT(YEAR FROM ${schema.contracts.deploymentTimestamp}) = ${year}`,
-              DOCUMENTED_CONDITION
-            )
-          ),
-      ]),
-    ]);
+    let overall = { total: 0, documented: 0 };
 
-    const overall = {
-      total: overallTotalResult[0]?.count ?? 0,
-      documented: overallDocumentedResult[0]?.count ?? 0,
-    };
+    const rows = Array.isArray(aggregationRows)
+      ? aggregationRows
+      : ((aggregationRows as { rows?: typeof aggregationRows }).rows ?? []);
+
+    for (const row of rows) {
+      const total = Number(row.total);
+      const documented = Number(row.documented);
+      const bits = Number(row.grouping_bits);
+      // bits: 3 = overall, 1 = per era, 2 = per year. See homepage for the derivation.
+      if (bits === 3) {
+        overall = { total, documented };
+      } else if (bits === 1 && row.era_id && (ERA_IDS as readonly string[]).includes(row.era_id)) {
+        byEra[row.era_id] = { total, documented };
+      } else if (bits === 2 && row.year != null) {
+        const y = Number(row.year);
+        if ((YEARS as readonly number[]).includes(y)) {
+          byYear[y] = { total, documented };
+        }
+      }
+    }
 
     const community = {
       historians: historianCountResult[0]?.count ?? 0,
       totalEdits: totalEditsResult[0]?.count ?? 0,
     };
-
-    const eraResults = rest.slice(0, ERA_IDS.length * 2);
-    const byEra: Record<string, { total: number; documented: number }> = {};
-    ERA_IDS.forEach((eraId, i) => {
-      const totalResult = eraResults[i * 2];
-      const documentedResult = eraResults[i * 2 + 1];
-      byEra[eraId] = {
-        total: totalResult[0]?.count ?? 0,
-        documented: documentedResult[0]?.count ?? 0,
-      };
-    });
-
-    const yearResults = rest.slice(ERA_IDS.length * 2);
-    const byYear: Record<number, { total: number; documented: number }> = {};
-    YEARS.forEach((year, i) => {
-      const totalResult = yearResults[i * 2];
-      const documentedResult = yearResults[i * 2 + 1];
-      byYear[year] = {
-        total: totalResult[0]?.count ?? 0,
-        documented: documentedResult[0]?.count ?? 0,
-      };
-    });
 
     return NextResponse.json(
       { data: { overall, byEra, byYear, community }, error: null },
