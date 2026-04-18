@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { ProofsClient } from "./ProofsClient";
 import type { ProofsResponse } from "@/app/api/proofs/route";
 
-export const revalidate = 300; // 5-minute ISR cache
+export const dynamic = "force-dynamic";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
