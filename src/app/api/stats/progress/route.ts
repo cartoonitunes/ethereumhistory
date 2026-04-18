@@ -6,11 +6,10 @@
  * Returns total and documented contract counts overall, per era, and per year,
  * plus community stats (historian count, total edits).
  *
- * "Documented" is served from the precomputed `is_documented` column on
- * contracts, maintained by the trigger installed in migration 067. That flag
- * already encodes the sibling-propagation logic (a contract counts as
- * documented if any canonical/bytecode sibling has a description or
- * verification_method), so this endpoint is a trivial index-aware aggregate.
+ * Backed by the `contract_stats_cache` table (migration 068), which is a
+ * ~20-row precomputed snapshot refreshed via `refresh_contract_stats_cache()`.
+ * This keeps the endpoint sub-millisecond instead of paying an O(1.4M-row)
+ * aggregation on every request.
  */
 
 import { NextResponse } from "next/server";
@@ -21,11 +20,8 @@ import { sql, eq } from "drizzle-orm";
 const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
 const YEARS = [2015, 2016, 2017, 2018] as const;
 
-// Render on request (not at build), but the Cache-Control header below still
-// lets the Vercel CDN cache the response for 10 minutes across users. ISR's
-// build-time pre-render was exceeding Next.js's 60s static-generation budget
-// on 1.4M rows; CDN caching gives us the same effective hit rate after the
-// first request in each region.
+type CacheRow = { scope: string; total: number | string; documented: number | string };
+
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
@@ -46,28 +42,8 @@ export async function GET(): Promise<NextResponse> {
   try {
     const db = getDb();
 
-    // One aggregation query covers overall + per-era + per-year thanks to
-    // GROUPING SETS. Previously this route fired 18 separate COUNT(*) queries
-    // with correlated subqueries on every request.
-    const aggregationRowsPromise = db.execute<{
-      era_id: string | null;
-      year: number | null;
-      total: number | string;
-      documented: number | string;
-      grouping_bits: number | string;
-    }>(sql`
-      SELECT
-        c.era_id,
-        EXTRACT(YEAR FROM c.deployment_timestamp)::int AS year,
-        COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE c.is_documented)::int AS documented,
-        GROUPING(c.era_id, EXTRACT(YEAR FROM c.deployment_timestamp))::int AS grouping_bits
-      FROM contracts c
-      GROUP BY GROUPING SETS (
-        (),
-        (c.era_id),
-        (EXTRACT(YEAR FROM c.deployment_timestamp))
-      )
+    const cacheRowsPromise = db.execute<CacheRow>(sql`
+      SELECT scope, total, documented FROM contract_stats_cache
     `);
 
     const historianPromise = db
@@ -79,31 +55,31 @@ export async function GET(): Promise<NextResponse> {
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(schema.contractEdits);
 
-    const [aggregationRows, historianCountResult, totalEditsResult] =
-      await Promise.all([aggregationRowsPromise, historianPromise, editsPromise]);
+    const [cacheRowsRaw, historianCountResult, totalEditsResult] =
+      await Promise.all([cacheRowsPromise, historianPromise, editsPromise]);
 
     const byEra: Record<string, { total: number; documented: number }> = {};
     const byYear: Record<number, { total: number; documented: number }> = {};
     for (const eraId of ERA_IDS) byEra[eraId] = { total: 0, documented: 0 };
     for (const year of YEARS) byYear[year] = { total: 0, documented: 0 };
-
     let overall = { total: 0, documented: 0 };
 
-    const rows = Array.isArray(aggregationRows)
-      ? aggregationRows
-      : ((aggregationRows as { rows?: typeof aggregationRows }).rows ?? []);
+    const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
+      ? (cacheRowsRaw as CacheRow[])
+      : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
 
-    for (const row of rows) {
+    for (const row of cacheRows) {
       const total = Number(row.total);
       const documented = Number(row.documented);
-      const bits = Number(row.grouping_bits);
-      // bits: 3 = overall, 1 = per era, 2 = per year. See homepage for the derivation.
-      if (bits === 3) {
+      if (row.scope === "overall") {
         overall = { total, documented };
-      } else if (bits === 1 && row.era_id && (ERA_IDS as readonly string[]).includes(row.era_id)) {
-        byEra[row.era_id] = { total, documented };
-      } else if (bits === 2 && row.year != null) {
-        const y = Number(row.year);
+      } else if (row.scope.startsWith("era:")) {
+        const eraId = row.scope.slice(4);
+        if ((ERA_IDS as readonly string[]).includes(eraId)) {
+          byEra[eraId] = { total, documented };
+        }
+      } else if (row.scope.startsWith("year:")) {
+        const y = Number(row.scope.slice(5));
         if ((YEARS as readonly number[]).includes(y)) {
           byYear[y] = { total, documented };
         }

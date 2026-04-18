@@ -75,7 +75,7 @@ async function getProgressStats(): Promise<ProgressStats | null> {
   try {
     return await cached<ProgressStats>(
       "homepage:progress-stats",
-      CACHE_TTL.MEDIUM,
+      CACHE_TTL.LONG,
       async () => {
         const db = getDb();
         const ERA_IDS = new Set([
@@ -88,29 +88,13 @@ async function getProgressStats(): Promise<ProgressStats | null> {
         ]);
         const YEARS = new Set([2015, 2016, 2017, 2018]);
 
-        // Single aggregation powered by the `is_documented` flag (migration 067).
-        // With the partial indexes on (era_id, is_documented) and
-        // (year, is_documented), this is an index-only GROUP BY instead of the
-        // 4-subquery CTE scan we used before.
-        const aggregationRows = await db.execute<{
-          era_id: string | null;
-          year: number | null;
-          total: number;
-          documented: number;
-          grouping_bits: number;
-        }>(sql`
-          SELECT
-            c.era_id,
-            EXTRACT(YEAR FROM c.deployment_timestamp)::int AS year,
-            COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE c.is_documented)::int AS documented,
-            GROUPING(c.era_id, EXTRACT(YEAR FROM c.deployment_timestamp))::int AS grouping_bits
-          FROM contracts c
-          GROUP BY GROUPING SETS (
-            (),
-            (c.era_id),
-            (EXTRACT(YEAR FROM c.deployment_timestamp))
-          )
+        // Reads from the ~20-row `contract_stats_cache` (migration 068) instead
+        // of aggregating 1.4M rows on every render. Cache is refreshed by
+        // `refresh_contract_stats_cache()`, not on read — so this is always
+        // sub-millisecond.
+        type CacheRow = { scope: string; total: number | string; documented: number | string };
+        const cacheRowsRaw = await db.execute<CacheRow>(sql`
+          SELECT scope, total, documented FROM contract_stats_cache
         `);
 
         const [historianCountResult, totalEditsResult] = await Promise.all([
@@ -121,38 +105,27 @@ async function getProgressStats(): Promise<ProgressStats | null> {
             .from(schema.contractEdits),
         ]);
 
-        // GROUPING(era_id, year) returns a bit mask where 1 = aggregated away, 0 = part of grouping.
-        // With the most significant bit = era_id, least significant = year:
-        //   - bits = 0b11 (3) → both aggregated → overall totals
-        //   - bits = 0b01 (1) → era grouped, year aggregated → per-era totals
-        //   - bits = 0b10 (2) → year grouped, era aggregated → per-year totals
         let overall = { total: 0, documented: 0 };
         const byEra: Record<string, { total: number; documented: number }> = {};
         const byYear: Record<string, { total: number; documented: number }> = {};
-
         for (const eraId of ERA_IDS) byEra[eraId] = { total: 0, documented: 0 };
         for (const year of YEARS) byYear[String(year)] = { total: 0, documented: 0 };
 
-        const rows = Array.isArray(aggregationRows)
-          ? aggregationRows
-          : ((aggregationRows as { rows?: typeof aggregationRows }).rows ?? []);
+        const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
+          ? (cacheRowsRaw as CacheRow[])
+          : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
 
-        for (const row of rows as Array<{
-          era_id: string | null;
-          year: number | null;
-          total: number | string;
-          documented: number | string;
-          grouping_bits: number | string;
-        }>) {
+        for (const row of cacheRows) {
           const total = Number(row.total);
           const documented = Number(row.documented);
-          const bits = Number(row.grouping_bits);
-          if (bits === 3) {
+          if (row.scope === "overall") {
             overall = { total, documented };
-          } else if (bits === 1 && row.era_id && ERA_IDS.has(row.era_id)) {
-            byEra[row.era_id] = { total, documented };
-          } else if (bits === 2 && row.year !== null && YEARS.has(Number(row.year))) {
-            byYear[String(row.year)] = { total, documented };
+          } else if (row.scope.startsWith("era:")) {
+            const eraId = row.scope.slice(4);
+            if (ERA_IDS.has(eraId)) byEra[eraId] = { total, documented };
+          } else if (row.scope.startsWith("year:")) {
+            const year = row.scope.slice(5);
+            if (YEARS.has(Number(year))) byYear[year] = { total, documented };
           }
         }
 
