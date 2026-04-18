@@ -229,7 +229,8 @@ async function getFeaturedList(): Promise<FeaturedContract[]> {
 }
 
 export default async function HomePage() {
-  // Fetch all data in parallel — server-side, no waterfall
+  // Keep the homepage resilient under serverless pressure.
+  // If any heavy data source stalls, fall back to partial content instead of timing out the whole site.
   const [
     featuredContracts,
     marqueeContracts,
@@ -237,7 +238,7 @@ export default async function HomePage() {
     recentEdits,
     contractOfTheDay,
     progressStats,
-  ] = await Promise.all([
+  ] = await Promise.allSettled([
     getFeaturedList(),
     getMarqueeContracts(),
     getTopEditorsList(),
@@ -248,12 +249,12 @@ export default async function HomePage() {
 
   return (
     <HomePageClient
-      featuredContracts={featuredContracts}
-      marqueeContracts={marqueeContracts}
-      topEditors={topEditors}
-      recentEdits={recentEdits}
-      contractOfTheDay={contractOfTheDay}
-      progressStats={progressStats}
+      featuredContracts={featuredContracts.status === "fulfilled" ? featuredContracts.value : []}
+      marqueeContracts={marqueeContracts.status === "fulfilled" ? marqueeContracts.value : []}
+      topEditors={topEditors.status === "fulfilled" ? topEditors.value : []}
+      recentEdits={recentEdits.status === "fulfilled" ? recentEdits.value : []}
+      contractOfTheDay={contractOfTheDay.status === "fulfilled" ? contractOfTheDay.value : null}
+      progressStats={progressStats.status === "fulfilled" ? progressStats.value : null}
     />
   );
 }
