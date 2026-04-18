@@ -13,11 +13,13 @@ dist/
 data/
 
 # Pipeline outputs / artifacts
-pipeline/results/
-pipeline/*.csv
-pipeline/*.jsonl
-pipeline/*.sql
-pipeline/*.json
+pipeline/
+
+# Non-runtime maintenance code and local research artifacts
+scripts/
+memory/
+db/migrations/
+missing.py
 
 # Drizzle output
 drizzle/

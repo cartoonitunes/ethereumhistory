@@ -11,7 +11,7 @@ import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
 import { sql, and, isNotNull } from "drizzle-orm";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 /**
  * Get the Monday and Sunday of the current week.
