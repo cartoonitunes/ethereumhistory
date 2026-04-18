@@ -5,9 +5,10 @@ import { Header } from "@/components/Header";
 import { ProofsClient } from "./ProofsClient";
 import type { ProofsResponse } from "@/app/api/proofs/route";
 
-// ISR: verified-proof catalogue changes rarely. Cache the rendered page at the
-// CDN for 5 minutes, matching the backing /api/proofs route.
-export const revalidate = 300;
+// Render on request. The backing /api/proofs route is already cached for 300s
+// at the CDN (see its Cache-Control header), so the page's first hit in each
+// region pays the DB round trip once and subsequent hits are cached.
+export const dynamic = "force-dynamic";
 
 function getMetadataBaseUrl(): URL {
   const explicit =

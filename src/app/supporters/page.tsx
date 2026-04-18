@@ -14,8 +14,11 @@ export const metadata: Metadata = {
     "The people who keep Ethereum History running. View our donors and support the free, open archive.",
 };
 
-// Revalidate every 30 minutes — external API calls are expensive
-export const revalidate = 1800;
+// Render on request — the external Etherscan/donation API calls regularly
+// blow past Next.js's 60s build-phase budget, failing the Vercel build.
+// CDN caching on the response (if added) is the right path for steady-state
+// caching rather than build-time pre-render.
+export const dynamic = "force-dynamic";
 
 const HISTORY_TOKEN = "0xD67A9266D0ae84839f62197713B2D2A9f3a62Ba3";
 const HISTORY_FEE_SENDER = "0xdbd69cb44135a96474de7d28a6e4cbfc2aacef7f";

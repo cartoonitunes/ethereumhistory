@@ -21,10 +21,12 @@ import { sql, eq } from "drizzle-orm";
 const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
 const YEARS = [2015, 2016, 2017, 2018] as const;
 
-// Cache at the Vercel edge for 10 minutes, serve stale while revalidating for
-// another 20. The /api/stats/progress response is identical across users, so
-// this takes the vast majority of requests off the database entirely.
-export const revalidate = 600;
+// Render on request (not at build), but the Cache-Control header below still
+// lets the Vercel CDN cache the response for 10 minutes across users. ISR's
+// build-time pre-render was exceeding Next.js's 60s static-generation budget
+// on 1.4M rows; CDN caching gives us the same effective hit rate after the
+// first request in each region.
+export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<NextResponse> {
   if (!isDatabaseConfigured()) {
