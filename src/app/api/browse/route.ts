@@ -18,7 +18,7 @@ import {
   getUndocumentedContractsFromDb,
   getUndocumentedContractsCountFromDb,
 } from "@/lib/db-client";
-import { turso } from "@/lib/turso";
+import { turso, isTursoConfigured } from "@/lib/turso";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import { CAPABILITY_CATEGORIES } from "@/types";
 
@@ -155,6 +155,13 @@ interface TursoIndexRow {
 }
 
 async function browseIndex(searchParams: URLSearchParams): Promise<NextResponse> {
+  if (!isTursoConfigured()) {
+    return NextResponse.json(
+      { data: null, error: "Contract index is not available (TURSO_DATABASE_URL not configured)." },
+      { status: 503 }
+    );
+  }
+
   const era = searchParams.get("era")?.trim() || null;
   const year = searchParams.get("year")?.trim() ? parseInt(searchParams.get("year")!, 10) : null;
   const deployer = searchParams.get("deployer")?.trim().toLowerCase() || null;
