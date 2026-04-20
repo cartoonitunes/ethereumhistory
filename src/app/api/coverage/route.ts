@@ -18,6 +18,13 @@ import { cached, CACHE_TTL } from "@/lib/cache";
 export const dynamic = "force-dynamic";
 
 interface EraRow { era: string; total: number; uncovered: number; }
+
+const TURSO_ERA_TO_APP: Record<string, string> = {
+  "frontier-thawing": "frontier",
+  "dao-fork": "dao",
+  "tangerine-whistle": "tangerine",
+  "spurious-dragon": "spurious",
+};
 interface YearRow { year: number; total: number; uncovered: number; }
 interface NeonEraRow { era_id: string | null; count: number; }
 interface NeonYearRow { year: number | null; count: number; }
@@ -74,12 +81,20 @@ export async function GET(): Promise<NextResponse> {
         }
       }
 
-      const eras = eraRows.map((r) => {
-        const total = Number(r.total);
-        const documented = neonEraMap.get(r.era) ?? 0;
-        const uncovered = Number(r.uncovered);
+      // Merge Turso verbose era names into app-canonical IDs before building output
+      const eraMerged = new Map<string, { total: number; uncovered: number }>();
+      for (const r of eraRows) {
+        const appEra = TURSO_ERA_TO_APP[r.era] ?? r.era;
+        const prev = eraMerged.get(appEra) ?? { total: 0, uncovered: 0 };
+        eraMerged.set(appEra, { total: prev.total + Number(r.total), uncovered: prev.uncovered + Number(r.uncovered) });
+      }
+
+      const ERA_ORDER = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"];
+      const eras = ERA_ORDER.filter((id) => eraMerged.has(id)).map((id) => {
+        const { total, uncovered } = eraMerged.get(id)!;
+        const documented = neonEraMap.get(id) ?? 0;
         return {
-          eraId: r.era,
+          eraId: id,
           total,
           documented,
           uncovered,

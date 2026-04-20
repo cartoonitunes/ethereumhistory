@@ -20,6 +20,14 @@ import { sql, eq } from "drizzle-orm";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
 const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+
+// Turso DB stores verbose era names; map to app-canonical short IDs
+const TURSO_ERA_TO_APP: Record<string, string> = {
+  "frontier-thawing": "frontier",
+  "dao-fork": "dao",
+  "tangerine-whistle": "tangerine",
+  "spurious-dragon": "spurious",
+};
 const YEARS = [2015, 2016, 2017, 2018] as const;
 
 export const dynamic = "force-dynamic";
@@ -92,7 +100,9 @@ export async function GET(): Promise<NextResponse> {
           ERA_IDS.map((id) => [id, { total: 0, documented: docMap.get(`era:${id}`) ?? 0 }])
         );
         for (const r of tursoByEra.rows as unknown as { era: string; total: number | bigint }[]) {
-          byEra[r.era] = { total: Number(r.total), documented: docMap.get(`era:${r.era}`) ?? 0 };
+          const appEra = TURSO_ERA_TO_APP[r.era] ?? r.era;
+          const prev = byEra[appEra] ?? { total: 0, documented: docMap.get(`era:${appEra}`) ?? 0 };
+          byEra[appEra] = { total: prev.total + Number(r.total), documented: prev.documented };
         }
 
         const byYear: Record<number, { total: number; documented: number }> = Object.fromEntries(
