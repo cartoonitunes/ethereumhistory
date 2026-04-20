@@ -27,24 +27,16 @@ export async function GET(): Promise<NextResponse> {
     const result = await cached("coverage:v1", CACHE_TTL.SHORT, async () => {
       const [eraResult, yearResult] = await Promise.all([
         turso.execute(`
-          SELECT
-            ci.era,
-            COUNT(*) as total,
-            COUNT(CASE WHEN bf.is_cracked = 1 THEN 1 END) as uncovered
-          FROM contract_index ci
-          LEFT JOIN bytecode_families bf ON ci.bytecode_hash = bf.bytecode_hash
-          GROUP BY ci.era
-          ORDER BY MIN(ci.block_number) ASC
+          SELECT era, COUNT(*) as total, 0 as uncovered
+          FROM contract_index
+          GROUP BY era
+          ORDER BY MIN(block_number) ASC
         `),
         turso.execute(`
-          SELECT
-            ci.year,
-            COUNT(*) as total,
-            COUNT(CASE WHEN bf.is_cracked = 1 THEN 1 END) as uncovered
-          FROM contract_index ci
-          LEFT JOIN bytecode_families bf ON ci.bytecode_hash = bf.bytecode_hash
-          GROUP BY ci.year
-          ORDER BY ci.year ASC
+          SELECT year, COUNT(*) as total, 0 as uncovered
+          FROM contract_index
+          GROUP BY year
+          ORDER BY year ASC
         `),
       ]);
 
@@ -132,10 +124,9 @@ export async function GET(): Promise<NextResponse> {
       { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" } }
     );
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
     console.error("Coverage API error:", error);
     return NextResponse.json(
-      { data: null, error: `Failed to fetch coverage data: ${msg}` },
+      { data: null, error: "Failed to fetch coverage data." },
       { status: 500 }
     );
   }
