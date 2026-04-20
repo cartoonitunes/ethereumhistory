@@ -23,6 +23,7 @@
     "similarity:run": "cd pipeline && python -m similarity.main"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@react-sigma/core": "^5.0.6",
     "@tailwindcss/typography": "^0.5.15",
