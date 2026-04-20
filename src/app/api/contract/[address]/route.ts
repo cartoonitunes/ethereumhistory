@@ -61,7 +61,13 @@ export async function GET(
     }
 
     return NextResponse.json({
-      data: buildContractFromResolved(resolved),
+      data: {
+        contract: buildContractFromResolved(resolved),
+        bytecodeAnalysis: null,
+        similarContracts: [],
+        detectedPatterns: [],
+        functionSignatures: [],
+      } satisfies ContractPageData,
       error: null,
       meta: { timestamp: new Date().toISOString(), cached: false },
     });
