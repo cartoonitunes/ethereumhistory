@@ -83,7 +83,7 @@ async function getProgressStats(): Promise<ProgressStats | null> {
   if (!isDatabaseConfigured()) return null;
   try {
     return await cached<ProgressStats>(
-      "homepage:progress-stats:v2",
+      "homepage:progress-stats:v3",
       CACHE_TTL.LONG,
       async () => {
         const db = getDb();
