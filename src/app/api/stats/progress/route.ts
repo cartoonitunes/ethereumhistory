@@ -7,9 +7,9 @@
  * plus community stats (historian count, total edits).
  *
  * Totals come from the Turso contract_index (12M+ contracts) when configured.
- * Documented counts come from Neon: contracts with short_description set (~40),
- * which reflects actual editorial work by historians — not the broader
- * is_documented flag that includes verified/sibling contracts.
+ * Documented counts come from Neon's contract_stats_cache (~20 rows), which
+ * uses is_documented=TRUE: historian narratives, cracked/etherscan-verified
+ * contracts, and all bytecode siblings of any of the above.
  */
 
 import { NextResponse } from "next/server";
@@ -20,6 +20,7 @@ import { sql, eq } from "drizzle-orm";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
 const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+const YEARS = [2015, 2016, 2017, 2018] as const;
 
 // Turso DB stores verbose era names; map to app-canonical short IDs
 const TURSO_ERA_TO_APP: Record<string, string> = {
@@ -28,7 +29,6 @@ const TURSO_ERA_TO_APP: Record<string, string> = {
   "tangerine-whistle": "tangerine",
   "spurious-dragon": "spurious",
 };
-const YEARS = [2015, 2016, 2017, 2018] as const;
 
 export const dynamic = "force-dynamic";
 
@@ -47,129 +47,81 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const data = await cached("stats:progress:v3", CACHE_TTL.MEDIUM, async () => {
+    const data = await cached("stats:progress:v4", CACHE_TTL.MEDIUM, async () => {
       const db = getDb();
 
-      const historianPromise = db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.historians)
-        .where(eq(schema.historians.active, true));
+      // contract_stats_cache: ~20 rows, uses is_documented=TRUE as numerator.
+      // Covers: historian narratives + verification_method + bytecode siblings.
+      type CacheRow = { scope: string; documented: number | string };
+      const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
+        db.execute<CacheRow>(sql`SELECT scope, documented FROM contract_stats_cache`),
+        db.select({ count: sql<number>`COUNT(*)::int` })
+          .from(schema.historians)
+          .where(eq(schema.historians.active, true)),
+        db.select({ count: sql<number>`COUNT(*)::int` })
+          .from(schema.contractEdits),
+      ]);
 
-      const editsPromise = db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(schema.contractEdits);
+      const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
+        ? (cacheRowsRaw as CacheRow[])
+        : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
 
-      // Documented = short_description set — actual historian editorial work
-      type NeonDocRow = { scope: string; documented: number };
-      const neonDocPromise = db.execute<NeonDocRow>(sql`
-        SELECT 'overall' AS scope, COUNT(*)::int AS documented, NULL AS extra
-        FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-        UNION ALL
-        SELECT 'era:' || era_id, COUNT(*)::int, NULL
-        FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-          AND era_id IS NOT NULL
-        GROUP BY era_id
-        UNION ALL
-        SELECT 'year:' || EXTRACT(YEAR FROM deployment_timestamp)::int::text, COUNT(*)::int, NULL
-        FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-          AND deployment_timestamp IS NOT NULL
-        GROUP BY EXTRACT(YEAR FROM deployment_timestamp)::int
-      `);
+      const docMap = new Map<string, number>();
+      for (const r of cacheRows) docMap.set(r.scope, Number(r.documented));
+
+      const byEra: Record<string, { total: number; documented: number }> = Object.fromEntries(
+        ERA_IDS.map((id) => [id, { total: 0, documented: docMap.get(`era:${id}`) ?? 0 }])
+      );
+      const byYear: Record<number, { total: number; documented: number }> = Object.fromEntries(
+        YEARS.map((y) => [y, { total: 0, documented: docMap.get(`year:${y}`) ?? 0 }])
+      );
+      let grandTotal = 0;
 
       if (isTursoConfigured()) {
-        const [historianCountResult, totalEditsResult, neonDocRaw, tursoOverall, tursoByEra, tursoByYear] =
-          await Promise.all([
-            historianPromise,
-            editsPromise,
-            neonDocPromise,
-            turso.execute(`SELECT COUNT(*) AS total FROM contract_index`),
-            turso.execute(`SELECT era, COUNT(*) AS total FROM contract_index WHERE era IS NOT NULL GROUP BY era`),
-            turso.execute(`SELECT year, COUNT(*) AS total FROM contract_index WHERE year IS NOT NULL GROUP BY year`),
-          ]);
+        const [tursoOverall, tursoByEra, tursoByYear] = await Promise.all([
+          turso.execute(`SELECT COUNT(*) AS total FROM contract_index`),
+          turso.execute(`SELECT era, COUNT(*) AS total FROM contract_index WHERE era IS NOT NULL GROUP BY era`),
+          turso.execute(`SELECT year, COUNT(*) AS total FROM contract_index WHERE year IS NOT NULL GROUP BY year`),
+        ]);
 
-        const neonRows: NeonDocRow[] = Array.isArray(neonDocRaw)
-          ? (neonDocRaw as NeonDocRow[])
-          : ((neonDocRaw as { rows?: NeonDocRow[] }).rows ?? []);
+        grandTotal = Number((tursoOverall.rows[0] as unknown as { total: number | bigint })?.total ?? 0);
 
-        const docMap = new Map<string, number>();
-        for (const r of neonRows) docMap.set(r.scope, Number(r.documented));
-
-        const grandTotal = Number((tursoOverall.rows[0] as unknown as { total: number | bigint })?.total ?? 0);
-
-        const byEra: Record<string, { total: number; documented: number }> = Object.fromEntries(
-          ERA_IDS.map((id) => [id, { total: 0, documented: docMap.get(`era:${id}`) ?? 0 }])
-        );
         for (const r of tursoByEra.rows as unknown as { era: string; total: number | bigint }[]) {
           const appEra = TURSO_ERA_TO_APP[r.era] ?? r.era;
-          const prev = byEra[appEra] ?? { total: 0, documented: docMap.get(`era:${appEra}`) ?? 0 };
+          if (!(appEra in byEra)) continue;
+          const prev = byEra[appEra];
           byEra[appEra] = { total: prev.total + Number(r.total), documented: prev.documented };
         }
 
-        const byYear: Record<number, { total: number; documented: number }> = Object.fromEntries(
-          YEARS.map((y) => [y, { total: 0, documented: docMap.get(`year:${y}`) ?? 0 }])
-        );
         for (const r of tursoByYear.rows as unknown as { year: number; total: number | bigint }[]) {
-          byYear[Number(r.year)] = { total: Number(r.total), documented: docMap.get(`year:${r.year}`) ?? 0 };
+          const y = Number(r.year);
+          if (!(y in byYear)) continue;
+          byYear[y] = { total: Number(r.total), documented: byYear[y].documented };
         }
+      } else {
+        // Fallback: Neon-only totals from contract_stats_cache
+        type TotalRow = { scope: string; total: number | string };
+        const totalRowsRaw = await db.execute<TotalRow>(sql`SELECT scope, total FROM contract_stats_cache`);
+        const totalRows: TotalRow[] = Array.isArray(totalRowsRaw)
+          ? (totalRowsRaw as TotalRow[])
+          : ((totalRowsRaw as { rows?: TotalRow[] }).rows ?? []);
 
-        return {
-          overall: { total: grandTotal, documented: docMap.get("overall") ?? 0 },
-          byEra,
-          byYear,
-          community: {
-            historians: historianCountResult[0]?.count ?? 0,
-            totalEdits: totalEditsResult[0]?.count ?? 0,
-          },
-        };
+        for (const r of totalRows) {
+          const t = Number(r.total);
+          if (r.scope === "overall") {
+            grandTotal = t;
+          } else if (r.scope.startsWith("era:")) {
+            const eraId = r.scope.slice(4);
+            if (eraId in byEra) byEra[eraId] = { total: t, documented: byEra[eraId].documented };
+          } else if (r.scope.startsWith("year:")) {
+            const y = Number(r.scope.slice(5));
+            if (y in byYear) byYear[y] = { total: t, documented: byYear[y].documented };
+          }
+        }
       }
 
-      // Fallback: Neon-only (Turso not configured), documented = short_description only
-      type NeonTotalRow = { scope: string; total: number };
-      const neonTotalPromise = db.execute<NeonTotalRow>(sql`
-        SELECT 'overall' AS scope, COUNT(*)::int AS total, NULL AS extra FROM contracts
-        UNION ALL
-        SELECT 'era:' || era_id, COUNT(*)::int, NULL
-        FROM contracts WHERE era_id IS NOT NULL GROUP BY era_id
-        UNION ALL
-        SELECT 'year:' || EXTRACT(YEAR FROM deployment_timestamp)::int::text, COUNT(*)::int, NULL
-        FROM contracts WHERE deployment_timestamp IS NOT NULL
-        GROUP BY EXTRACT(YEAR FROM deployment_timestamp)::int
-      `);
-
-      const [historianCountResult, totalEditsResult, neonDocRaw, neonTotalRaw] = await Promise.all([
-        historianPromise,
-        editsPromise,
-        neonDocPromise,
-        neonTotalPromise,
-      ]);
-
-      const neonDocRows: NeonDocRow[] = Array.isArray(neonDocRaw)
-        ? (neonDocRaw as NeonDocRow[])
-        : ((neonDocRaw as { rows?: NeonDocRow[] }).rows ?? []);
-      const neonTotalRows: NeonTotalRow[] = Array.isArray(neonTotalRaw)
-        ? (neonTotalRaw as NeonTotalRow[])
-        : ((neonTotalRaw as { rows?: NeonTotalRow[] }).rows ?? []);
-
-      const docMap = new Map<string, number>();
-      const totalMap = new Map<string, number>();
-      for (const r of neonDocRows) docMap.set(r.scope, Number(r.documented));
-      for (const r of neonTotalRows) totalMap.set(r.scope, Number(r.total));
-
-      const byEra: Record<string, { total: number; documented: number }> = Object.fromEntries(
-        ERA_IDS.map((id) => [
-          id,
-          { total: totalMap.get(`era:${id}`) ?? 0, documented: docMap.get(`era:${id}`) ?? 0 },
-        ])
-      );
-      const byYear: Record<number, { total: number; documented: number }> = Object.fromEntries(
-        YEARS.map((y) => [
-          y,
-          { total: totalMap.get(`year:${y}`) ?? 0, documented: docMap.get(`year:${y}`) ?? 0 },
-        ])
-      );
-
       return {
-        overall: { total: totalMap.get("overall") ?? 0, documented: docMap.get("overall") ?? 0 },
+        overall: { total: grandTotal, documented: docMap.get("overall") ?? 0 },
         byEra,
         byYear,
         community: {
