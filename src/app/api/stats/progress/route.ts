@@ -174,9 +174,10 @@ export async function GET(): Promise<NextResponse> {
       { headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1200" } }
     );
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     console.error("[stats/progress] Error fetching progress stats:", error);
     return NextResponse.json(
-      { data: null, error: "Failed to fetch progress stats" },
+      { data: null, error: `Failed to fetch progress stats: ${msg}` },
       { status: 500 }
     );
   }

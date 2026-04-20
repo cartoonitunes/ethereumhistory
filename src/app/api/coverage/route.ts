@@ -132,9 +132,10 @@ export async function GET(): Promise<NextResponse> {
       { headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=600" } }
     );
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
     console.error("Coverage API error:", error);
     return NextResponse.json(
-      { data: null, error: "Failed to fetch coverage data." },
+      { data: null, error: `Failed to fetch coverage data: ${msg}` },
       { status: 500 }
     );
   }
