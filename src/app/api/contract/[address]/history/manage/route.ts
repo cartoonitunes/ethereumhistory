@@ -17,6 +17,8 @@ import {
   updateContractTokenLogoFromDb,
   upsertHistoricalLinkFromDb,
 } from "@/lib/db-client";
+import { insertContractIfMissing } from "@/lib/db/contracts";
+import { resolveContract } from "@/lib/contract-resolver";
 import { normalizeContractCategories } from "@/lib/contract-categories";
 
 export const dynamic = "force-dynamic";
@@ -203,7 +205,32 @@ export async function POST(
 
   try {
     // Get current contract's deployer address BEFORE updating (to add to person's wallets if needed)
-    const currentContract = await getContractByAddress(normalized);
+    let currentContract = await getContractByAddress(normalized);
+
+    // If the contract exists only in the Turso index (not yet in Neon), promote it
+    // so that trusted historians can document factory-deployed contracts.
+    if (!currentContract) {
+      const resolved = await resolveContract(normalized);
+      if (!resolved || resolved.layer === "on-chain") {
+        return NextResponse.json({ data: null, error: "Contract not found." }, { status: 404 });
+      }
+      if (resolved.layer === "indexed" || resolved.layer === "uncovered") {
+        const ts = resolved.timestamp ? new Date(resolved.timestamp * 1000) : null;
+        await insertContractIfMissing({
+          address: normalized,
+          deployerAddress: resolved.deployer ?? null,
+          deploymentBlock: resolved.blockNumber ?? null,
+          deploymentTimestamp: ts,
+          eraId: resolved.era ?? null,
+          codeSizeBytes: resolved.codeSize ?? null,
+          runtimeBytecodeHash: resolved.bytecodeHash ?? null,
+          deployedBytecodeHash: resolved.bytecodeHash ?? null,
+          isDocumented: false,
+        } as any);
+        currentContract = await getContractByAddress(normalized);
+      }
+    }
+
     const currentDeployerAddress = currentContract?.deployerAddress?.toLowerCase() || null;
 
     await updateContractHistoryFieldsFromDb(normalized, {
