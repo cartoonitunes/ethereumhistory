@@ -47,14 +47,29 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const data = await cached("stats:progress:v4", CACHE_TTL.MEDIUM, async () => {
+    const data = await cached("stats:progress:v5", CACHE_TTL.MEDIUM, async () => {
       const db = getDb();
 
-      // contract_stats_cache: ~20 rows, uses is_documented=TRUE as numerator.
-      // Covers: historian narratives + verification_method + bytecode siblings.
-      type CacheRow = { scope: string; documented: number | string };
-      const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
-        db.execute<CacheRow>(sql`SELECT scope, documented FROM contract_stats_cache`),
+      // Documented = short_description set (historian editorial work).
+      // Uses the partial index on contracts(short_description) — fast on Neon.
+      // When migrations 067+068 are confirmed on prod, upgrade to is_documented=TRUE
+      // and contract_stats_cache for the broader numerator.
+      type NeonDocRow = { scope: string; documented: number };
+      const [neonDocRaw, historianCountResult, totalEditsResult] = await Promise.all([
+        db.execute<NeonDocRow>(sql`
+          SELECT 'overall' AS scope, COUNT(*)::int AS documented
+          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
+          UNION ALL
+          SELECT 'era:' || era_id, COUNT(*)::int
+          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
+            AND era_id IS NOT NULL
+          GROUP BY era_id
+          UNION ALL
+          SELECT 'year:' || EXTRACT(YEAR FROM deployment_timestamp)::int::text, COUNT(*)::int
+          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
+            AND deployment_timestamp IS NOT NULL
+          GROUP BY EXTRACT(YEAR FROM deployment_timestamp)::int
+        `),
         db.select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.historians)
           .where(eq(schema.historians.active, true)),
@@ -62,12 +77,12 @@ export async function GET(): Promise<NextResponse> {
           .from(schema.contractEdits),
       ]);
 
-      const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
-        ? (cacheRowsRaw as CacheRow[])
-        : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
+      const neonDocRows: NeonDocRow[] = Array.isArray(neonDocRaw)
+        ? (neonDocRaw as NeonDocRow[])
+        : ((neonDocRaw as { rows?: NeonDocRow[] }).rows ?? []);
 
       const docMap = new Map<string, number>();
-      for (const r of cacheRows) docMap.set(r.scope, Number(r.documented));
+      for (const r of neonDocRows) docMap.set(r.scope, Number(r.documented));
 
       const byEra: Record<string, { total: number; documented: number }> = Object.fromEntries(
         ERA_IDS.map((id) => [id, { total: 0, documented: docMap.get(`era:${id}`) ?? 0 }])
