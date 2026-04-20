@@ -12,7 +12,7 @@ import { ERAS, CAPABILITY_CATEGORIES } from "@/types";
 import { getContractTypeLabel, formatAddress, formatBytes } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
 
-const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
+const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
 
 // ─── Documented/undocumented (Neon) ────────────────────────────────────────
 
