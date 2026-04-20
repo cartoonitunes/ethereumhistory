@@ -59,14 +59,13 @@ export async function GET(): Promise<NextResponse> {
           db.execute(sql`
             SELECT era_id, COUNT(*)::int as count
             FROM contracts
-            WHERE short_description IS NOT NULL AND short_description != ''
+            WHERE is_documented = TRUE AND era_id IS NOT NULL
             GROUP BY era_id
           `),
           db.execute(sql`
             SELECT EXTRACT(YEAR FROM deployment_timestamp)::int as year, COUNT(*)::int as count
             FROM contracts
-            WHERE short_description IS NOT NULL AND short_description != ''
-              AND deployment_timestamp IS NOT NULL
+            WHERE is_documented = TRUE AND deployment_timestamp IS NOT NULL
             GROUP BY year
           `),
         ]);

@@ -7,6 +7,7 @@
  */
 
 import { isDatabaseConfigured, getDb, getTopEditorsFromDb, getRecentEditsFromDb, getDocumentedContractsFromDb } from "@/lib/db-client";
+import { isTursoConfigured, turso } from "@/lib/turso";
 import { getFeaturedContracts } from "@/lib/db";
 import * as schema from "@/lib/schema";
 import { sql, isNotNull, ne, and, asc, eq } from "drizzle-orm";
@@ -70,34 +71,31 @@ async function getContractOfTheDay(): Promise<FeaturedContract | null> {
   }
 }
 
+// Turso era names → app canonical IDs
+const TURSO_ERA_MAP: Record<string, string> = {
+  "frontier-thawing": "frontier",
+  "dao-fork": "dao",
+  "tangerine-whistle": "tangerine",
+  "spurious-dragon": "spurious",
+};
+
 async function getProgressStats(): Promise<ProgressStats | null> {
   if (!isDatabaseConfigured()) return null;
   try {
     return await cached<ProgressStats>(
-      "homepage:progress-stats",
+      "homepage:progress-stats:v2",
       CACHE_TTL.LONG,
       async () => {
         const db = getDb();
-        const ERA_IDS = new Set([
-          "frontier",
-          "homestead",
-          "dao",
-          "tangerine",
-          "spurious",
-          "byzantium",
-        ]);
+        const APP_ERA_IDS = new Set(["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"]);
         const YEARS = new Set([2015, 2016, 2017, 2018]);
 
-        // Reads from the ~20-row `contract_stats_cache` (migration 068) instead
-        // of aggregating 1.4M rows on every render. Cache is refreshed by
-        // `refresh_contract_stats_cache()`, not on read — so this is always
-        // sub-millisecond.
+        // contract_stats_cache (~20 rows) stores `documented` using is_documented=TRUE,
+        // which covers: historian narratives + cracked/etherscan-verified + bytecode siblings.
+        // We use it for documented counts only. Totals come from Turso (12M+).
         type CacheRow = { scope: string; total: number | string; documented: number | string };
-        const cacheRowsRaw = await db.execute<CacheRow>(sql`
-          SELECT scope, total, documented FROM contract_stats_cache
-        `);
-
-        const [historianCountResult, totalEditsResult] = await Promise.all([
+        const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
+          db.execute<CacheRow>(sql`SELECT scope, documented FROM contract_stats_cache`),
           db.select({ count: sql<number>`COUNT(*)::int` })
             .from(schema.historians)
             .where(eq(schema.historians.active, true)),
@@ -105,32 +103,45 @@ async function getProgressStats(): Promise<ProgressStats | null> {
             .from(schema.contractEdits),
         ]);
 
-        let overall = { total: 0, documented: 0 };
-        const byEra: Record<string, { total: number; documented: number }> = {};
-        const byYear: Record<string, { total: number; documented: number }> = {};
-        for (const eraId of ERA_IDS) byEra[eraId] = { total: 0, documented: 0 };
-        for (const year of YEARS) byYear[String(year)] = { total: 0, documented: 0 };
-
         const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
           ? (cacheRowsRaw as CacheRow[])
           : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
 
-        for (const row of cacheRows) {
-          const total = Number(row.total);
-          const documented = Number(row.documented);
-          if (row.scope === "overall") {
-            overall = { total, documented };
-          } else if (row.scope.startsWith("era:")) {
-            const eraId = row.scope.slice(4);
-            if (ERA_IDS.has(eraId)) byEra[eraId] = { total, documented };
-          } else if (row.scope.startsWith("year:")) {
-            const year = row.scope.slice(5);
-            if (YEARS.has(Number(year))) byYear[year] = { total, documented };
+        const docMap = new Map<string, number>();
+        for (const row of cacheRows) docMap.set(row.scope, Number(row.documented));
+
+        const byEra: Record<string, { total: number; documented: number }> = {};
+        const byYear: Record<string, { total: number; documented: number }> = {};
+        for (const eraId of APP_ERA_IDS) byEra[eraId] = { total: 0, documented: docMap.get(`era:${eraId}`) ?? 0 };
+        for (const year of YEARS) byYear[String(year)] = { total: 0, documented: docMap.get(`year:${year}`) ?? 0 };
+
+        let grandTotal = 0;
+
+        if (isTursoConfigured()) {
+          const [tursoOverall, tursoByEra, tursoByYear] = await Promise.all([
+            turso.execute(`SELECT COUNT(*) AS total FROM contract_index`),
+            turso.execute(`SELECT era, COUNT(*) AS total FROM contract_index WHERE era IS NOT NULL GROUP BY era`),
+            turso.execute(`SELECT year, COUNT(*) AS total FROM contract_index WHERE year IS NOT NULL GROUP BY year`),
+          ]);
+
+          grandTotal = Number((tursoOverall.rows[0] as unknown as { total: number | bigint })?.total ?? 0);
+
+          for (const r of tursoByEra.rows as unknown as { era: string; total: number | bigint }[]) {
+            const appEra = TURSO_ERA_MAP[r.era] ?? r.era;
+            if (!APP_ERA_IDS.has(appEra)) continue;
+            const prev = byEra[appEra] ?? { total: 0, documented: docMap.get(`era:${appEra}`) ?? 0 };
+            byEra[appEra] = { total: prev.total + Number(r.total), documented: prev.documented };
+          }
+
+          for (const r of tursoByYear.rows as unknown as { year: number; total: number | bigint }[]) {
+            const y = String(Number(r.year));
+            if (!YEARS.has(Number(y))) continue;
+            byYear[y] = { total: Number(r.total), documented: docMap.get(`year:${y}`) ?? 0 };
           }
         }
 
         return {
-          overall,
+          overall: { total: grandTotal, documented: docMap.get("overall") ?? 0 },
           byEra,
           byYear,
           community: {
