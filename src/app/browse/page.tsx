@@ -7,12 +7,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
 import { ContractCard } from "@/components/ContractCard";
 import { DocumentationProgress } from "@/components/DocumentationProgress";
-import { Search, ArrowLeft, ChevronLeft, ChevronRight, Check, Filter, X } from "lucide-react";
+import { Search, ArrowLeft, ChevronLeft, ChevronRight, Check, Filter, Database, BookOpen } from "lucide-react";
 import { ERAS, CAPABILITY_CATEGORIES } from "@/types";
-import { getContractTypeLabel } from "@/lib/utils";
+import { getContractTypeLabel, formatAddress, formatBytes } from "@/lib/utils";
 import type { FeaturedContract } from "@/types";
 
-const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"] as const;
+const ERA_IDS = ["frontier", "homestead", "dao", "tangerine", "spurious"] as const;
+
+// ─── Documented/undocumented (Neon) ────────────────────────────────────────
 
 interface BrowseContract {
   address: string;
@@ -43,6 +45,37 @@ function toFeaturedContract(c: BrowseContract): FeaturedContract & { tokenName: 
   };
 }
 
+// ─── Index (Turso) ──────────────────────────────────────────────────────────
+
+interface IndexContract {
+  address: string;
+  deployer: string;
+  blockNumber: number;
+  deploymentDate: string | null;
+  bytecodeHash: string | null;
+  codeSizeBytes: number;
+  era: string;
+  year: number;
+  isInternal: boolean;
+}
+
+function indexToFeaturedContract(c: IndexContract): FeaturedContract & { tokenName: string | null; deploymentRank: number | null; codeSizeBytes: number | null; deployStatus: string | null } {
+  return {
+    address: c.address,
+    name: formatAddress(c.address, 8),
+    shortDescription: "",
+    eraId: c.era || "frontier",
+    deploymentDate: c.deploymentDate || "Unknown",
+    significance: "",
+    tokenName: null,
+    deploymentRank: null,
+    codeSizeBytes: c.codeSizeBytes ?? null,
+    deployStatus: null,
+  };
+}
+
+// ─── Main browse content ────────────────────────────────────────────────────
+
 function BrowseContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -55,7 +88,10 @@ function BrowseContent() {
     }
   }, [rawQ, router]);
 
-  const [contracts, setContracts] = useState<BrowseContract[]>([]);
+  // Mode: "documented" (Neon) vs "index" (Turso)
+  const mode = (searchParams.get("mode") || "documented") as "documented" | "index";
+
+  const [contracts, setContracts] = useState<BrowseContract[] | IndexContract[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -74,48 +110,68 @@ function BrowseContent() {
   const registrar = searchParams.get("registrar") || "";
   const sort = searchParams.get("sort") || "";
   const selfDestructed = searchParams.get("self_destructed") || "";
+  // Index-specific filters
+  const deployer = searchParams.get("deployer") || "";
+  const minSize = searchParams.get("min_size") || "";
+  const maxSize = searchParams.get("max_size") || "";
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/browse/types")
-      .then((res) => res.json())
-      .then((json) => {
-        if (!cancelled && json?.data?.types) setTypeOptions(json.data.types);
-      })
-      .catch(() => {});
-    fetch("/api/browse/capabilities")
-      .then((res) => res.json())
-      .then((json) => {
-        if (!cancelled && json?.data?.categories) setAvailableCapabilities(json.data.categories);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (mode === "documented") {
+      let cancelled = false;
+      fetch("/api/browse/types")
+        .then((res) => res.json())
+        .then((json) => { if (!cancelled && json?.data?.types) setTypeOptions(json.data.types); })
+        .catch(() => {});
+      fetch("/api/browse/capabilities")
+        .then((res) => res.json())
+        .then((json) => { if (!cancelled && json?.data?.categories) setAvailableCapabilities(json.data.categories); })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }
+  }, [mode]);
 
   const fetchContracts = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (era) params.set("era", era);
-    if (year) params.set("year", year);
-    if (type) params.set("type", type);
-    if (q.trim()) params.set("q", q.trim());
-    if (undocumented) params.set("undocumented", "1");
-    if (registrar) params.set("registrar", registrar);
-    if (capabilities) params.set("capabilities", capabilities);
-    if (verification) params.set("verification", verification);
-    if (sort) params.set("sort", sort);
-    if (selfDestructed) params.set("self_destructed", selfDestructed);
-    params.set("page", String(page));
     try {
-      const res = await fetch(`/api/browse?${params.toString()}`);
-      const json = await res.json();
-      const data = json?.data;
-      if (data) {
-        setContracts(data.contracts || []);
-        setTotal(data.total ?? 0);
-        setTotalPages(data.totalPages ?? 0);
+      if (mode === "index") {
+        const params = new URLSearchParams();
+        params.set("source", "index");
+        if (era) params.set("era", era);
+        if (year) params.set("year", year);
+        if (deployer) params.set("deployer", deployer);
+        if (minSize) params.set("min_size", minSize);
+        if (maxSize) params.set("max_size", maxSize);
+        if (sort) params.set("sort", sort);
+        params.set("page", String(page));
+        const res = await fetch(`/api/browse?${params.toString()}`);
+        const json = await res.json();
+        const d = json?.data;
+        if (d) {
+          setContracts(d.contracts || []);
+          setTotal(d.total ?? 0);
+          setTotalPages(d.totalPages ?? 0);
+        }
+      } else {
+        const params = new URLSearchParams();
+        if (era) params.set("era", era);
+        if (year) params.set("year", year);
+        if (type) params.set("type", type);
+        if (q.trim()) params.set("q", q.trim());
+        if (undocumented) params.set("undocumented", "1");
+        if (registrar) params.set("registrar", registrar);
+        if (capabilities) params.set("capabilities", capabilities);
+        if (verification) params.set("verification", verification);
+        if (sort) params.set("sort", sort);
+        if (selfDestructed) params.set("self_destructed", selfDestructed);
+        params.set("page", String(page));
+        const res = await fetch(`/api/browse?${params.toString()}`);
+        const json = await res.json();
+        const d = json?.data;
+        if (d) {
+          setContracts(d.contracts || []);
+          setTotal(d.total ?? 0);
+          setTotalPages(d.totalPages ?? 0);
+        }
       }
     } catch {
       setContracts([]);
@@ -124,17 +180,23 @@ function BrowseContent() {
     } finally {
       setLoading(false);
     }
-  }, [era, year, type, q, undocumented, capabilities, verification, registrar, sort, selfDestructed, page]);
+  }, [mode, era, year, type, q, undocumented, capabilities, verification, registrar, sort, selfDestructed, deployer, minSize, maxSize, page]);
 
   useEffect(() => {
     fetchContracts();
   }, [fetchContracts]);
 
-  const setFilter = (key: "era" | "year" | "type" | "q" | "page" | "undocumented" | "capabilities" | "verification" | "registrar" | "sort" | "self_destructed", value: string) => {
+  const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams.toString());
     if (value) next.set(key, value);
     else next.delete(key);
     if (key !== "page") next.set("page", "1");
+    window.history.replaceState(null, "", `?${next.toString()}`);
+  };
+
+  const setMode = (newMode: "documented" | "index") => {
+    const next = new URLSearchParams();
+    next.set("mode", newMode);
     window.history.replaceState(null, "", `?${next.toString()}`);
   };
 
@@ -174,13 +236,128 @@ function BrowseContent() {
             </p>
           </motion.div>
 
-          {/* Documentation Progress */}
-          <div className="mb-6">
-            <DocumentationProgress variant="browse" filterEra={era || undefined} filterYear={year || undefined} />
+          {/* Mode tabs */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-obsidian-900/60 border border-obsidian-800 w-fit mb-6">
+            <button
+              onClick={() => setMode("documented")}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                mode === "documented"
+                  ? "bg-ether-500/20 text-ether-300 border border-ether-500/30"
+                  : "text-obsidian-400 hover:text-obsidian-200"
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              Documented
+            </button>
+            <button
+              onClick={() => setMode("index")}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                mode === "index"
+                  ? "bg-obsidian-700/60 text-obsidian-100 border border-obsidian-600"
+                  : "text-obsidian-400 hover:text-obsidian-200"
+              }`}
+            >
+              <Database className="w-4 h-4" />
+              All Contracts
+            </button>
           </div>
 
-          {/* Search bar + Filters toggle */}
+          {/* Documentation Progress (documented mode only) */}
+          {mode === "documented" && (
+            <div className="mb-6">
+              <DocumentationProgress variant="browse" filterEra={era || undefined} filterYear={year || undefined} />
+            </div>
+          )}
+
+          {/* Index mode total count banner */}
+          {mode === "index" && !loading && total > 0 && (
+            <div className="mb-4 text-sm text-obsidian-400">
+              Showing{" "}
+              <span className="text-obsidian-200 font-medium">{total.toLocaleString()}</span>{" "}
+              contracts from the full on-chain index
+            </div>
+          )}
+
+          {/* Search + filters */}
           {(() => {
+            if (mode === "index") {
+              // Index mode filters
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="mb-4"
+                >
+                  <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-5 flex flex-col gap-4">
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex flex-col gap-1.5 text-sm">
+                        <span className="text-obsidian-400">Era</span>
+                        <select value={era} onChange={(e) => setFilter("era", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                          <option value="">All eras</option>
+                          {ERA_IDS.map((id) => (<option key={id} value={id}>{ERAS[id]?.name ?? id}</option>))}
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm">
+                        <span className="text-obsidian-400">Year</span>
+                        <select value={year} onChange={(e) => setFilter("year", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                          <option value="">All years</option>
+                          <option value="2015">2015</option>
+                          <option value="2016">2016</option>
+                          <option value="2017">2017</option>
+                          <option value="2018">2018</option>
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm">
+                        <span className="text-obsidian-400">Sort</span>
+                        <select value={sort} onChange={(e) => setFilter("sort", e.target.value)} className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50">
+                          <option value="">Oldest first</option>
+                          <option value="block_desc">Newest first</option>
+                          <option value="size_desc">Largest code</option>
+                          <option value="size_asc">Smallest code</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex flex-col gap-1.5 text-sm flex-1 min-w-48">
+                        <span className="text-obsidian-400">Deployer address</span>
+                        <input
+                          type="text"
+                          value={deployer}
+                          onChange={(e) => setFilter("deployer", e.target.value)}
+                          placeholder="0x..."
+                          className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50 placeholder:text-obsidian-500 font-mono text-sm"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm w-28">
+                        <span className="text-obsidian-400">Min size (bytes)</span>
+                        <input
+                          type="number"
+                          value={minSize}
+                          onChange={(e) => setFilter("min_size", e.target.value)}
+                          placeholder="0"
+                          min={0}
+                          className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm w-28">
+                        <span className="text-obsidian-400">Max size (bytes)</span>
+                        <input
+                          type="number"
+                          value={maxSize}
+                          onChange={(e) => setFilter("max_size", e.target.value)}
+                          placeholder="24576"
+                          min={0}
+                          className="rounded-lg border border-obsidian-700 bg-obsidian-900/80 text-obsidian-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ether-500/50"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            }
+
+            // Documented mode filters
             const activeFilterCount = [
               era, year, type, verification, sort, selfDestructed, registrar,
               undocumented ? "1" : "",
@@ -194,7 +371,6 @@ function BrowseContent() {
                 transition={{ delay: 0.05 }}
                 className="mb-4"
               >
-                {/* Always-visible: search + filters button */}
                 <div className="flex gap-3 mb-3">
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-obsidian-500" />
@@ -224,7 +400,6 @@ function BrowseContent() {
                   </button>
                 </div>
 
-                {/* Collapsible filter panel */}
                 <AnimatePresence>
                   {filtersOpen && (
                     <motion.div
@@ -236,7 +411,6 @@ function BrowseContent() {
                       className="overflow-hidden"
                     >
                       <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-5 mb-3 flex flex-col gap-5">
-                        {/* Row 1: dropdowns */}
                         <div className="flex flex-wrap gap-3">
                           <label className="flex flex-col gap-1.5 text-sm">
                             <span className="text-obsidian-400">Year</span>
@@ -245,7 +419,6 @@ function BrowseContent() {
                               <option value="2015">2015</option>
                               <option value="2016">2016</option>
                               <option value="2017">2017</option>
-                              <option value="2018">2018</option>
                             </select>
                           </label>
                           <label className="flex flex-col gap-1.5 text-sm">
@@ -297,7 +470,6 @@ function BrowseContent() {
                           </div>
                         </div>
 
-                        {/* Registrar pills */}
                         <div className="flex flex-wrap gap-2 items-center">
                           <span className="text-xs text-obsidian-500 font-medium uppercase tracking-wider">Named in</span>
                           {([
@@ -313,7 +485,6 @@ function BrowseContent() {
                           ))}
                         </div>
 
-                        {/* Capability pills */}
                         {availableCapabilities.length > 0 && (() => {
                           const groups: Record<string, string[]> = {};
                           for (const slug of availableCapabilities) {
@@ -361,39 +532,82 @@ function BrowseContent() {
           {loading ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div
-                  key={i}
-                  className="h-48 rounded-xl bg-obsidian-900/30 border border-obsidian-800 animate-pulse"
-                />
+                <div key={i} className="h-48 rounded-xl bg-obsidian-900/30 border border-obsidian-800 animate-pulse" />
               ))}
             </div>
           ) : contracts.length === 0 ? (
             <div className="rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-12 text-center">
-              <p className="text-obsidian-400 mb-2">No documented contracts match your filters.</p>
-              <p className="text-sm text-obsidian-500">
-                Try changing era, type, or search in code.
+              <p className="text-obsidian-400 mb-2">
+                {mode === "index"
+                  ? "No contracts match your filters in the index."
+                  : "No documented contracts match your filters."}
               </p>
+              <p className="text-sm text-obsidian-500">Try changing era, type, or filters.</p>
             </div>
           ) : (
             <>
-              <p className="text-sm text-obsidian-500 mb-4">
-                {total} contract{total !== 1 ? "s" : ""} found
-              </p>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {contracts.map((contract, index) => (
-                  <motion.div
-                    key={contract.address}
-                    initial={{ opacity: 0, y: 16 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03 }}
-                  >
-                    <ContractCard
-                      contract={toFeaturedContract(contract)}
-                      variant="featured"
-                    />
-                  </motion.div>
-                ))}
-              </div>
+              {mode !== "index" && (
+                <p className="text-sm text-obsidian-500 mb-4">
+                  {total} contract{total !== 1 ? "s" : ""} found
+                </p>
+              )}
+
+              {mode === "index" ? (
+                // Index mode: compact list
+                <div className="flex flex-col gap-2">
+                  {(contracts as IndexContract[]).map((contract, index) => (
+                    <motion.div
+                      key={contract.address}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.02 }}
+                    >
+                      <Link
+                        href={`/contract/${contract.address}`}
+                        className="flex items-center gap-4 px-4 py-3 rounded-xl border border-obsidian-800 bg-obsidian-900/30 hover:bg-obsidian-900/60 hover:border-obsidian-700 transition-colors group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="font-mono text-sm text-obsidian-200 group-hover:text-ether-300 transition-colors truncate">
+                            {contract.address}
+                          </div>
+                          <div className="text-xs text-obsidian-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                            {contract.era && (
+                              <span className="capitalize">{contract.era}</span>
+                            )}
+                            {contract.deploymentDate && (
+                              <span>{contract.deploymentDate}</span>
+                            )}
+                            {contract.codeSizeBytes > 0 && (
+                              <span>{formatBytes(contract.codeSizeBytes)}</span>
+                            )}
+                            {contract.isInternal && (
+                              <span className="text-obsidian-600">internal</span>
+                            )}
+                          </div>
+                        </div>
+                        {contract.deployer && (
+                          <div className="font-mono text-xs text-obsidian-500 shrink-0 hidden sm:block">
+                            {formatAddress(contract.deployer, 6)}
+                          </div>
+                        )}
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(contracts as BrowseContract[]).map((contract, index) => (
+                    <motion.div
+                      key={contract.address}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.03 }}
+                    >
+                      <ContractCard contract={toFeaturedContract(contract)} variant="featured" />
+                    </motion.div>
+                  ))}
+                </div>
+              )}
 
               {/* Pagination */}
               {totalPages > 1 && (() => {
@@ -404,34 +618,22 @@ function BrowseContent() {
                 return (
                   <div className="flex items-center justify-center gap-2 mt-10">
                     {page > 1 ? (
-                      <Link
-                        href={`?${prevParams.toString()}`}
-                        className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 transition-colors"
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                        Previous
+                      <Link href={`?${prevParams.toString()}`} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 transition-colors">
+                        <ChevronLeft className="w-4 h-4" />Previous
                       </Link>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-600 cursor-not-allowed">
-                        <ChevronLeft className="w-4 h-4" />
-                        Previous
+                        <ChevronLeft className="w-4 h-4" />Previous
                       </span>
                     )}
-                    <span className="px-3 py-2 text-sm text-obsidian-400">
-                      Page {page} of {totalPages}
-                    </span>
+                    <span className="px-3 py-2 text-sm text-obsidian-400">Page {page} of {totalPages}</span>
                     {page < totalPages ? (
-                      <Link
-                        href={`?${nextParams.toString()}`}
-                        className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 transition-colors"
-                      >
-                        Next
-                        <ChevronRight className="w-4 h-4" />
+                      <Link href={`?${nextParams.toString()}`} className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-300 hover:bg-obsidian-800 hover:text-obsidian-100 transition-colors">
+                        Next<ChevronRight className="w-4 h-4" />
                       </Link>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-obsidian-600 cursor-not-allowed">
-                        Next
-                        <ChevronRight className="w-4 h-4" />
+                        Next<ChevronRight className="w-4 h-4" />
                       </span>
                     )}
                   </div>
@@ -452,7 +654,6 @@ export default function BrowsePage() {
         <Header />
         <div className="max-w-7xl mx-auto px-4 py-12">
           <div className="h-8 w-48 bg-obsidian-800 rounded animate-pulse mb-8" />
-          <div className="h-12 flex gap-4 mb-8" />
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="h-48 bg-obsidian-800 rounded-xl animate-pulse" />

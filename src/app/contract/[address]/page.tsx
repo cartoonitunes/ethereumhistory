@@ -1,9 +1,12 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContractPageClient } from "./ContractPageClient";
+import { IndexedContractPage } from "./IndexedContractPage";
 import { getContractPageData, getContractWithTokenMetadata, getContract } from "@/lib/db";
 import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
+import { resolveContract } from "@/lib/contract-resolver";
+import { isTursoConfigured } from "@/lib/turso";
 
 // Historical contracts are essentially immutable — cache for 10 min at the CDN/ISR layer
 export const revalidate = 600;
@@ -189,7 +192,23 @@ export default async function ContractPage({ params }: Props) {
   }
 
   if (!data) {
-    // Return client component with not found state
+    // Not in Neon — try the Turso index for Layer 2/3 contracts
+    if (isTursoConfigured()) {
+      try {
+        const resolved = await resolveContract(address.toLowerCase());
+        if (resolved && resolved.layer !== "on-chain") {
+          // Layer 4 should have been caught by getContractPageData — if resolver
+          // returns 'documented' here it means shortDescription is set but page
+          // data failed; fall through to ContractPageClient not-found state.
+          if (resolved.layer !== "documented") {
+            return <IndexedContractPage address={address.toLowerCase()} resolved={resolved} />;
+          }
+        }
+      } catch (resolverError) {
+        console.error("Contract resolver error:", resolverError);
+        // Fall through to not-found state
+      }
+    }
     return <ContractPageClient address={address} data={null} error={null} />;
   }
 
