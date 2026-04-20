@@ -86,19 +86,19 @@ export async function GET(): Promise<NextResponse> {
         const docMap = new Map<string, number>();
         for (const r of neonRows) docMap.set(r.scope, Number(r.documented));
 
-        const grandTotal = Number((tursoOverall.rows[0] as { total: number | bigint })?.total ?? 0);
+        const grandTotal = Number((tursoOverall.rows[0] as unknown as { total: number | bigint })?.total ?? 0);
 
         const byEra: Record<string, { total: number; documented: number }> = Object.fromEntries(
           ERA_IDS.map((id) => [id, { total: 0, documented: docMap.get(`era:${id}`) ?? 0 }])
         );
-        for (const r of tursoByEra.rows as { era: string; total: number | bigint }[]) {
+        for (const r of tursoByEra.rows as unknown as { era: string; total: number | bigint }[]) {
           byEra[r.era] = { total: Number(r.total), documented: docMap.get(`era:${r.era}`) ?? 0 };
         }
 
         const byYear: Record<number, { total: number; documented: number }> = Object.fromEntries(
           YEARS.map((y) => [y, { total: 0, documented: docMap.get(`year:${y}`) ?? 0 }])
         );
-        for (const r of tursoByYear.rows as { year: number; total: number | bigint }[]) {
+        for (const r of tursoByYear.rows as unknown as { year: number; total: number | bigint }[]) {
           byYear[Number(r.year)] = { total: Number(r.total), documented: docMap.get(`year:${r.year}`) ?? 0 };
         }
 
