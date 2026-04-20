@@ -47,29 +47,14 @@ export async function GET(): Promise<NextResponse> {
   }
 
   try {
-    const data = await cached("stats:progress:v5", CACHE_TTL.MEDIUM, async () => {
+    const data = await cached("stats:progress:v6", CACHE_TTL.MEDIUM, async () => {
       const db = getDb();
 
-      // Documented = short_description set (historian editorial work).
-      // Uses the partial index on contracts(short_description) — fast on Neon.
-      // When migrations 067+068 are confirmed on prod, upgrade to is_documented=TRUE
-      // and contract_stats_cache for the broader numerator.
+      // Documented = is_documented=TRUE (historian narratives + cracked/verified + bytecode siblings).
+      // contract_stats_cache (~20 rows) is the fast path — refreshed by migration 068 trigger.
       type NeonDocRow = { scope: string; documented: number };
       const [neonDocRaw, historianCountResult, totalEditsResult] = await Promise.all([
-        db.execute<NeonDocRow>(sql`
-          SELECT 'overall' AS scope, COUNT(*)::int AS documented
-          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-          UNION ALL
-          SELECT 'era:' || era_id, COUNT(*)::int
-          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-            AND era_id IS NOT NULL
-          GROUP BY era_id
-          UNION ALL
-          SELECT 'year:' || EXTRACT(YEAR FROM deployment_timestamp)::int::text, COUNT(*)::int
-          FROM contracts WHERE short_description IS NOT NULL AND short_description != ''
-            AND deployment_timestamp IS NOT NULL
-          GROUP BY EXTRACT(YEAR FROM deployment_timestamp)::int
-        `),
+        db.execute<NeonDocRow>(sql`SELECT scope, documented FROM contract_stats_cache`),
         db.select({ count: sql<number>`COUNT(*)::int` })
           .from(schema.historians)
           .where(eq(schema.historians.active, true)),
