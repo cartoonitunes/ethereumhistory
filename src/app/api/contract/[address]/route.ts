@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getContractPageData } from "@/lib/db";
+import { resolveContract, buildContractFromResolved } from "@/lib/contract-resolver";
 import { isValidAddress } from "@/lib/utils";
 import type { ApiResponse, ContractPageData } from "@/types";
 
@@ -37,36 +38,37 @@ export async function GET(
   try {
     const data = await getContractPageData(address);
 
-    if (!data) {
+    if (data) {
+      return NextResponse.json({
+        data,
+        error: null,
+        meta: { timestamp: new Date().toISOString(), cached: false },
+      });
+    }
+
+    // Neon + RPC came up empty — fall back to Turso index.
+    // Covers self-destructed contracts and historical contracts not yet seeded into Neon.
+    const resolved = await resolveContract(address);
+    if (!resolved) {
       return NextResponse.json(
         {
           data: null,
           error: "Contract not found in our historical archive.",
-          meta: {
-            timestamp: new Date().toISOString(),
-            cached: false,
-          },
+          meta: { timestamp: new Date().toISOString(), cached: false },
         },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
-      data,
+      data: buildContractFromResolved(resolved),
       error: null,
-      meta: {
-        timestamp: new Date().toISOString(),
-        cached: false,
-      },
+      meta: { timestamp: new Date().toISOString(), cached: false },
     });
   } catch (error) {
     console.error("Error fetching contract:", error);
-
     return NextResponse.json(
-      {
-        data: null,
-        error: "An error occurred while fetching contract data.",
-      },
+      { data: null, error: "An error occurred while fetching contract data." },
       { status: 500 }
     );
   }

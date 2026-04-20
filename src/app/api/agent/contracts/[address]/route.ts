@@ -14,6 +14,7 @@ import {
   getHistoricalLinksForContractFromDb,
   getContractMetadataFromDb,
 } from "@/lib/db-client";
+import { resolveContract, buildContractFromResolved } from "@/lib/contract-resolver";
 import { isValidAddress } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -31,23 +32,33 @@ export async function GET(
     );
   }
 
-  const contract = await getContract(address.toLowerCase());
+  const addr = address.toLowerCase();
+
+  let contract = await getContract(addr);
+  let layer = "documented";
+
   if (!contract) {
-    return NextResponse.json(
-      { error: "Contract not found in our historical archive." },
-      { status: 404 }
-    );
+    const resolved = await resolveContract(addr);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: "Contract not found in our historical archive." },
+        { status: 404 }
+      );
+    }
+    contract = buildContractFromResolved(resolved);
+    layer = resolved.layer;
   }
 
   const links = isDatabaseConfigured()
-    ? await getHistoricalLinksForContractFromDb(address.toLowerCase(), 50)
+    ? await getHistoricalLinksForContractFromDb(addr, 50)
     : [];
   const metadata = isDatabaseConfigured()
-    ? await getContractMetadataFromDb(address.toLowerCase(), 200)
+    ? await getContractMetadataFromDb(addr, 200)
     : [];
 
   const data = {
     address: contract.address,
+    layer,
     era_id: contract.eraId,
     era: contract.era
       ? {
