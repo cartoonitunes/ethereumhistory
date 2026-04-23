@@ -669,7 +669,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               {/* Inline verification badges — visible immediately on mobile */}
               {(contract.sourcifyMatch || contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourceCode) && (
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified") && (
+                  {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourcifyMatch) && (
                     <a
                       href={`https://etherscan.io/address/${contract.address}#code`}
                       target="_blank"
@@ -2370,7 +2370,7 @@ function OverviewTab({
 
             {/* Verification badges */}
             <div className="flex flex-wrap gap-2 mb-3">
-              {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified") && (
+              {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourcifyMatch) && (
                 <a
                   href={`https://etherscan.io/address/${contract.address}#code`}
                   target="_blank"

@@ -24,6 +24,7 @@ export async function updateContractHistoryFieldsFromDb(
     description?: string | null;
     historicalSignificance?: string | null;
     historicalContext?: string | null;
+    sourcifyMatch?: string | null;
   }
 ): Promise<void> {
   const database = getDb();
@@ -64,7 +65,11 @@ export async function updateContractHistoryFieldsFromDb(
     updates.historicalContext = patch.historicalContext;
     hasFieldUpdates = true;
   }
-  
+  if (patch.sourcifyMatch !== undefined) {
+    updates.sourcifyMatch = patch.sourcifyMatch;
+    hasFieldUpdates = true;
+  }
+
   // Only update if there are actual field changes (beyond just updatedAt)
   if (!hasFieldUpdates) return;
   
