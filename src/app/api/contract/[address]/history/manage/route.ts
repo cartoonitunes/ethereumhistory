@@ -266,6 +266,10 @@ export async function POST(
         contractPatch.historicalContext !== undefined
           ? (String(contractPatch.historicalContext || "").trim() || null)
           : undefined,
+      sourcifyMatch:
+        contractPatch.sourcifyMatch !== undefined
+          ? (String(contractPatch.sourcifyMatch || "").trim() || null)
+          : undefined,
     });
 
     // Handle deployer address changes
