@@ -27,6 +27,7 @@ import {
   Loader2,
   ShieldCheck,
   BookOpen,
+  Upload,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -2611,27 +2612,84 @@ function SimilarityTab({
 }
 
 function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
+  const [inputMode, setInputMode] = useState<"url" | "upload">("url");
   const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [caption, setCaption] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [mediaType, setMediaType] = useState("screenshot");
   const [saving, setSaving] = useState(false);
+  const [savingStep, setSavingStep] = useState<"uploading" | "saving" | "">("");
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+  const handleFileSelect = (f: File) => {
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      setError("Unsupported type. PNG, JPG, GIF, or WebP only — no SVG.");
+      return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setError("File too large. Max 5 MB.");
+      return;
+    }
+    setError(null);
+    setFile(f);
+    const reader = new FileReader();
+    reader.onload = (e) => setPreview((e.target?.result as string) ?? null);
+    reader.readAsDataURL(f);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
     setSaving(true);
     setError(null);
     setSuccess(false);
+
+    let finalUrl = url.trim();
+
+    if (inputMode === "upload") {
+      if (!file) {
+        setError("Please select a file.");
+        setSaving(false);
+        return;
+      }
+      setSavingStep("uploading");
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const res = await fetch("/api/upload/media", { method: "POST", body: fd });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json.error ?? "Upload failed.");
+          setSaving(false);
+          setSavingStep("");
+          return;
+        }
+        finalUrl = json.url as string;
+      } catch {
+        setError("Upload failed.");
+        setSaving(false);
+        setSavingStep("");
+        return;
+      }
+    } else if (!finalUrl) {
+      setSaving(false);
+      return;
+    }
+
+    setSavingStep("saving");
     try {
       const res = await fetch(`/api/contract/${contractAddress}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: url.trim(),
+          url: finalUrl,
           caption: caption.trim() || null,
           sourceLabel: sourceLabel.trim() || null,
           sourceUrl: sourceUrl.trim() || null,
@@ -2640,10 +2698,12 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error || "Failed to save media.");
+        setError(json.error ?? "Failed to save media.");
       } else {
         setSuccess(true);
         setUrl("");
+        setFile(null);
+        setPreview(null);
         setCaption("");
         setSourceLabel("");
         setSourceUrl("");
@@ -2653,6 +2713,7 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
       setError("Network error.");
     } finally {
       setSaving(false);
+      setSavingStep("");
     }
   };
 
@@ -2660,17 +2721,103 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
     <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
       <h3 className="font-semibold mb-4">Add Media</h3>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-xs text-obsidian-500 mb-1">Image URL *</label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
-            required
-            className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
-          />
+        {/* Input mode tabs */}
+        <div className="flex border-b border-obsidian-700 mb-1">
+          <button
+            type="button"
+            onClick={() => { setInputMode("url"); setError(null); }}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+              inputMode === "url"
+                ? "border-ether-500 text-obsidian-100"
+                : "border-transparent text-obsidian-500 hover:text-obsidian-300"
+            }`}
+          >
+            Link URL
+          </button>
+          <button
+            type="button"
+            onClick={() => { setInputMode("upload"); setError(null); }}
+            className={`px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
+              inputMode === "upload"
+                ? "border-ether-500 text-obsidian-100"
+                : "border-transparent text-obsidian-500 hover:text-obsidian-300"
+            }`}
+          >
+            Upload File
+          </button>
         </div>
+
+        {inputMode === "url" ? (
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">Image URL *</label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+              required
+              className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">Image File *</label>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const f = e.dataTransfer.files[0];
+                if (f) handleFileSelect(f);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors text-center ${
+                dragOver
+                  ? "border-ether-500 bg-ether-500/10"
+                  : "border-obsidian-700 hover:border-obsidian-500 bg-obsidian-800/50"
+              }`}
+            >
+              {preview ? (
+                <div className="space-y-2">
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className="max-h-48 mx-auto rounded object-contain"
+                  />
+                  <p className="text-xs text-obsidian-500 truncate">{file?.name}</p>
+                </div>
+              ) : (
+                <div className="text-obsidian-500 py-2">
+                  <Upload className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Drag & drop or click to upload</p>
+                  <p className="text-xs mt-1 opacity-70">PNG, JPG, GIF, WebP · max 5 MB · max 4096×4096 px</p>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFileSelect(f);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+            </div>
+            {preview && (
+              <button
+                type="button"
+                onClick={() => { setFile(null); setPreview(null); setError(null); }}
+                className="mt-1 text-xs text-obsidian-500 hover:text-obsidian-300 transition-colors"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="block text-xs text-obsidian-500 mb-1">Caption</label>
           <input
@@ -2721,10 +2868,14 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
         {success && <p className="text-sm text-green-400">Media added successfully.</p>}
         <button
           type="submit"
-          disabled={saving || !url.trim()}
+          disabled={saving || (inputMode === "url" ? !url.trim() : !file)}
           className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm font-medium transition-colors"
         >
-          {saving ? "Saving…" : "Add Media"}
+          {saving
+            ? savingStep === "uploading"
+              ? "Uploading…"
+              : "Saving…"
+            : "Add Media"}
         </button>
       </form>
     </section>
