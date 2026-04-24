@@ -27,6 +27,8 @@ import {
   Loader2,
   ShieldCheck,
   BookOpen,
+  Upload,
+  Link as LinkIcon,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -2610,7 +2612,11 @@ function SimilarityTab({
   );
 }
 
+const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
+
 function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
+  const [tab, setTab] = useState<"url" | "file">("url");
   const [url, setUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [sourceLabel, setSourceLabel] = useState("");
@@ -2620,18 +2626,87 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // File upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setError(null);
+    if (!file) {
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setError("Invalid file type. Only PNG, JPEG, GIF, and WebP are allowed.");
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    if (file.size > MAX_UPLOAD_SIZE) {
+      setError("File too large. Maximum size is 5MB.");
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    setSelectedFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+  };
+
+  const clearFile = () => {
+    setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const resetForm = () => {
+    setUrl("");
+    setCaption("");
+    setSourceLabel("");
+    setSourceUrl("");
+    setMediaType("screenshot");
+    clearFile();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
     setSaving(true);
     setError(null);
     setSuccess(false);
+
     try {
+      let resolvedUrl = url.trim();
+
+      if (tab === "file") {
+        if (!selectedFile) {
+          setError("Please select a file to upload.");
+          return;
+        }
+        const form = new FormData();
+        form.append("file", selectedFile);
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok) {
+          setError(uploadJson.error || "Upload failed.");
+          return;
+        }
+        resolvedUrl = uploadJson.url;
+      } else {
+        if (!resolvedUrl) {
+          setError("URL is required.");
+          return;
+        }
+      }
+
       const res = await fetch(`/api/contract/${contractAddress}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url: url.trim(),
+          url: resolvedUrl,
           caption: caption.trim() || null,
           sourceLabel: sourceLabel.trim() || null,
           sourceUrl: sourceUrl.trim() || null,
@@ -2643,11 +2718,7 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
         setError(json.error || "Failed to save media.");
       } else {
         setSuccess(true);
-        setUrl("");
-        setCaption("");
-        setSourceLabel("");
-        setSourceUrl("");
-        setMediaType("screenshot");
+        resetForm();
       }
     } catch {
       setError("Network error.");
@@ -2656,21 +2727,91 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
     }
   };
 
+  const canSubmit = tab === "url" ? !!url.trim() : !!selectedFile;
+
   return (
     <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
       <h3 className="font-semibold mb-4">Add Media</h3>
+
+      {/* Tab toggle */}
+      <div className="flex gap-1 mb-4 p-1 rounded-lg bg-obsidian-800 w-fit">
+        <button
+          type="button"
+          onClick={() => { setTab("url"); setError(null); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            tab === "url"
+              ? "bg-obsidian-700 text-obsidian-100"
+              : "text-obsidian-400 hover:text-obsidian-200"
+          }`}
+        >
+          <LinkIcon className="w-3 h-3" />
+          URL
+        </button>
+        <button
+          type="button"
+          onClick={() => { setTab("file"); setError(null); }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            tab === "file"
+              ? "bg-obsidian-700 text-obsidian-100"
+              : "text-obsidian-400 hover:text-obsidian-200"
+          }`}
+        >
+          <Upload className="w-3 h-3" />
+          Upload
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className="block text-xs text-obsidian-500 mb-1">Image URL *</label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
-            required
-            className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
-          />
-        </div>
+        {tab === "url" ? (
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">Image URL *</label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+              required
+              className="w-full px-3 py-2 rounded-lg bg-obsidian-800 border border-obsidian-700 text-sm text-obsidian-100 placeholder-obsidian-500 focus:outline-none focus:border-ether-500"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="block text-xs text-obsidian-500 mb-1">
+              Image File * <span className="text-obsidian-600">(PNG, JPEG, GIF, WebP · max 5MB)</span>
+            </label>
+            {!previewUrl ? (
+              <label className="flex flex-col items-center justify-center gap-2 w-full h-28 rounded-lg border-2 border-dashed border-obsidian-700 bg-obsidian-800 cursor-pointer hover:border-ether-600 transition-colors">
+                <Upload className="w-5 h-5 text-obsidian-500" />
+                <span className="text-xs text-obsidian-500">Click to choose a file</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+              </label>
+            ) : (
+              <div className="relative w-fit">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt="Preview"
+                  className="max-h-48 max-w-full rounded-lg border border-obsidian-700 object-contain bg-obsidian-800"
+                />
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  className="absolute -top-2 -right-2 p-0.5 rounded-full bg-obsidian-700 hover:bg-obsidian-600 border border-obsidian-600 transition-colors"
+                  aria-label="Remove file"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="block text-xs text-obsidian-500 mb-1">Caption</label>
           <input
@@ -2721,10 +2862,10 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
         {success && <p className="text-sm text-green-400">Media added successfully.</p>}
         <button
           type="submit"
-          disabled={saving || !url.trim()}
+          disabled={saving || !canSubmit}
           className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 text-sm font-medium transition-colors"
         >
-          {saving ? "Saving…" : "Add Media"}
+          {saving ? (tab === "file" ? "Uploading…" : "Saving…") : "Add Media"}
         </button>
       </form>
     </section>
