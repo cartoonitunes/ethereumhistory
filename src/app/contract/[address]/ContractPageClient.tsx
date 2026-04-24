@@ -29,6 +29,7 @@ import {
   BookOpen,
   Upload,
   Link2,
+  ImageDown,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -78,6 +79,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [dismissedBanner, setDismissedBanner] = useState(false);
+  const [cardDownloading, setCardDownloading] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
   const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings", "interact"] as const), []);
@@ -398,6 +400,26 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     }
   }
 
+  async function handleDownloadCard() {
+    setCardDownloading(true);
+    try {
+      const res = await fetch(`/api/og/contract/${address}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `eth-contract-${address.slice(0, 8)}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // non-fatal
+    } finally {
+      setCardDownloading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <Header showHistorianLogin={!me} />
@@ -644,6 +666,19 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             >
               {linkCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Link2 className="w-3.5 h-3.5" />}
               {linkCopied ? "Copied!" : "Copy Link"}
+            </button>
+            <button
+              onClick={handleDownloadCard}
+              disabled={cardDownloading}
+              title="Download share card as PNG"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors disabled:opacity-50"
+            >
+              {cardDownloading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ImageDown className="w-3.5 h-3.5" />
+              )}
+              {cardDownloading ? "Saving…" : "Save Card"}
             </button>
             <EmbedButton address={address} />
             <CompareButton sourceAddress={address} />

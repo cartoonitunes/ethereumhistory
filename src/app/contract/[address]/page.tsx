@@ -37,25 +37,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const metadataBase = getMetadataBaseUrl();
-  const fallbackSocialImage =
-    "https://gaccdiscordimages.s3.us-east-1.amazonaws.com/eth_history_summary.jpg";
   const contract = await getContractWithTokenMetadata(address.toLowerCase());
   const tokenName = contract?.tokenName || null;
   const tokenSymbol = contract?.tokenSymbol || null;
-  const tokenLogo = contract?.tokenLogo || null;
-
-  // For Twitter summary card, prioritize contract image if available, otherwise use fallback
-  const twitterImageUrl = (() => {
-    if (!tokenLogo) return fallbackSocialImage;
-    const raw = String(tokenLogo).trim();
-    if (!raw) return fallbackSocialImage;
-    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return fallbackSocialImage;
-
-    const resolved = new URL(raw, metadataBase).toString();
-    const lower = resolved.toLowerCase();
-    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return fallbackSocialImage;
-    return resolved;
-  })();
 
   const titlePrefix = tokenName
     ? `${tokenName}${tokenSymbol ? ` (${tokenSymbol})` : ""}`
@@ -64,25 +48,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : `Contract ${formatAddress(address)}`;
 
   const title = `${titlePrefix} - Ethereum History`;
-  const description = tokenName
-    ? `Historical analysis of ${tokenName} on Ethereum (${address}).`
-    : `Historical analysis of Ethereum contract ${address}.`;
 
-  // For OpenGraph, we can still use token logo if available (for other platforms)
-  // Twitter/X is picky about image formats; SVGs and non-http(s) URLs often won't render in cards.
-  const ogImageUrl = (() => {
-    if (!tokenLogo) return null;
-    const raw = String(tokenLogo).trim();
-    if (!raw) return null;
-    if (raw.startsWith("ipfs://") || raw.startsWith("data:")) return null;
+  // Rich description: prefer historical content over generic fallback
+  const richDescription =
+    contract?.shortDescription?.trim() ||
+    (contract?.historicalSignificance?.trim()
+      ? contract.historicalSignificance.trim().split("\n")[0].slice(0, 200)
+      : null) ||
+    (tokenName
+      ? `Historical analysis of ${tokenName} on Ethereum.`
+      : `Historical analysis of Ethereum smart contract ${address}.`);
 
-    const resolved = new URL(raw, metadataBase).toString();
-    const lower = resolved.toLowerCase();
-    if (lower.endsWith(".svg") || lower.includes("image/svg+xml")) return null;
-    return resolved;
-  })();
-
-  const ogSocialImage = ogImageUrl || fallbackSocialImage;
+  // Dynamic OG share card — generated server-side as a PNG
+  const ogImageUrl = new URL(
+    `/api/og/contract/${address.toLowerCase()}`,
+    metadataBase
+  ).toString();
 
   const canonicalUrl = new URL(
     `/contract/${address.toLowerCase()}`,
@@ -92,43 +73,31 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     metadataBase,
     title,
-    description,
+    description: richDescription,
     alternates: {
       canonical: canonicalUrl,
     },
     openGraph: {
       title,
-      description: tokenName
-        ? `Historical analysis of ${tokenName} on Ethereum.`
-        : `Historical analysis of Ethereum contract ${address}.`,
+      description: richDescription,
       type: "website",
       siteName: "Ethereum History",
       url: canonicalUrl,
       images: [
-        ogImageUrl
-          ? {
-              url: ogSocialImage,
-              alt: tokenName ? `${tokenName} logo` : "Token logo",
-              width: 1200,
-              height: 630,
-              type: "image/jpeg",
-            }
-          : {
-              url: ogSocialImage,
-              alt: "Ethereum History",
-              width: 1200,
-              height: 630,
-              type: "image/jpeg",
-            },
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          type: "image/png",
+          alt: `${titlePrefix} — Ethereum History share card`,
+        },
       ],
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description: tokenName
-        ? `Historical analysis of ${tokenName} on Ethereum.`
-        : `Historical analysis of Ethereum contract ${address}.`,
-      // Dynamic OG image is auto-discovered from opengraph-image.tsx
+      description: richDescription,
+      images: [ogImageUrl],
     },
   };
 }
