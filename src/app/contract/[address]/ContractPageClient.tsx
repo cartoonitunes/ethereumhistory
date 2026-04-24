@@ -750,6 +750,8 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
               media={media ?? []}
               proxyInfo={proxyInfo}
               verifiedBy={verifiedBy}
+              canUpload={!!me?.active}
+              onUploadClick={() => setActiveTab("history")}
             />
           )}
           {activeTab === "history" && (
@@ -2020,6 +2022,8 @@ function OverviewTab({
   media,
   proxyInfo,
   verifiedBy,
+  canUpload,
+  onUploadClick,
 }: {
   contract: ContractPageData["contract"];
   bytecodeAnalysis: ContractPageData["bytecodeAnalysis"];
@@ -2028,6 +2032,8 @@ function OverviewTab({
   media: ContractMedia[];
   proxyInfo?: ProxyInfo | null;
   verifiedBy?: { name: string; editedAt: string } | null;
+  canUpload?: boolean;
+  onUploadClick?: () => void;
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
   const tokenName = contract.tokenName;
@@ -2086,7 +2092,9 @@ function OverviewTab({
       )}
 
       {/* Media gallery — above technical sections */}
-      {media.length > 0 && <ContractMediaGallery items={media} />}
+      {(media.length > 0 || canUpload) && (
+        <ContractMediaGallery items={media} canUpload={canUpload} onUploadClick={onUploadClick} />
+      )}
 
       {/* Technical sections + sidebar */}
       <div className="grid lg:grid-cols-3 gap-6 min-w-0">
