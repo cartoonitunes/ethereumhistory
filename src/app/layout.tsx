@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 function getMetadataBaseUrl(): URL {
@@ -8,6 +8,11 @@ function getMetadataBaseUrl(): URL {
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   return new URL(explicit || "http://localhost:3000");
 }
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   metadataBase: getMetadataBaseUrl(),
