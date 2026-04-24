@@ -108,10 +108,10 @@ export async function GET(
   );
   const symbol = contract.tokenSymbol || null;
 
-  // Story hook: prefer historicalSignificance, fall back to shortDescription, then ogSnippet
+  // Story hook: prefer shortDescription (concise), fall back to historicalSignificance, then ogSnippet
   const rawHook =
-    contract.historicalSignificance?.trim() ||
     contract.shortDescription?.trim() ||
+    contract.historicalSignificance?.trim() ||
     rankResult?.ogSnippet?.trim() ||
     null;
   const hook = rawHook ? truncate(rawHook.replace(/\n+/g, " "), 150) : null;
