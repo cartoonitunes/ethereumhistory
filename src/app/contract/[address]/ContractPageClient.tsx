@@ -78,7 +78,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [dismissedBanner, setDismissedBanner] = useState(false);
   const [cardDownloading, setCardDownloading] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
@@ -355,7 +354,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     ? truncateText(shortDescriptionText, SHORT_DESCRIPTION_MAX_CHARS)
     : null;
 
-  const hasDocumentation = !!(contract.historicalSignificance || contract.shortDescription || contract.description);
 
   function buildShareText() {
     const eraName = contract.era?.name ?? null;
@@ -684,42 +682,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <CompareButton sourceAddress={address} />
           </div>
         </motion.div>
-
-        {/* Mobile engagement banner — documented contracts only, dismissable */}
-        {hasDocumentation && !dismissedBanner && (
-          <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-ether-500/20 bg-ether-500/5 px-4 py-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-obsidian-200">
-                This contract&apos;s history has been documented. Explore it, then share it.
-              </p>
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={handleShareOnX}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-xs transition-colors"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                  </svg>
-                  Share on X
-                </button>
-                <button
-                  onClick={handleCopyLink}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-xs transition-colors"
-                >
-                  {linkCopied ? <Check className="w-3 h-3 text-green-400" /> : <Link2 className="w-3 h-3" />}
-                  {linkCopied ? "Copied!" : "Copy Link"}
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={() => setDismissedBanner(true)}
-              className="p-1 rounded hover:bg-obsidian-800 text-obsidian-500 hover:text-obsidian-300 transition-colors flex-shrink-0 mt-0.5"
-              title="Dismiss"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
 
         {/* Tabs (scrollable on mobile) */}
         <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-6 border-b border-obsidian-800 sticky top-0 z-40 bg-obsidian-950">
