@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   BookOpen,
   Upload,
+  Link2,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -75,6 +76,8 @@ const SHORT_DESCRIPTION_MAX_CHARS = 160;
 export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [dismissedBanner, setDismissedBanner] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
   // Hash-based tab persistence: read from URL hash on mount, update hash on change
   const validTabs = useMemo(() => new Set(["overview", "history", "code", "siblings", "interact"] as const), []);
@@ -350,6 +353,51 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     ? truncateText(shortDescriptionText, SHORT_DESCRIPTION_MAX_CHARS)
     : null;
 
+  const hasDocumentation = !!(contract.historicalSignificance || contract.shortDescription || contract.description);
+
+  function buildShareText() {
+    const eraName = contract.era?.name ?? null;
+    const deployDate = contract.deploymentTimestamp
+      ? new Date(contract.deploymentTimestamp).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      : null;
+    const eraPart = deployDate
+      ? `deployed ${deployDate} on Ethereum${eraName ? `\u2019s ${eraName} era` : ""}.`
+      : eraName
+      ? `deployed on Ethereum\u2019s ${eraName} era.`
+      : "deployed on early Ethereum.";
+    const descPart = contract.shortDescription
+      ? contract.shortDescription.length > 120
+        ? contract.shortDescription.slice(0, 120) + "\u2026"
+        : contract.shortDescription
+      : null;
+    return [
+      `${title} \u2014 ${eraPart}`,
+      ...(descPart ? [descPart] : []),
+      `ethereumhistory.com/contract/${address}`,
+    ].join("\n\n");
+  }
+
+  function handleShareOnX() {
+    const url = new URL("https://x.com/intent/tweet");
+    url.searchParams.set("text", buildShareText());
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }
+
+  function handleShareFarcaster() {
+    const url = new URL("https://warpcast.com/~/compose");
+    url.searchParams.set("text", buildShareText());
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
+  }
+
+  async function handleCopyLink() {
+    const pageUrl = window.location.href.split("#")[0];
+    const success = await copyToClipboard(pageUrl);
+    if (success) {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <Header showHistorianLogin={!me} />
@@ -574,20 +622,72 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
 
           {/* Action buttons: Share, Embed, Compare */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <ShareOnX
-              contractAddress={address}
-              contractName={title}
-              eraId={contract.eraId}
-              shortDescription={contract.shortDescription}
-              deploymentTimestamp={contract.deploymentTimestamp}
-            />
+            <button
+              onClick={handleShareOnX}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+              Share on X
+            </button>
+            <button
+              onClick={handleShareFarcaster}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+            >
+              <span className="text-xs font-bold text-purple-400 leading-none">f</span>
+              Farcaster
+            </button>
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
+            >
+              {linkCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Link2 className="w-3.5 h-3.5" />}
+              {linkCopied ? "Copied!" : "Copy Link"}
+            </button>
             <EmbedButton address={address} />
             <CompareButton sourceAddress={address} />
           </div>
         </motion.div>
 
+        {/* Mobile engagement banner — documented contracts only, dismissable */}
+        {hasDocumentation && !dismissedBanner && (
+          <div className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-ether-500/20 bg-ether-500/5 px-4 py-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-obsidian-200">
+                This contract&apos;s history has been documented. Explore it, then share it.
+              </p>
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleShareOnX}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-xs transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                  </svg>
+                  Share on X
+                </button>
+                <button
+                  onClick={handleCopyLink}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-xs transition-colors"
+                >
+                  {linkCopied ? <Check className="w-3 h-3 text-green-400" /> : <Link2 className="w-3 h-3" />}
+                  {linkCopied ? "Copied!" : "Copy Link"}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setDismissedBanner(true)}
+              className="p-1 rounded hover:bg-obsidian-800 text-obsidian-500 hover:text-obsidian-300 transition-colors flex-shrink-0 mt-0.5"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Tabs (scrollable on mobile) */}
-        <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-6 border-b border-obsidian-800">
+        <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-6 border-b border-obsidian-800 sticky top-0 z-40 bg-obsidian-950">
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap">
             <TabButton
               active={activeTab === "overview"}
@@ -1946,308 +2046,368 @@ function OverviewTab({
   const hasContractInfo = frontierEntryForSection || balanceDisplay;
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6 min-w-0">
-      {/* Main info */}
-      <div className="lg:col-span-2 space-y-6 min-w-0">
-        {/* Proxy Banner */}
-        {proxyInfo?.isProxy && proxyInfo.targetAddress && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300 flex gap-3">
-            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400" />
-            <span>
-              This contract is a proxy that delegates all calls to{" "}
-              <Link
-                href={`/contract/${proxyInfo.targetAddress.toLowerCase()}`}
-                className="font-mono underline decoration-blue-500/50 hover:text-blue-200 transition-colors"
-              >
-                {proxyInfo.targetAddress.toLowerCase()}
-              </Link>
-              {proxyInfo.targetName && (
-                <span className="ml-1 text-blue-400">({proxyInfo.targetName})</span>
-              )}
-              . See the master contract for the full logic.
-            </span>
-          </div>
-        )}
-        {/* Token Info - Show if available */}
-        {hasTokenInfo && (
-          <section className="p-6 rounded-xl border border-ether-500/20 bg-ether-500/5">
-            <div className="flex items-center gap-2 mb-4">
-              <Coins className="w-5 h-5 text-ether-400" />
-              <h2 className="text-lg font-semibold">Token Information</h2>
-            </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {contract.tokenLogo && (
-                <FactItem
-                  label="Logo"
-                  value={
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
-                        <img
-                          src={contract.tokenLogo}
-                          alt={tokenName ? `${tokenName} logo` : "Token logo"}
-                          width={32}
-                          height={32}
-                          className="w-8 h-8 object-cover"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                      <span className="text-xs text-obsidian-500">via RPC</span>
-                    </div>
-                  }
-                />
-              )}
-              {tokenName && (
-                <FactItem label="Token Name" value={tokenName} />
-              )}
-              {tokenSymbol && (
-                <FactItem label="Symbol" value={tokenSymbol} />
-              )}
-              {tokenDecimals !== null && tokenDecimals !== undefined && (
-                <FactItem label="Decimals" value={tokenDecimals.toString()} />
-              )}
-              {tokenSupply && (
-                <FactItem
-                  label="Total Supply"
-                  value={formatTokenSupplyDisplay(tokenSupply, tokenDecimals ?? 0)}
-                />
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Contract Information */}
-        {hasContractInfo && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-            <div className="flex items-center gap-2 mb-4">
-              <Database className="w-5 h-5 text-obsidian-400" />
-              <h2 className="text-lg font-semibold">Contract Information</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {frontierEntryForSection && (() => {
-                const regInfo = REGISTRAR_INFO[frontierEntryForSection.registrar];
-                return (
-                  <FactItem
-                    label="Registered Name"
-                    value={
-                      <div className="space-y-1">
-                        <div className="font-medium">{frontierEntryForSection.name}</div>
-                        <a
-                          href={regInfo.etherscanUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-amber-500 hover:text-amber-400 transition-colors"
-                        >
-                          {regInfo.label} ↗
-                        </a>
-                        <div className="text-xs text-obsidian-500 leading-relaxed">{regInfo.description}</div>
-                      </div>
-                    }
-                  />
-                );
-              })()}
-              {balanceDisplay && (
-                <FactItem label="ETH Balance" value={balanceDisplay} />
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Key facts */}
-        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-          <h2 className="text-lg font-semibold mb-4">Key Facts</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {contract.ensName && (
-              <FactItem
-                label="ENS name"
-                value={
-                  <a
-                    href={`https://app.ens.domains/${contract.ensName}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-ether-400 hover:text-ether-300 transition-colors"
-                  >
-                    {contract.ensName}
-                  </a>
-                }
+    <div className="space-y-6 min-w-0">
+      {/* Mobile-only compact era + verification row */}
+      {(contract.era || contract.sourceCode) && (
+        <div className="lg:hidden flex flex-wrap items-center gap-3 py-1">
+          {contract.era && (
+            <span className="inline-flex items-center gap-1.5 text-sm text-obsidian-400">
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ backgroundColor: contract.era.color }}
               />
+              {contract.era.name} Era
+            </span>
+          )}
+          {contract.sourceCode && (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30 text-green-400">
+              <Check className="w-3 h-3" />
+              Verified Source
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Story content — historical significance + context */}
+      {(contract.historicalSignificance?.trim() || contract.historicalContext?.trim()) && (
+        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+          <div className="prose prose-invert max-w-none overflow-hidden break-words">
+            {contract.historicalSignificance?.trim() && (
+              <>
+                <h2 className="text-xl font-semibold text-obsidian-100 mt-0 mb-3">Historical Significance</h2>
+                <MarkdownRenderer content={contract.historicalSignificance.trim()} />
+              </>
             )}
-            <FactItem
-              label="Deployer"
-              value={
-                contract.deployerAddress ? (
-                  deployerPerson && deployerPerson.slug ? (
-                    <span className="text-sm">
-                      <Link
-                        href={`/people/${deployerPerson.slug}`}
-                        className="hover:text-ether-400 transition-colors font-medium"
-                      >
-                        {deployerPerson.name}
-                      </Link>
-                      {contract.deployerEnsName ? (
-                        <a
-                          href={etherscanUrl(contract.deployerAddress)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-obsidian-400 hover:text-ether-400 transition-colors ml-1"
-                        >
-                          ({contract.deployerEnsName})
-                        </a>
-                      ) : (
-                        <span className="font-mono text-obsidian-400 ml-1">
-                          ({formatAddress(contract.deployerAddress)})
-                        </span>
-                      )}
-                    </span>
-                  ) : contract.deployerEnsName ? (
-                    <span className="text-sm text-obsidian-300">
+            {contract.historicalContext?.trim() && (
+              <div className={contract.historicalSignificance?.trim() ? "mt-6" : ""}>
+                <h2 className="text-xl font-semibold text-obsidian-100 mb-3">Context</h2>
+                <MarkdownRenderer content={contract.historicalContext.trim()} />
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Media gallery — above technical sections */}
+      {media.length > 0 && <ContractMediaGallery items={media} />}
+
+      {/* Technical sections + sidebar */}
+      <div className="grid lg:grid-cols-3 gap-6 min-w-0">
+        {/* Main info */}
+        <div className="lg:col-span-2 space-y-4 min-w-0">
+          {/* Proxy Banner */}
+          {proxyInfo?.isProxy && proxyInfo.targetAddress && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300 flex gap-3">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-400" />
+              <span>
+                This contract is a proxy that delegates all calls to{" "}
+                <Link
+                  href={`/contract/${proxyInfo.targetAddress.toLowerCase()}`}
+                  className="font-mono underline decoration-blue-500/50 hover:text-blue-200 transition-colors"
+                >
+                  {proxyInfo.targetAddress.toLowerCase()}
+                </Link>
+                {proxyInfo.targetName && (
+                  <span className="ml-1 text-blue-400">({proxyInfo.targetName})</span>
+                )}
+                . See the master contract for the full logic.
+              </span>
+            </div>
+          )}
+
+          {/* Token Info — collapsible accordion */}
+          {hasTokenInfo && (
+            <details className="group rounded-xl border border-ether-500/20 bg-ether-500/5 overflow-hidden">
+              <summary className="flex items-center gap-2 px-6 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden [&::marker]:hidden hover:bg-ether-500/10 transition-colors">
+                <Coins className="w-5 h-5 text-ether-400 flex-shrink-0" />
+                <span className="text-base font-semibold">Token Information</span>
+                <svg className="ml-auto w-4 h-4 text-obsidian-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </summary>
+              <div className="px-6 pb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {contract.tokenLogo && (
+                    <FactItem
+                      label="Logo"
+                      value={
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
+                            <img
+                              src={contract.tokenLogo}
+                              alt={tokenName ? `${tokenName} logo` : "Token logo"}
+                              width={32}
+                              height={32}
+                              className="w-8 h-8 object-cover"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <span className="text-xs text-obsidian-500">via RPC</span>
+                        </div>
+                      }
+                    />
+                  )}
+                  {tokenName && <FactItem label="Token Name" value={tokenName} />}
+                  {tokenSymbol && <FactItem label="Symbol" value={tokenSymbol} />}
+                  {tokenDecimals !== null && tokenDecimals !== undefined && (
+                    <FactItem label="Decimals" value={tokenDecimals.toString()} />
+                  )}
+                  {tokenSupply && (
+                    <FactItem
+                      label="Total Supply"
+                      value={formatTokenSupplyDisplay(tokenSupply, tokenDecimals ?? 0)}
+                    />
+                  )}
+                </div>
+              </div>
+            </details>
+          )}
+
+          {/* Contract Information — collapsible accordion */}
+          {hasContractInfo && (
+            <details className="group rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
+              <summary className="flex items-center gap-2 px-6 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden [&::marker]:hidden hover:bg-obsidian-800/40 transition-colors">
+                <Database className="w-5 h-5 text-obsidian-400 flex-shrink-0" />
+                <span className="text-base font-semibold">Contract Information</span>
+                <svg className="ml-auto w-4 h-4 text-obsidian-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </summary>
+              <div className="px-6 pb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {frontierEntryForSection && (() => {
+                    const regInfo = REGISTRAR_INFO[frontierEntryForSection.registrar];
+                    return (
+                      <FactItem
+                        label="Registered Name"
+                        value={
+                          <div className="space-y-1">
+                            <div className="font-medium">{frontierEntryForSection.name}</div>
+                            <a
+                              href={regInfo.etherscanUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                            >
+                              {regInfo.label} ↗
+                            </a>
+                            <div className="text-xs text-obsidian-500 leading-relaxed">{regInfo.description}</div>
+                          </div>
+                        }
+                      />
+                    );
+                  })()}
+                  {balanceDisplay && <FactItem label="ETH Balance" value={balanceDisplay} />}
+                </div>
+              </div>
+            </details>
+          )}
+
+          {/* Key facts — collapsible accordion */}
+          <details className="group rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
+            <summary className="flex items-center gap-2 px-6 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden [&::marker]:hidden hover:bg-obsidian-800/40 transition-colors">
+              <span className="text-base font-semibold">Key Facts</span>
+              <svg className="ml-auto w-4 h-4 text-obsidian-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </summary>
+            <div className="px-6 pb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {contract.ensName && (
+                  <FactItem
+                    label="ENS name"
+                    value={
                       <a
-                        href={etherscanUrl(contract.deployerAddress)}
+                        href={`https://app.ens.domains/${contract.ensName}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-ether-400 hover:text-ether-300 transition-colors"
                       >
-                        {contract.deployerEnsName}
+                        {contract.ensName}
                       </a>
-                      <span className="font-mono text-obsidian-400">
-                        {" "}({formatAddress(contract.deployerAddress)})
-                      </span>
-                    </span>
-                  ) : (
-                    <a
-                      href={etherscanUrl(contract.deployerAddress)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-sm text-obsidian-300 hover:text-ether-400 transition-colors"
-                    >
-                      {formatAddress(contract.deployerAddress)}
-                    </a>
-                  )
-                ) : (
-                  "Unknown"
-                )
-              }
-            />
-            <FactItem
-              label="Deployment Block"
-              value={
-                contract.deploymentBlock ? (
-                  <a
-                    href={etherscanBlockUrl(contract.deploymentBlock)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono hover:text-ether-400 transition-colors"
-                  >
-                    {formatBlockNumber(contract.deploymentBlock)}
-                  </a>
-                ) : (
-                  "Unknown"
-                )
-              }
-            />
-            <FactItem
-              label="Deployment Date"
-              value={contract.deploymentTimestamp ? formatDateTime(contract.deploymentTimestamp) : "Unknown"}
-            />
-            <FactItem
-              label="Code Size"
-              value={contract.codeSizeBytes ? formatBytes(contract.codeSizeBytes) : "Unknown"}
-            />
-            {contract.gasUsed != null && (
-              <FactItem label="Gas at Deploy" value={contract.gasUsed.toLocaleString()} />
-            )}
-            {contract.transactionCount != null && (
-              <FactItem
-                label="Transaction Count"
-                value={contract.transactionCount.toLocaleString()}
-              />
-            )}
-          </div>
-
-          {txCountsByYear && Object.keys(txCountsByYear.counts || {}).length > 0 && (
-            <div className="mt-4 pt-4 border-t border-obsidian-800">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-obsidian-500">Transactions by Year</span>
-                {txCountsByYear.truncated && (
-                  <span className="text-xs text-yellow-400">Partial (capped)</span>
+                    }
+                  />
+                )}
+                <FactItem
+                  label="Deployer"
+                  value={
+                    contract.deployerAddress ? (
+                      deployerPerson && deployerPerson.slug ? (
+                        <span className="text-sm">
+                          <Link
+                            href={`/people/${deployerPerson.slug}`}
+                            className="hover:text-ether-400 transition-colors font-medium"
+                          >
+                            {deployerPerson.name}
+                          </Link>
+                          {contract.deployerEnsName ? (
+                            <a
+                              href={etherscanUrl(contract.deployerAddress)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-obsidian-400 hover:text-ether-400 transition-colors ml-1"
+                            >
+                              ({contract.deployerEnsName})
+                            </a>
+                          ) : (
+                            <span className="font-mono text-obsidian-400 ml-1">
+                              ({formatAddress(contract.deployerAddress)})
+                            </span>
+                          )}
+                        </span>
+                      ) : contract.deployerEnsName ? (
+                        <span className="text-sm text-obsidian-300">
+                          <a
+                            href={etherscanUrl(contract.deployerAddress)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-ether-400 hover:text-ether-300 transition-colors"
+                          >
+                            {contract.deployerEnsName}
+                          </a>
+                          <span className="font-mono text-obsidian-400">
+                            {" "}({formatAddress(contract.deployerAddress)})
+                          </span>
+                        </span>
+                      ) : (
+                        <a
+                          href={etherscanUrl(contract.deployerAddress)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-sm text-obsidian-300 hover:text-ether-400 transition-colors"
+                        >
+                          {formatAddress(contract.deployerAddress)}
+                        </a>
+                      )
+                    ) : (
+                      "Unknown"
+                    )
+                  }
+                />
+                <FactItem
+                  label="Deployment Block"
+                  value={
+                    contract.deploymentBlock ? (
+                      <a
+                        href={etherscanBlockUrl(contract.deploymentBlock)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono hover:text-ether-400 transition-colors"
+                      >
+                        {formatBlockNumber(contract.deploymentBlock)}
+                      </a>
+                    ) : (
+                      "Unknown"
+                    )
+                  }
+                />
+                <FactItem
+                  label="Deployment Date"
+                  value={contract.deploymentTimestamp ? formatDateTime(contract.deploymentTimestamp) : "Unknown"}
+                />
+                <FactItem
+                  label="Code Size"
+                  value={contract.codeSizeBytes ? formatBytes(contract.codeSizeBytes) : "Unknown"}
+                />
+                {contract.gasUsed != null && (
+                  <FactItem label="Gas at Deploy" value={contract.gasUsed.toLocaleString()} />
+                )}
+                {contract.transactionCount != null && (
+                  <FactItem
+                    label="Transaction Count"
+                    value={contract.transactionCount.toLocaleString()}
+                  />
                 )}
               </div>
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {Object.keys(txCountsByYear.counts)
-                  .sort((a, b) => Number(a) - Number(b))
-                  .map((year) => (
-                    <div
-                      key={year}
-                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40"
-                    >
-                      <span className="text-xs font-mono text-obsidian-400">{year}</span>
-                      <span className="text-xs font-semibold text-obsidian-200">
-                        {txCountsByYear.counts[year]?.toLocaleString?.() ??
-                          String(txCountsByYear.counts[year] ?? 0)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
 
-          {contract.deploymentTxHash && (
-            <div className="mt-4 pt-4 border-t border-obsidian-800">
-              <span className="text-xs text-obsidian-500">Deployment Transaction: </span>
-              <a
-                href={etherscanTxUrl(contract.deploymentTxHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-mono text-ether-400 hover:text-ether-300"
-              >
-                {formatAddress(contract.deploymentTxHash, 16)}
-              </a>
-            </div>
-          )}
-        </section>
+              {txCountsByYear && Object.keys(txCountsByYear.counts || {}).length > 0 && (
+                <div className="mt-4 pt-4 border-t border-obsidian-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs text-obsidian-500">Transactions by Year</span>
+                    {txCountsByYear.truncated && (
+                      <span className="text-xs text-yellow-400">Partial (capped)</span>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {Object.keys(txCountsByYear.counts)
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((year) => (
+                        <div
+                          key={year}
+                          className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40"
+                        >
+                          <span className="text-xs font-mono text-obsidian-400">{year}</span>
+                          <span className="text-xs font-semibold text-obsidian-200">
+                            {txCountsByYear.counts[year]?.toLocaleString?.() ??
+                              String(txCountsByYear.counts[year] ?? 0)}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
 
-        {/* Description (from contract data, above Heuristics when present) */}
-        {contract.description?.trim() && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
-            <h2 className="text-lg font-semibold mb-4">Description</h2>
-            <div className="prose prose-invert max-w-none overflow-hidden break-words">
-              <MarkdownRenderer content={contract.description.trim()} />
-            </div>
-          </section>
-        )}
-
-        {/* Verification Proof Card */}
-        <VerificationProofCard contract={contract} />
-
-        {/* Manual category overrides */}
-        {(contract.manualCategories || []).length > 0 && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-            <h3 className="text-sm font-medium text-obsidian-300 mb-2">Historian Categories</h3>
-            <div className="flex flex-wrap gap-2">
-              {(contract.manualCategories || []).map((key: string) => {
-                const option = CONTRACT_CATEGORY_OPTIONS.find((o) => o.key === key);
-                return (
-                  <span
-                    key={key}
-                    className="inline-flex items-center rounded-full border border-ether-500/30 bg-ether-500/10 px-2.5 py-1 text-xs text-ether-300"
+              {contract.deploymentTxHash && (
+                <div className="mt-4 pt-4 border-t border-obsidian-800">
+                  <span className="text-xs text-obsidian-500">Deployment Transaction: </span>
+                  <a
+                    href={etherscanTxUrl(contract.deploymentTxHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-mono text-ether-400 hover:text-ether-300"
                   >
-                    {option?.label || key}
-                  </span>
-                );
-              })}
+                    {formatAddress(contract.deploymentTxHash, 16)}
+                  </a>
+                </div>
+              )}
             </div>
-          </section>
-        )}
+          </details>
 
-        {/* Heuristics */}
-        {contract.heuristics.contractType && (
-          <section className="p-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 className="text-sm font-medium text-yellow-400 mb-1">
-                  Heuristic Analysis
-                </h3>
+          {/* Description */}
+          {contract.description?.trim() && (
+            <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30 overflow-hidden">
+              <h2 className="text-lg font-semibold mb-4">Description</h2>
+              <div className="prose prose-invert max-w-none overflow-hidden break-words">
+                <MarkdownRenderer content={contract.description.trim()} />
+              </div>
+            </section>
+          )}
+
+          {/* Verification Proof Card */}
+          <VerificationProofCard contract={contract} />
+
+          {/* Manual category overrides */}
+          {(contract.manualCategories || []).length > 0 && (
+            <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+              <h3 className="text-sm font-medium text-obsidian-300 mb-2">Historian Categories</h3>
+              <div className="flex flex-wrap gap-2">
+                {(contract.manualCategories || []).map((key: string) => {
+                  const option = CONTRACT_CATEGORY_OPTIONS.find((o) => o.key === key);
+                  return (
+                    <span
+                      key={key}
+                      className="inline-flex items-center rounded-full border border-ether-500/30 bg-ether-500/10 px-2.5 py-1 text-xs text-ether-300"
+                    >
+                      {option?.label || key}
+                    </span>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Heuristics — collapsible accordion */}
+          {contract.heuristics.contractType && (
+            <details className="group rounded-xl border border-yellow-500/20 bg-yellow-500/5 overflow-hidden">
+              <summary className="flex items-center gap-2 px-6 py-4 cursor-pointer list-none [&::-webkit-details-marker]:hidden [&::marker]:hidden hover:bg-yellow-500/10 transition-colors">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
+                <span className="text-base font-semibold text-yellow-400">Heuristic Analysis</span>
+                <svg className="ml-auto w-4 h-4 text-obsidian-500 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </summary>
+              <div className="px-6 pb-6">
                 <p className="text-sm text-obsidian-400 mb-3">
                   The following characteristics were detected through bytecode analysis
                   and may not be accurate.
@@ -2290,164 +2450,159 @@ function OverviewTab({
                   <p className="mt-3 text-xs text-obsidian-500">{contract.heuristics.notes}</p>
                 )}
               </div>
-            </div>
-          </section>
-        )}
-        {/* Contract Media */}
-        {media.length > 0 && <ContractMediaGallery items={media} />}
-      </div>
+            </details>
+          )}
+        </div>
 
-      {/* Sidebar */}
-      <div className="space-y-6 min-w-0">
-        {/* Era info */}
-        {contract.era && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-            <div className="flex items-center gap-2 mb-3">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: contract.era.color }}
-              />
-              <h3 className="font-semibold">{contract.era.name} Era</h3>
-            </div>
-            <p className="text-sm text-obsidian-400 mb-3">{contract.era.description}</p>
-            <div className="space-y-1 text-xs text-obsidian-500">
-              <div>
-                Block span: {contract.era.startBlock.toLocaleString()} — {contract.era.endBlock?.toLocaleString() || "present"}
+        {/* Sidebar */}
+        <div className="space-y-6 min-w-0">
+          {/* Era info — hidden on mobile (shown in compact row at top) */}
+          {contract.era && (
+            <section className="hidden lg:block p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: contract.era.color }}
+                />
+                <h3 className="font-semibold">{contract.era.name} Era</h3>
               </div>
-              <div>
-                {formatDate(contract.era.startDate)} — {contract.era.endDate ? formatDate(contract.era.endDate) : "Present"}
+              <p className="text-sm text-obsidian-400 mb-3">{contract.era.description}</p>
+              <div className="space-y-1 text-xs text-obsidian-500">
+                <div>
+                  Block span: {contract.era.startBlock.toLocaleString()} — {contract.era.endBlock?.toLocaleString() || "present"}
+                </div>
+                <div>
+                  {formatDate(contract.era.startDate)} — {contract.era.endDate ? formatDate(contract.era.endDate) : "Present"}
+                </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          )}
 
-        {/* Quick bytecode stats */}
-        {bytecodeAnalysis && (
-          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-            <h3 className="font-semibold mb-4">Bytecode Overview</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-obsidian-500">Opcodes</span>
-                <span className="font-mono">{bytecodeAnalysis.opcodeCount.toLocaleString()}</span>
+          {/* Quick bytecode stats */}
+          {bytecodeAnalysis && (
+            <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+              <h3 className="font-semibold mb-4">Bytecode Overview</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-obsidian-500">Opcodes</span>
+                  <span className="font-mono">{bytecodeAnalysis.opcodeCount.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-obsidian-500">Unique Opcodes</span>
+                  <span className="font-mono">{bytecodeAnalysis.uniqueOpcodeCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-obsidian-500">Jump Instructions</span>
+                  <span className="font-mono">{bytecodeAnalysis.jumpCount}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-obsidian-500">Storage Operations</span>
+                  <span className="font-mono">{bytecodeAnalysis.storageOpsCount}</span>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-obsidian-500">Unique Opcodes</span>
-                <span className="font-mono">{bytecodeAnalysis.uniqueOpcodeCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-obsidian-500">Jump Instructions</span>
-                <span className="font-mono">{bytecodeAnalysis.jumpCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-obsidian-500">Storage Operations</span>
-                <span className="font-mono">{bytecodeAnalysis.storageOpsCount}</span>
-              </div>
-            </div>
-          </section>
-        )}
+            </section>
+          )}
 
-        {/* Verified Source Code */}
-        {contract.sourceCode && (
-          <section className="p-6 rounded-xl border border-green-500/20 bg-green-500/5">
-            <div className="flex items-center gap-2 mb-3">
-              <Code className="w-4 h-4 text-green-400" />
-              <h3 className="font-semibold text-green-400">Verified Source Available</h3>
-            </div>
-            <p className="text-xs text-obsidian-400 mb-3">
-              {contract.verificationMethod
-                ? contract.verificationMethod === "exact_bytecode_match"
-                  ? "Source verified through compiler archaeology and exact bytecode matching."
-                  : contract.verificationMethod === "near_exact_match"
-                  ? "Source verified through compiler archaeology (near-exact bytecode match)."
-                  : contract.verificationMethod === "author_published_source"
-                  ? "Source code published by the original contract author."
-                  : contract.verificationMethod === "author_published"
-                  ? "Source code published by the original contract author."
-                  : contract.verificationMethod === "etherscan_verified"
-                  ? "Source verified on Etherscan."
-                  : "This contract has verified source code."
-                : "This contract has verified source code on Etherscan."}
-            </p>
-
-            {/* Verification badges */}
-            <div className="flex flex-wrap gap-2 mb-3">
-              {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourcifyMatch) && (
+          {/* Verified Source Code — hidden on mobile (compact badge shown in row above) */}
+          {contract.sourceCode && (
+            <section className="hidden lg:block p-6 rounded-xl border border-green-500/20 bg-green-500/5">
+              <div className="flex items-center gap-2 mb-3">
+                <Code className="w-4 h-4 text-green-400" />
+                <h3 className="font-semibold text-green-400">Verified Source Available</h3>
+              </div>
+              <p className="text-xs text-obsidian-400 mb-3">
+                {contract.verificationMethod
+                  ? contract.verificationMethod === "exact_bytecode_match"
+                    ? "Source verified through compiler archaeology and exact bytecode matching."
+                    : contract.verificationMethod === "near_exact_match"
+                    ? "Source verified through compiler archaeology (near-exact bytecode match)."
+                    : contract.verificationMethod === "author_published_source"
+                    ? "Source code published by the original contract author."
+                    : contract.verificationMethod === "author_published"
+                    ? "Source code published by the original contract author."
+                    : contract.verificationMethod === "etherscan_verified"
+                    ? "Source verified on Etherscan."
+                    : "This contract has verified source code."
+                  : "This contract has verified source code on Etherscan."}
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {(contract.etherscanVerified || contract.verificationMethod === "etherscan_verified" || contract.sourcifyMatch) && (
+                  <a
+                    href={`https://etherscan.io/address/${contract.address}#code`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                  >
+                    <Check className="w-3 h-3" />
+                    Verified on Etherscan
+                  </a>
+                )}
+                {contract.sourcifyMatch && (
+                  <a
+                    href={`https://repo.sourcify.dev/1/${contract.address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                  >
+                    <Check className="w-3 h-3" />
+                    Verified on Sourcify
+                  </a>
+                )}
+              </div>
+              {contract.verificationProofUrl && (
                 <a
-                  href={`https://etherscan.io/address/${contract.address}#code`}
+                  href={contract.verificationProofUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
+                  className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
                 >
-                  <Check className="w-3 h-3" />
-                  Verified on Etherscan
+                  View Verification Proof
+                  <ExternalLink className="w-3 h-3" />
                 </a>
               )}
-              {contract.sourcifyMatch && (
-                <a
-                  href={`https://repo.sourcify.dev/1/${contract.address}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
-                >
-                  <Check className="w-3 h-3" />
-                  Verified on Sourcify
-                </a>
+              {verifiedBy && (
+                <p className="text-xs text-obsidian-500 mt-2">
+                  Verified by <span className="text-obsidian-300">{verifiedBy.name}</span> · {formatRelativeTime(verifiedBy.editedAt)}
+                </p>
               )}
-            </div>
+              {contract.sourceCode && (
+                <details className="mt-4">
+                  <summary className="text-xs text-obsidian-400 cursor-pointer hover:text-obsidian-300">
+                    Show source code ({contract.compilerLanguage ? contract.compilerLanguage.charAt(0).toUpperCase() + contract.compilerLanguage.slice(1) : "Solidity"})
+                  </summary>
+                  <pre className="mt-2 p-4 rounded-lg bg-obsidian-950 border border-obsidian-800 text-xs text-obsidian-300 overflow-x-auto max-h-96 whitespace-pre">
+                    {contract.sourceCode}
+                  </pre>
+                </details>
+              )}
+            </section>
+          )}
 
-            {contract.verificationProofUrl && (
+          {/* External links */}
+          <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+            <h3 className="font-semibold mb-4">External Links</h3>
+            <div className="space-y-2">
               <a
-                href={contract.verificationProofUrl}
+                href={etherscanUrl(contract.address)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-ether-400 hover:text-ether-300"
+                className="flex items-center justify-between text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
               >
-                View Verification Proof
-                <ExternalLink className="w-3 h-3" />
+                <span>Etherscan</span>
+                <ExternalLink className="w-4 h-4" />
               </a>
-            )}
-            {verifiedBy && (
-              <p className="text-xs text-obsidian-500 mt-2">
-                Verified by <span className="text-obsidian-300">{verifiedBy.name}</span> · {formatRelativeTime(verifiedBy.editedAt)}
-              </p>
-            )}
-            {contract.sourceCode && (
-              <details className="mt-4">
-                <summary className="text-xs text-obsidian-400 cursor-pointer hover:text-obsidian-300">
-                  Show source code ({contract.compilerLanguage ? contract.compilerLanguage.charAt(0).toUpperCase() + contract.compilerLanguage.slice(1) : "Solidity"})
-                </summary>
-                <pre className="mt-2 p-4 rounded-lg bg-obsidian-950 border border-obsidian-800 text-xs text-obsidian-300 overflow-x-auto max-h-96 whitespace-pre">
-                  {contract.sourceCode}
-                </pre>
-              </details>
-            )}
+              <a
+                href={`https://etherscan.io/address/${contract.address}#code`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
+              >
+                <span>Verified Source (if any)</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
           </section>
-        )}
-
-        {/* External links */}
-        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-          <h3 className="font-semibold mb-4">External Links</h3>
-          <div className="space-y-2">
-            <a
-              href={etherscanUrl(contract.address)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
-            >
-              <span>Etherscan</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-            <a
-              href={`https://etherscan.io/address/${contract.address}#code`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between text-sm text-obsidian-400 hover:text-ether-400 transition-colors"
-            >
-              <span>Verified Source (if any)</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
-        </section>
+        </div>
       </div>
     </div>
   );
@@ -3845,7 +4000,7 @@ function EmbedButton({ address }: { address: string }) {
         Embed
       </button>
       {showEmbed && (
-        <div className="absolute left-0 top-full mt-2 z-50 w-[380px] p-4 rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl">
+        <div className="absolute left-0 top-full mt-2 z-50 w-[min(90vw,380px)] p-4 rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-sm font-semibold text-obsidian-200">Embed this contract</h4>
             <button
@@ -3954,7 +4109,7 @@ function CompareButton({ sourceAddress }: { sourceAddress: string }) {
         Compare
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-2 z-50 w-[380px] rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 z-50 w-[min(90vw,380px)] rounded-xl border border-obsidian-700 bg-obsidian-900 shadow-xl overflow-hidden">
           <div className="p-3 border-b border-obsidian-800">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-semibold text-obsidian-200">Compare with...</h4>
