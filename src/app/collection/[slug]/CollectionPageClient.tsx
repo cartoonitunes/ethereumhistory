@@ -126,17 +126,19 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
 
       {/* Hero */}
       <section className="relative py-16 border-b border-obsidian-800 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(98,110,241,0.07),transparent_55%)]" />
-        {collection.coverImageUrl && (
-          <div className="hidden lg:block absolute right-0 inset-y-0 w-80 pointer-events-none" aria-hidden="true">
-            <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-obsidian-950 to-transparent z-10" />
-            <div className="absolute inset-y-0 right-0 left-0 bg-gradient-to-t from-obsidian-950/60 to-transparent z-10" />
+        {collection.coverImageUrl ? (
+          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
             <img
               src={collection.coverImageUrl}
               alt=""
-              className="absolute inset-0 h-full w-full object-cover object-top opacity-50"
+              className="absolute inset-0 w-full h-full object-cover object-top opacity-25 lg:opacity-40 lg:object-right-top"
             />
+            {/* Heavy left fade so text stays readable; bottom fade anchors the section */}
+            <div className="absolute inset-0 bg-gradient-to-r from-obsidian-950 via-obsidian-950/85 to-obsidian-950/30 lg:to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-obsidian-950 via-transparent to-obsidian-950/60" />
           </div>
+        ) : (
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(98,110,241,0.07),transparent_55%)]" />
         )}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link
