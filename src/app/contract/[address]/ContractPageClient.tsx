@@ -30,6 +30,7 @@ import {
   Upload,
   Link2,
   ImageDown,
+  Archive,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -344,6 +345,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     archiveNotice,
     media,
     proxyInfo,
+    collection,
   } = data!;
 
   const frontierEntry = getFrontierRegistrarEntry(address);
@@ -507,6 +509,17 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                   );
                 })()}
               </div>
+
+              {/* Collection badge */}
+              {collection && (
+                <Link
+                  href={`/collection/${collection.slug}`}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-ether-500/10 border border-ether-500/20 text-ether-400 hover:text-ether-300 hover:border-ether-400/40 transition-colors"
+                >
+                  <Archive className="w-3 h-3" />
+                  Part of {collection.title}
+                </Link>
+              )}
 
               {/* Address */}
               <div className="flex items-center gap-2">

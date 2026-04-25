@@ -349,6 +349,7 @@ export interface ContractPageData {
   media?: ContractMedia[];
   proxyInfo?: ProxyInfo | null;
   deploymentRankResult?: { rank: number; ogSnippet: string | null; rankTag: string } | null;
+  collection?: { slug: string; title: string } | null;
 }
 
 // =============================================================================
