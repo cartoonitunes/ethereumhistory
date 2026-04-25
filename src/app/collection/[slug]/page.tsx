@@ -36,6 +36,7 @@ export default async function CollectionPage({ params }: Props) {
 
   const contracts = await getCollectionContractsFromDb(
     collection.contractAddresses ?? [],
+    collection.deployerAddress ?? null,
     200
   ).catch(() => [] as CollectionContract[]);
 
