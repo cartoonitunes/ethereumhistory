@@ -69,32 +69,32 @@ export default function CollectionsPageClient({ collections }: Props) {
               >
                 <Link
                   href={`/collection/${col.slug}`}
-                  className="group block h-full rounded-2xl border border-obsidian-800 bg-obsidian-900/40 overflow-hidden hover:border-obsidian-600 transition-colors"
+                  className="group relative block h-56 rounded-2xl border border-obsidian-800 bg-obsidian-900/40 overflow-hidden hover:border-obsidian-600 transition-colors"
                 >
-                  {/* Cover gradient */}
-                  <div
-                    className={`h-32 bg-gradient-to-br ${gradientForIndex(i)} border-b border-obsidian-800 flex items-end p-5`}
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                      <Archive className="w-5 h-5 text-obsidian-300" />
-                    </div>
-                  </div>
+                  {col.coverImageUrl ? (
+                    <>
+                      <img
+                        src={col.coverImageUrl}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover object-top opacity-40 group-hover:opacity-50 transition-opacity"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-obsidian-950 via-obsidian-950/70 to-transparent" />
+                    </>
+                  ) : (
+                    <div className={`absolute inset-0 bg-gradient-to-br ${gradientForIndex(i)}`} />
+                  )}
 
-                  {/* Body */}
-                  <div className="p-5 flex flex-col gap-3">
-                    <div>
-                      <h2 className="text-lg font-semibold group-hover:text-ether-400 transition-colors line-clamp-1">
-                        {col.title}
-                      </h2>
-                      {col.subtitle && (
-                        <p className="text-sm text-obsidian-400 mt-1 line-clamp-2">
-                          {col.subtitle}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center gap-4 text-xs text-obsidian-500 pt-1">
+                  {/* Content pinned to bottom */}
+                  <div className="absolute inset-x-0 bottom-0 z-10 p-5">
+                    <h2 className="text-base font-semibold group-hover:text-ether-400 transition-colors line-clamp-1 mb-1">
+                      {col.title}
+                    </h2>
+                    {col.subtitle && (
+                      <p className="text-xs text-obsidian-400 line-clamp-2 mb-2">
+                        {col.subtitle}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-4 text-xs text-obsidian-500">
                       <span>{col.contractCount.toLocaleString()} contracts</span>
                       {col.deployerAddress && (
                         <span className="font-mono">
