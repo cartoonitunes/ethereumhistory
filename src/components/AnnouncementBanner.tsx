@@ -30,18 +30,10 @@ export function AnnouncementBanner() {
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         <p className="text-obsidian-200 leading-snug pr-6">
           <span className="font-semibold text-ether-400">NEW</span>
-          {" — Explore the "}
-          <Link href="/collection/avsa" className="underline underline-offset-2 hover:text-ether-400 transition-colors">
-            Avsa Collection
-          </Link>
-          {" and the "}
-          <Link href="/collection/vitalik" className="underline underline-offset-2 hover:text-ether-400 transition-colors">
-            Vitalik Collection
-          </Link>
-          {" — every contract deployed by Ethereum's founders, documented and verified."}
+          {" — Explore Collections — every contract deployed by Ethereum's earliest builders, documented and verified."}
           {" "}
           <Link href="/collections" className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap">
-            Explore Collections →
+            Browse Collections →
           </Link>
         </p>
         <button
