@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
-import { ArrowLeft, Archive, CheckCircle, Calendar, ExternalLink } from "lucide-react";
+import { ArrowLeft, Archive, CheckCircle, ExternalLink } from "lucide-react";
 import { formatAddress, formatDate } from "@/lib/utils";
 import { ERAS } from "@/types";
 import type { CollectionContract } from "@/lib/db/collections";
@@ -29,7 +29,7 @@ function getEraLabel(eraId: string | null): string | null {
   return ERAS[eraId]?.name ?? eraId.replace(/_/g, " ");
 }
 
-function ContractCard({ contract, index }: { contract: CollectionContract; index: number }) {
+function DocumentedCard({ contract, index }: { contract: CollectionContract; index: number }) {
   const name = contract.name ?? formatAddress(contract.address, 10);
   const verified = isVerified(contract.verificationMethod);
   const era = getEraLabel(contract.eraId);
@@ -42,7 +42,7 @@ function ContractCard({ contract, index }: { contract: CollectionContract; index
     >
       <Link
         href={`/contract/${contract.address}`}
-        className="group block rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-4 hover:border-obsidian-600 hover:bg-obsidian-900/70 transition-all"
+        className="group block rounded-xl border border-obsidian-800 bg-obsidian-900/40 p-4 hover:border-obsidian-600 hover:bg-obsidian-900/70 transition-all h-full"
       >
         {/* Top row: name + badges */}
         <div className="flex items-start justify-between gap-2 mb-2">
@@ -80,12 +80,45 @@ function ContractCard({ contract, index }: { contract: CollectionContract; index
   );
 }
 
-export default function CollectionPageClient({ collection, contracts }: Props) {
-  const verifiedCount = contracts.filter((c) => isVerified(c.verificationMethod)).length;
-  const documentedCount = contracts.filter((c) => c.shortDescription).length;
+function GhostCard({ contract, index }: { contract: CollectionContract; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.6) }}
+    >
+      <Link
+        href={`/contract/${contract.address}`}
+        className="group block rounded-xl border border-obsidian-800/50 bg-obsidian-900/20 p-4 hover:border-obsidian-700 hover:bg-obsidian-900/40 transition-all h-full"
+      >
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <code className="text-xs font-mono text-obsidian-500 group-hover:text-obsidian-400 transition-colors truncate">
+            {formatAddress(contract.address, 12)}
+          </code>
+          {contract.deploymentTimestamp && (
+            <span className="text-[10px] text-obsidian-600 flex-shrink-0">
+              {formatDate(contract.deploymentTimestamp)}
+            </span>
+          )}
+        </div>
 
-  // Earliest and latest era in the collection
-  const eras = [...new Set(contracts.map((c) => c.eraId).filter(Boolean))];
+        <p className="text-xs text-obsidian-600 mb-3">Not yet documented</p>
+
+        <div className="text-[11px] text-ether-600 group-hover:text-ether-500 transition-colors">
+          Document this contract →
+        </div>
+      </Link>
+    </motion.div>
+  );
+}
+
+export default function CollectionPageClient({ collection, contracts }: Props) {
+  const documentedContracts = contracts.filter((c) => c.documented);
+  const verifiedCount = documentedContracts.filter((c) => isVerified(c.verificationMethod)).length;
+  const documentedCount = documentedContracts.length;
+  const totalCount = contracts.length;
+
+  const eras = [...new Set(documentedContracts.map((c) => c.eraId).filter(Boolean))];
 
   return (
     <div className="min-h-screen">
@@ -146,9 +179,17 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
             <div className="flex flex-wrap items-center gap-6 text-sm">
               <div>
                 <span className="text-2xl font-bold text-obsidian-100">
-                  {contracts.length.toLocaleString()}
+                  {totalCount.toLocaleString()}
                 </span>
                 <span className="ml-1.5 text-obsidian-500">contracts</span>
+              </div>
+              <div>
+                <span className="text-2xl font-bold text-ether-400">
+                  {documentedCount.toLocaleString()}
+                </span>
+                <span className="ml-1.5 text-obsidian-500">
+                  of {totalCount} documented
+                </span>
               </div>
               {verifiedCount > 0 && (
                 <div>
@@ -156,14 +197,6 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
                     {verifiedCount.toLocaleString()}
                   </span>
                   <span className="ml-1.5 text-obsidian-500">verified</span>
-                </div>
-              )}
-              {documentedCount > 0 && (
-                <div>
-                  <span className="text-2xl font-bold text-ether-400">
-                    {documentedCount.toLocaleString()}
-                  </span>
-                  <span className="ml-1.5 text-obsidian-500">documented</span>
                 </div>
               )}
               {eras.length > 0 && (
@@ -191,9 +224,13 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {contracts.map((contract, i) => (
-              <ContractCard key={contract.address} contract={contract} index={i} />
-            ))}
+            {contracts.map((contract, i) =>
+              contract.documented ? (
+                <DocumentedCard key={contract.address} contract={contract} index={i} />
+              ) : (
+                <GhostCard key={contract.address} contract={contract} index={i} />
+              )
+            )}
           </div>
         )}
       </section>

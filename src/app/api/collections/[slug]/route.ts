@@ -21,7 +21,8 @@ export async function GET(
       return NextResponse.json({ error: "Collection not found." }, { status: 404 });
     }
     const contracts = await getCollectionContractsFromDb(
-      collection.contractAddresses ?? []
+      collection.contractAddresses ?? [],
+      collection.deployerAddress ?? null
     );
     return NextResponse.json({ data: { collection, contracts } });
   } catch (err) {
