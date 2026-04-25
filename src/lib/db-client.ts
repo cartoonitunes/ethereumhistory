@@ -16,3 +16,4 @@ export * from "./db/analytics";
 export * from "./db/abi";
 export * from "./db/capabilities";
 export * from "./db/media";
+export * from "./db/collections";

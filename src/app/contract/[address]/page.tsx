@@ -7,6 +7,7 @@ import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
 import { isTursoConfigured } from "@/lib/turso";
+import { getCollectionForContractFromDb } from "@/lib/db-client";
 
 // Historical contracts are essentially immutable — cache for 10 min at the CDN/ISR layer
 export const revalidate = 600;
@@ -223,6 +224,14 @@ export default async function ContractPage({ params }: Props) {
   if (proxyInfo) {
     data = { ...data, proxyInfo };
   }
+
+  // Collection badge — non-fatal if DB lookup fails
+  try {
+    const collection = await getCollectionForContractFromDb(address.toLowerCase());
+    if (collection) {
+      data = { ...data, collection };
+    }
+  } catch {}
 
   const jsonLd = buildJsonLd(address, data);
 

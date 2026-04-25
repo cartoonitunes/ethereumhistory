@@ -593,3 +593,30 @@ export const apiKeys = pgTable(
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+
+// =============================================================================
+// Collections (curated contract galleries)
+// =============================================================================
+
+export const collections = pgTable(
+  "collections",
+  {
+    id: serial("id").primaryKey(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    subtitle: text("subtitle"),
+    description: text("description"),
+    deployerAddress: text("deployer_address"),
+    coverImageUrl: text("cover_image_url"),
+    contractAddresses: text("contract_addresses").array(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("collections_slug_unique").on(table.slug),
+    deployerIdx: index("collections_deployer_idx").on(table.deployerAddress),
+  })
+);
+
+export type Collection = typeof collections.$inferSelect;
+export type NewCollection = typeof collections.$inferInsert;

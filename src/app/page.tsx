@@ -6,7 +6,7 @@
  * Data is passed as props to HomePageClient which handles interactivity.
  */
 
-import { isDatabaseConfigured, getDb, getTopEditorsFromDb, getRecentEditsFromDb, getDocumentedContractsFromDb } from "@/lib/db-client";
+import { isDatabaseConfigured, getDb, getTopEditorsFromDb, getRecentEditsFromDb, getDocumentedContractsFromDb, getCollectionsListFromDb } from "@/lib/db-client";
 import { isTursoConfigured, turso } from "@/lib/turso";
 import { getFeaturedContracts } from "@/lib/db";
 import * as schema from "@/lib/schema";
@@ -15,6 +15,7 @@ import { cached, CACHE_TTL } from "@/lib/cache";
 import HomePageClient from "./HomePageClient";
 import type { FeaturedContract } from "@/types";
 import type { MarqueeContract, TopEditor, RecentEdit, ProgressStats } from "./HomePageClient";
+import type { CollectionSummary } from "@/lib/db/collections";
 
 // ISR: cache the rendered homepage at the CDN for 60s. Most visitors get a
 // pre-rendered response with zero DB work; the background revalidation happens
@@ -212,6 +213,15 @@ async function getFeaturedList(): Promise<FeaturedContract[]> {
   }
 }
 
+async function getCollectionsList(): Promise<CollectionSummary[]> {
+  if (!isDatabaseConfigured()) return [];
+  try {
+    return await getCollectionsListFromDb();
+  } catch {
+    return [];
+  }
+}
+
 // Hard cap on any single homepage data fetch. Under the serverless-only pool (max: 1),
 // heavy queries (esp. progressStats) can stall behind each other. If a fetch hasn't
 // returned in this window we give up and render partial content so the page responds
@@ -244,6 +254,7 @@ export default async function HomePage() {
     recentEdits,
     contractOfTheDay,
     progressStats,
+    collections,
   ] = await Promise.all([
     withTimeout(getFeaturedList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as FeaturedContract[]),
     withTimeout(getMarqueeContracts(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as MarqueeContract[]),
@@ -251,6 +262,7 @@ export default async function HomePage() {
     withTimeout(getRecentEditsList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as RecentEdit[]),
     withTimeout(getContractOfTheDay(), HOMEPAGE_FETCH_TIMEOUT_MS, null as FeaturedContract | null),
     withTimeout(getProgressStats(), HOMEPAGE_FETCH_TIMEOUT_MS, null as ProgressStats | null),
+    withTimeout(getCollectionsList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as CollectionSummary[]),
   ]);
 
   return (
@@ -261,6 +273,7 @@ export default async function HomePage() {
       recentEdits={recentEdits}
       contractOfTheDay={contractOfTheDay}
       progressStats={progressStats}
+      collections={collections}
     />
   );
 }

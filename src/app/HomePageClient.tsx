@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History, Calendar } from "lucide-react";
+import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History, Calendar, Layers } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
@@ -12,6 +12,7 @@ import { usePageView } from "@/lib/useAnalytics";
 import { EraCompact } from "@/components/EraTimeline";
 import { Users as UsersIcon, PenLine, FileText } from "lucide-react";
 import type { FeaturedContract } from "@/types";
+import type { CollectionSummary } from "@/lib/db/collections";
 
 export interface TopEditor {
   historianId: number;
@@ -51,6 +52,7 @@ interface HomePageClientProps {
   recentEdits: RecentEdit[];
   contractOfTheDay: FeaturedContract | null;
   progressStats: ProgressStats | null;
+  collections: CollectionSummary[];
 }
 
 const YEAR_COLORS: Record<string, string> = {
@@ -73,6 +75,7 @@ export default function HomePageClient({
   recentEdits,
   contractOfTheDay,
   progressStats,
+  collections,
 }: HomePageClientProps) {
   usePageView("/");
 
@@ -533,6 +536,73 @@ export default function HomePageClient({
                       <span className="text-xs text-obsidian-500 shrink-0">
                         {formatRelativeTime(edit.editedAt)}
                       </span>
+                    </Link>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </section>
+      )}
+
+      {/* Collections */}
+      {collections.length > 0 && (
+        <section className="py-16 border-t border-obsidian-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-ether-500/10 flex items-center justify-center text-ether-400">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Collections</h2>
+                    <p className="text-sm text-obsidian-500">Curated galleries of historically significant contracts</p>
+                  </div>
+                </div>
+                <Link
+                  href="/collections"
+                  className="text-sm text-obsidian-400 hover:text-obsidian-200 transition-colors"
+                >
+                  View all &rarr;
+                </Link>
+              </div>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {collections.slice(0, 3).map((col, i) => (
+                  <motion.div
+                    key={col.slug}
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.07 }}
+                  >
+                    <Link
+                      href={`/collection/${col.slug}`}
+                      className="group block rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-5 hover:border-obsidian-600 hover:bg-obsidian-900/60 transition-all"
+                    >
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="w-9 h-9 rounded-lg bg-ether-500/10 flex items-center justify-center text-ether-400 shrink-0">
+                          <Archive className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors line-clamp-1">
+                            {col.title}
+                          </h3>
+                          {col.subtitle && (
+                            <p className="text-xs text-obsidian-400 mt-0.5 line-clamp-2">{col.subtitle}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-obsidian-500">
+                        <span>{col.contractCount.toLocaleString()} contracts</span>
+                        {col.deployerAddress && (
+                          <code className="font-mono">{formatAddress(col.deployerAddress, 8)}</code>
+                        )}
+                      </div>
                     </Link>
                   </motion.div>
                 ))}
