@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
@@ -106,6 +107,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
+        <AnnouncementBanner />
         <div className="relative min-h-screen">
           {/* Background gradient */}
           <div className="fixed inset-0 gradient-radial pointer-events-none" />
