@@ -11,6 +11,18 @@ import type { Collection } from "@/lib/schema";
 
 export const revalidate = 300;
 
+function getMetadataBaseUrl(): URL {
+  const explicit =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    (process.env.VERCEL_ENV === "production"
+      ? "https://www.ethereumhistory.com"
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+  return new URL(explicit || "https://www.ethereumhistory.com");
+}
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
@@ -20,9 +32,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!isDatabaseConfigured()) return { title: "Collection — Ethereum History" };
   const collection = await getCollectionBySlugFromDb(slug).catch(() => null);
   if (!collection) return { title: "Collection Not Found — Ethereum History" };
+
+  const metadataBase = getMetadataBaseUrl();
+  const title = `${collection.title} — Ethereum History`;
+  const description =
+    collection.subtitle ??
+    collection.description ??
+    `Explore the ${collection.title} on Ethereum History.`;
+  const ogImageUrl = new URL(`/api/og/collection/${slug}`, metadataBase).toString();
+  const canonicalUrl = new URL(`/collection/${slug}`, metadataBase).toString();
+
   return {
-    title: `${collection.title} — Ethereum History`,
-    description: collection.subtitle ?? collection.description ?? undefined,
+    metadataBase,
+    title,
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      type: "website",
+      siteName: "Ethereum History",
+      images: [{ url: ogImageUrl, width: 1200, height: 630, type: "image/png" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImageUrl],
+    },
   };
 }
 
