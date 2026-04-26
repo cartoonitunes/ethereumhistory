@@ -14,6 +14,12 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/historian/", "/api/", "/api/analytics/"],
       },
       {
+        // Allow social card crawlers to fetch OG images
+        userAgent: ["Twitterbot", "facebookexternalhit", "LinkedInBot", "Slackbot"],
+        allow: ["/", "/contract/", "/browse", "/people/", "/api/og/"],
+        disallow: ["/historian/", "/api/analytics/"],
+      },
+      {
         // Allow AI crawlers to index the public API docs and agent endpoints
         userAgent: ["Anthropic-AI", "GPTBot", "Google-Extended", "CCBot"],
         allow: ["/", "/contract/", "/browse", "/api-docs", "/api/agent/", "/mcp"],
