@@ -446,10 +446,11 @@ export async function getContractsByDeployerFromDb(
   limit = 200
 ): Promise<AppContract[]> {
   const database = getDb();
+  const lower = deployerAddress.toLowerCase();
   const results = await database
     .select()
     .from(schema.contracts)
-    .where(eq(schema.contracts.deployerAddress, deployerAddress.toLowerCase()))
+    .where(sql`LOWER(${schema.contracts.deployerAddress}) = ${lower}`)
     .orderBy(desc(schema.contracts.deploymentTimestamp))
     .limit(limit);
 
