@@ -116,7 +116,8 @@ async function fetchWmeatFeesEth(): Promise<number> {
         const amount0Raw = BigInt("0x" + raw.slice(0, 64));
         // decode int256 two's complement
         const amount0 = amount0Raw >= INT256_MIN ? amount0Raw - UINT256_MOD : amount0Raw;
-        totalWethVolumeWei += amount0 < BigInt(0) ? -amount0 : amount0;
+        // only count positive inflows (buys) — negative amount0 means WETH out (sells, fee in w🍖)
+        if (amount0 > BigInt(0)) totalWethVolumeWei += amount0;
       }
 
       if (json.result.length < 1000) break;
@@ -359,32 +360,43 @@ export default async function SupportersPage() {
           </div>
         </div>
 
+        {/* Tier legend */}
+        <div className="flex flex-wrap items-center gap-3 mb-8 justify-center">
+          {(["philanthropist", "benefactor", "sponsor", "patron", "supporter"] as Tier[]).map((tier) => {
+            const cfg = TIER_CONFIG[tier];
+            return (
+              <span
+                key={tier}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.color} ${cfg.border}`}
+              >
+                <TierDot tier={tier} />
+                {cfg.label}
+                <span className="text-obsidian-600 font-normal">{cfg.threshold}</span>
+              </span>
+            );
+          })}
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-ether-500/10 text-ether-400 border-ether-500/30">
+            Founding Supporter: first 10 donors
+          </span>
+        </div>
+
+        {/* Leaderboard */}
+        {donations.length === 0 ? (
+          <div className="text-center py-20 text-obsidian-600">
+            No donations yet. Be the first!
+          </div>
+        ) : (
+          <div className="space-y-3 mb-16">
+            {donations.map((d, idx) => (
+              <DonationCard key={d.txHash} donation={d} rank={idx + 1} />
+            ))}
+          </div>
+        )}
+
         {/* Token fee trackers */}
-        <div className="mb-10 space-y-3">
-            {historyFeesEth > 0 && (
-              <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
-                    <p className="text-xs text-obsidian-500 mt-0.5">
-                      Created by a supporter on{" "}
-                      <a
-                        href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-ether-400 transition-colors"
-                      >
-                        Base ↗
-                      </a>
-                      {" "}- 1% of trading fees support this archive
-                    </p>
-                  </div>
-                  <span className="text-sm font-semibold text-ether-300 shrink-0">
-                    {historyFeesEth.toFixed(4)} ETH
-                  </span>
-                </div>
-              </div>
-            )}
+        <div className="mb-12">
+          <h3 className="text-sm font-medium text-obsidian-600 uppercase tracking-widest mb-3">Token Fee Contributions</h3>
+          <div className="space-y-3">
             <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -450,40 +462,32 @@ export default async function SupportersPage() {
                 </div>
               </div>
             </div>
-        </div>
-
-        {/* Tier legend */}
-        <div className="flex flex-wrap items-center gap-3 mb-8 justify-center">
-          {(["philanthropist", "benefactor", "sponsor", "patron", "supporter"] as Tier[]).map((tier) => {
-            const cfg = TIER_CONFIG[tier];
-            return (
-              <span
-                key={tier}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.color} ${cfg.border}`}
-              >
-                <TierDot tier={tier} />
-                {cfg.label}
-                <span className="text-obsidian-600 font-normal">{cfg.threshold}</span>
-              </span>
-            );
-          })}
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border bg-ether-500/10 text-ether-400 border-ether-500/30">
-            Founding Supporter: first 10 donors
-          </span>
-        </div>
-
-        {/* Leaderboard */}
-        {donations.length === 0 ? (
-          <div className="text-center py-20 text-obsidian-600">
-            No donations yet. Be the first!
+            {historyFeesEth > 0 && (
+              <div className="rounded-2xl border border-obsidian-700 bg-obsidian-900/50 px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <span className="text-sm font-semibold text-obsidian-100">HISTORY Token</span>
+                    <p className="text-xs text-obsidian-500 mt-0.5">
+                      Created by a supporter on{" "}
+                      <a
+                        href={`https://dexscreener.com/base/${HISTORY_TOKEN}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-ether-400 transition-colors"
+                      >
+                        Base ↗
+                      </a>
+                      {" "}- 1% of trading fees support this archive
+                    </p>
+                  </div>
+                  <span className="text-sm font-semibold text-ether-300 shrink-0">
+                    {historyFeesEth.toFixed(4)} ETH
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="space-y-3 mb-16">
-            {donations.map((d, idx) => (
-              <DonationCard key={d.txHash} donation={d} rank={idx + 1} />
-            ))}
-          </div>
-        )}
+        </div>
 
         {/* Claim section */}
         <div className="border-t border-obsidian-800 pt-12 text-center">
