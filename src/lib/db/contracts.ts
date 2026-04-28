@@ -216,9 +216,11 @@ export async function updateContractEtherscanEnrichmentFromDb(
     sourceCode?: string | null;
     compilerLanguage?: string | null;
     compilerCommit?: string | null;
+    compilerRepo?: string | null;
     verificationMethod?: string | null;
     verificationProofUrl?: string | null;
     verificationNotes?: string | null;
+    sourcifyMatch?: string | null;
   }
 ): Promise<void> {
   const database = getDb();
@@ -236,9 +238,11 @@ export async function updateContractEtherscanEnrichmentFromDb(
   if (patch.sourceCode !== undefined) updates.sourceCode = patch.sourceCode;
   if (patch.compilerLanguage !== undefined) updates.compilerLanguage = patch.compilerLanguage;
   if (patch.compilerCommit !== undefined) updates.compilerCommit = patch.compilerCommit;
+  if (patch.compilerRepo !== undefined) updates.compilerRepo = patch.compilerRepo;
   if (patch.verificationMethod !== undefined) updates.verificationMethod = patch.verificationMethod;
   if (patch.verificationProofUrl !== undefined) updates.verificationProofUrl = patch.verificationProofUrl;
   if (patch.verificationNotes !== undefined) updates.verificationNotes = patch.verificationNotes;
+  if (patch.sourcifyMatch !== undefined) updates.sourcifyMatch = patch.sourcifyMatch;
 
   if (Object.keys(updates).length <= 1) return;
 

@@ -81,6 +81,7 @@ import {
   fetchEtherscanContractCreation,
   fetchEtherscanSourceCode,
 } from "./etherscan";
+import { fetchSourcifySource } from "./sourcify";
 import { getEnsName } from "./ens";
 import { decompileContract } from "./evm-decompile";
 import { classifyContract } from "./capabilities";
@@ -102,6 +103,12 @@ function isDatabaseEnabled(): boolean {
  */
 function hasLocalJsonData(): boolean {
   return hasLocalDataFiles();
+}
+
+function extractCompilerCommit(compilerVersion: string | null | undefined): string | null {
+  if (!compilerVersion) return null;
+  const match = compilerVersion.match(/commit\.([^.]+)/i);
+  return match?.[1] ?? null;
 }
 
 /**
@@ -283,27 +290,32 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   if (!contract) return null;
 
   // ---------------------------------------------------------------------------
-  // Optional Etherscan enrichment (ABI, verified source, creator + creation tx)
+  // Optional external enrichment (Etherscan + Sourcify)
   // ---------------------------------------------------------------------------
   const etherscanKey = process.env.ETHERSCAN_API_KEY;
-  const mayNeedEtherscan =
+  const needsExternalEnrichment =
     !contract.abi ||
     !contract.deployerAddress ||
     !contract.deploymentTxHash ||
     !contract.deploymentBlock ||
     !contract.deploymentTimestamp ||
-    (!contract.sourceCode && !contract.etherscanContractName);
+    !contract.sourceCode ||
+    !contract.etherscanContractName ||
+    !contract.verificationMethod;
 
-  if (etherscanKey && mayNeedEtherscan) {
+  if (needsExternalEnrichment) {
     const patch: Parameters<typeof dbUpdateContractEtherscanEnrichment>[1] = {};
     const merged: Partial<Contract> = {};
 
     // Deployer + creation tx + block/timestamp
     if (
-      !contract.deployerAddress ||
-      !contract.deploymentTxHash ||
-      !contract.deploymentBlock ||
-      !contract.deploymentTimestamp
+      etherscanKey &&
+      (
+        !contract.deployerAddress ||
+        !contract.deploymentTxHash ||
+        !contract.deploymentBlock ||
+        !contract.deploymentTimestamp
+      )
     ) {
       try {
         const creation = await fetchEtherscanContractCreation(contract.address);
@@ -331,7 +343,7 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
     }
 
     // ABI
-    if (!contract.abi) {
+    if (etherscanKey && !contract.abi) {
       try {
         const abi = await fetchEtherscanAbi(contract.address);
         if (abi) {
@@ -344,7 +356,7 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
     }
 
     // Verified source + contract name (only if verified)
-    if (!contract.sourceCode || !contract.etherscanContractName) {
+    if (etherscanKey && (!contract.sourceCode || !contract.etherscanContractName || !contract.verificationMethod)) {
       try {
         const source = await fetchEtherscanSourceCode(contract.address);
         if (source?.isVerified) {
@@ -372,9 +384,60 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
             merged.abi = source.abi;
             patch.abi = source.abi;
           }
+          if (!contract.verificationMethod) {
+            merged.verificationMethod = "etherscan_verified";
+            patch.verificationMethod = "etherscan_verified";
+          }
+          if (!contract.compilerLanguage && source.compilerType) {
+            const language = source.compilerType.toLowerCase().includes("vyper")
+              ? "vyper"
+              : "solidity";
+            merged.compilerLanguage = language;
+            patch.compilerLanguage = language;
+          }
+          if (!contract.compilerCommit && source.compilerVersion) {
+            const compilerCommit = extractCompilerCommit(source.compilerVersion);
+            if (compilerCommit) {
+              merged.compilerCommit = compilerCommit;
+              patch.compilerCommit = compilerCommit;
+            }
+          }
         }
       } catch (error) {
         console.warn("[etherscan] source lookup failed:", error);
+      }
+    }
+
+    if (!contract.sourceCode || !contract.abi) {
+      try {
+        const sourcify = await fetchSourcifySource(contract.address);
+        if (sourcify) {
+          if (!contract.sourceCode) {
+            merged.sourceCode = sourcify.sourceCode;
+            patch.sourceCode = sourcify.sourceCode;
+          }
+          if (!contract.abi && sourcify.abi) {
+            merged.abi = sourcify.abi;
+            patch.abi = sourcify.abi;
+          }
+          if (!contract.compilerLanguage && sourcify.compilerLanguage) {
+            merged.compilerLanguage = sourcify.compilerLanguage;
+            patch.compilerLanguage = sourcify.compilerLanguage;
+          }
+          if (!contract.compilerCommit && sourcify.compilerVersion) {
+            const compilerCommit = extractCompilerCommit(sourcify.compilerVersion);
+            if (compilerCommit) {
+              merged.compilerCommit = compilerCommit;
+              patch.compilerCommit = compilerCommit;
+            }
+          }
+          if (!contract.sourcifyMatch) {
+            merged.sourcifyMatch = sourcify.matchType;
+            patch.sourcifyMatch = sourcify.matchType;
+          }
+        }
+      } catch (error) {
+        console.warn("[sourcify] source lookup failed:", error);
       }
     }
 
@@ -547,13 +610,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
   const deploymentBlock = deployment?.deploymentBlock ?? null;
   const deploymentTimestamp = deployment?.deploymentTimestamp ?? null;
 
-  const year =
-    deploymentTimestamp != null ? new Date(deploymentTimestamp).getUTCFullYear() : null;
-
-  const outOfRange = year != null && year >= 2018;
-  let archiveNotice = outOfRange
-    ? "This contract appears to have been deployed after 2018. Ethereum History currently covers 2015–2018, with newer years to be added in the future."
-    : null;
+  let archiveNotice: string | null = null;
 
   const era = deploymentBlock != null ? getEraFromBlock(deploymentBlock) : null;
 

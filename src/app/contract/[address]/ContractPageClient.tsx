@@ -40,7 +40,6 @@ import { AddressSearch } from "@/components/AddressSearch";
 import { getFrontierRegistrarEntry, REGISTRAR_INFO } from "@/lib/frontier-registrar";
 import { usePageView, useTrackEvent } from "@/lib/useAnalytics";
 import { SuggestEditForm } from "@/components/SuggestEditForm";
-import ShareOnX from "@/components/ShareOnX";
 import { EraCompact } from "@/components/EraTimeline";
 import { SimilarityTable, SimilarityDetail } from "@/components/SimilarityTable";
 import { BytecodeViewer } from "@/components/BytecodeViewer";
@@ -342,7 +341,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
     functionSignatures,
     deployerPerson,
     txCountsByYear,
-    archiveNotice,
     media,
     proxyInfo,
     collection,
@@ -381,12 +379,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
 
   function handleShareOnX() {
     const url = new URL("https://x.com/intent/tweet");
-    url.searchParams.set("text", buildShareText());
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
-  }
-
-  function handleShareFarcaster() {
-    const url = new URL("https://warpcast.com/~/compose");
     url.searchParams.set("text", buildShareText());
     window.open(url.toString(), "_blank", "noopener,noreferrer");
   }
@@ -434,18 +426,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           <ArrowLeft className="w-4 h-4" />
           Back to Home
         </Link>
-
-        {archiveNotice && (
-          <div className="mb-6 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-obsidian-200">
-            <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-              <div>
-                <div className="font-medium text-yellow-400">Outside the curated archive</div>
-                <div className="text-obsidian-300 mt-1">{archiveNotice}</div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Header */}
         <motion.div
@@ -663,13 +643,6 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
               Share on X
-            </button>
-            <button
-              onClick={handleShareFarcaster}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
-            >
-              <span className="text-xs font-bold text-purple-400 leading-none">f</span>
-              Farcaster
             </button>
             <button
               onClick={handleCopyLink}

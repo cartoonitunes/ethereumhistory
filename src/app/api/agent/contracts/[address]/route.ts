@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getContract } from "@/lib/db";
+import { getContract, getContractWithTokenMetadata } from "@/lib/db";
 import {
   isDatabaseConfigured,
   getHistoricalLinksForContractFromDb,
@@ -34,8 +34,12 @@ export async function GET(
 
   const addr = address.toLowerCase();
 
-  let contract = await getContract(addr);
+  let contract = await getContractWithTokenMetadata(addr);
   let layer = "documented";
+
+  if (!contract) {
+    contract = await getContract(addr);
+  }
 
   if (!contract) {
     const resolved = await resolveContract(addr);
