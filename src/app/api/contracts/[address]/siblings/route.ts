@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db-client";
 import { contracts } from "@/lib/schema";
 import { eq, ne, and, sql } from "drizzle-orm";
+import { turso, isTursoConfigured } from "@/lib/turso";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const hash = target?.runtimeBytecodeHash;
     if (!hash) {
       return NextResponse.json({ hash: null, count: 0, contracts: [] });
+    }
+
+    // Look up authoritative sibling count from Turso's bytecode_families table.
+    // Turso uses a different hash (hashes the creation bytecode differently than Neon),
+    // so we look up by address in contract_index to get the Turso hash first.
+    let tursoSiblingCount: number | null = null;
+    if (isTursoConfigured()) {
+      try {
+        const idxResult = await turso.execute({
+          sql: 'SELECT bytecode_hash FROM contract_index WHERE address = ?',
+          args: [normalizedAddress],
+        });
+        const tursoHash = (idxResult.rows[0] as any)?.bytecode_hash;
+        if (tursoHash) {
+          const familyResult = await turso.execute({
+            sql: 'SELECT sibling_count FROM bytecode_families WHERE bytecode_hash = ?',
+            args: [tursoHash],
+          });
+          const sc = (familyResult.rows[0] as any)?.sibling_count;
+          if (sc != null) tursoSiblingCount = Number(sc);
+        }
+      } catch {
+        // fall through to Neon count
+      }
     }
 
     const canonical = target?.canonicalAddress || normalizedAddress;
@@ -91,7 +116,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       hash,
-      count: totalCount,
+      // Use Turso's pre-computed sibling_count when available — it covers the full
+      // Ethereum history dataset (306k+), not just the subset in Neon (~4k canonical-grouped).
+      count: tursoSiblingCount ?? totalCount,
       lifecycle: {
         live: lifecycle?.liveCount ?? 0,
         selfDestructed: lifecycle?.selfDestructedCount ?? 0,

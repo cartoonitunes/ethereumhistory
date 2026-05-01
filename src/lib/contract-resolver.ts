@@ -67,6 +67,15 @@ export async function resolveContract(address: string): Promise<ResolvedContract
   // Layer 4: documented in Neon with editorial content
   if (neonContract?.shortDescription) {
     const base = buildFromIndex(addr, indexRow);
+    // Still fetch the family row so siblingCount is populated for documented contracts
+    if (indexRow?.bytecode_hash) {
+      const familyResult = await turso.execute({
+        sql: 'SELECT sibling_count, is_cracked, cracked_address, proof_url FROM bytecode_families WHERE bytecode_hash = ?',
+        args: [indexRow.bytecode_hash],
+      });
+      const familyRow = familyResult.rows[0] as unknown as TursoFamilyRow | undefined;
+      if (familyRow) base.siblingCount = familyRow.sibling_count;
+    }
     return {
       ...base,
       layer: 'documented',
