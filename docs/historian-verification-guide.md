@@ -116,23 +116,7 @@ curl -X POST "https://www.ethereumhistory.com/api/contract/0xADDRESS/history/man
 
 **Critical:** All field names are **camelCase** in the request body. The `verificationStatus` field is read-only (computed from `sourceCode`), but passing it as `"verified"` is required to unlock the `sourceCode` field for writing. Without source code, the status stays `"decompiled"` regardless of other fields.
 
-### 6. Fire the bot notification
-
-The social bot only auto-fires on the **first ever edit** to a contract. If you've touched the contract before (e.g. added a description earlier), you must trigger manually:
-
-```bash
-curl -X POST "https://nameless-lake-39668-540f6213f30f.herokuapp.com/contractdocumentation" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "contract_address": "0xADDRESS",
-    "contract_name": "ContractName",
-    "deployment_timestamp": "2015-08-07T00:00:00.000Z",
-    "short_description": "One sentence description.",
-    "contract_url": "https://ethereumhistory.com/contract/0xADDRESS"
-  }'
-```
-
-### 7. Confirm on /proofs
+### 6. Confirm on /proofs
 
 Check `https://ethereumhistory.com/proofs` — the contract should appear in the verified list.
 
@@ -157,3 +141,65 @@ Check `https://ethereumhistory.com/proofs` — the contract should appear in the
 | `etherscan_verified` | Contract is already verified on Etherscan — pull source from there |
 | `author_published` | Original author published the source (GitHub, gist, blog post) |
 | `source_reconstructed` | Source reconstructed from bytecode but not byte-for-byte compiler match |
+
+---
+
+## Early Compiler Archaeology
+
+Most contracts on EthereumHistory were deployed between Frontier launch (July 2015) and early 2016. Compiling them requires specific compiler builds that differ significantly from modern Solidity.
+
+### Identifying the compiler era
+
+| Signal | Era | Compiler |
+|---|---|---|
+| `6060604052` init prefix | Frontier (v0.1.x - v0.3.x) | Free memory pointer at 0x60 |
+| `6080604052` init prefix | Post-Homestead (v0.4.x+) | Free memory pointer at 0x80 |
+| 19-byte init code | soljson (JavaScript build) | `6060604052 61XXXX 80 61YYYY 6000 39 6000 f3` |
+| Longer init code | Native C++ build | Different init sequence, more opcodes |
+| `sha3` in source | Pre-0.4.3 | Renamed to `keccak256` in 0.4.3 |
+| `suicide` in source | Pre-0.4.0 | Renamed to `selfdestruct` in 0.4.0 |
+| `constant` on functions | Pre-0.4.17 | Replaced by `view`/`pure` |
+| No `emit` keyword | Pre-0.4.21 | `emit` added in 0.4.21 |
+
+### soljson builds (JavaScript/emscripten)
+
+These are the builds used with `solc.setupMethods()` in Node.js. Available in `/tmp/soljson/`:
+
+| Version | Commit | Date | Notes |
+|---|---|---|---|
+| v0.1.1 | 6ff4cd6 | Aug 2015 | Frontier launch era. Right-to-left expression eval. |
+| v0.1.2 | d0d36e3 | Sep 2015 | Minor fixes |
+| v0.1.3 | 28f561 | Sep 2015 | |
+| v0.1.4 | various | Oct 2015 | Multiple nightly builds |
+| v0.1.5 | 23865e39 | Oct 2015 | |
+| v0.1.6 | d41f8b7c | Nov 2015 | |
+| v0.1.7 | b4e666cc | Dec 2015 | Last v0.1.x release |
+| v0.2.0 | 4dc2445e | Jan 2016 | |
+| v0.2.1 | fad2d4df | Feb 2016 | |
+| v0.3.x | various | Mar-May 2016 | |
+
+### Native C++ builds (Docker)
+
+For contracts with longer init code that don't match any soljson build. These produce different bytecode from the same source because the native compiler has a different code generator.
+
+Available Docker images: `solc-v011`, `solc-v015`, `solc-v016`, `solc-v017`, `solc-jan20`, `solc-v020`, `solc-umbrella`, `solc-aug2015b`, `solc-poc8`.
+
+### v0.1.x quirks that affect bytecode matching
+
+These are hard-won lessons from cracking dozens of Frontier-era contracts:
+
+1. **Right-to-left evaluation**: In v0.1.1, expressions evaluate right-to-left. `if (creator == msg.sender)` produces different bytecode than `if (msg.sender == creator)`. The comparison order in source must match the opcode order.
+
+2. **`uint(10)` defeats constant folding**: Writing `uint(10)` instead of `10` prevents the optimizer from folding the constant, producing a PUSH opcode where a folded constant would be inlined. This is sometimes necessary to match on-chain bytecode.
+
+3. **Declaration vs assignment opcode count**: `uint x = 5;` and `uint x; x = 5;` produce different opcode counts in v0.1.x. The two-statement form generates an extra SSTORE/MSTORE.
+
+4. **Function declaration order matters**: With the optimizer ON, function dispatch order follows selector value (alphabetical by hash). With optimizer OFF, dispatch follows source declaration order. Getting the wrong order is the most common reason for near-misses.
+
+5. **No `.push()` on arrays in v0.1.1**: Use `arr.length++; arr[arr.length - 1] = val;` instead.
+
+6. **Struct fields are not packed**: Each field occupies a full 256-bit storage slot, unlike modern Solidity which packs smaller types.
+
+### Serpent contracts
+
+Some pre-2016 contracts (notably Augur REP) were written in Serpent, not Solidity. Serpent compilation requires the original `serpent` compiler binary. These are rare but important historical artifacts. The bytecode structure is visibly different: no function dispatch table, no free-memory-pointer init.
