@@ -1771,7 +1771,6 @@ function IWasHereButton({ address }: { address: string }) {
           to: address,
           data: "0x39ae461f", // iWasHere()
           value: "0x0",
-          gas: "0x7530", // 30000 - caps cost for contracts with code
         }],
       }) as string;
       setTxHash(hash);
@@ -1806,7 +1805,7 @@ function IWasHereButton({ address }: { address: string }) {
           </span>
         </div>
         <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
-          Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent and no contract code is executed. Costs only the base gas fee (~21,000 gas).
+          Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent. Costs only the transaction gas fee.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <button
