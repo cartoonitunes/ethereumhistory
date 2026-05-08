@@ -1752,6 +1752,34 @@ function IWasHereButton({ address }: { address: string }) {
   const [status, setStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [supported, setSupported] = useState<boolean | null>(null); // null = checking
+
+  // Check on mount whether this contract accepts the iWasHere call
+  useEffect(() => {
+    const checkSupport = async () => {
+      try {
+        const rpc = "https://ethereum.publicnode.com";
+        const res = await fetch(rpc, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            method: "eth_call",
+            params: [{ to: address, data: "0x39ae461f" }, "latest"],
+            id: 1,
+          }),
+        });
+        const json = await res.json();
+        // If result exists (even empty "0x"), the call succeeded
+        // If error exists, the contract reverts on this selector
+        setSupported(!json.error);
+      } catch {
+        // Network error — assume supported, let wallet handle it
+        setSupported(true);
+      }
+    };
+    checkSupport();
+  }, [address]);
 
   const sendIWasHere = async () => {
     if (!window.ethereum) {
@@ -1804,34 +1832,46 @@ function IWasHereButton({ address }: { address: string }) {
             0x39ae461f
           </span>
         </div>
-        <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
-          Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent. Costs only the transaction gas fee.
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={sendIWasHere}
-            disabled={status === "pending"}
-            className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-white font-medium transition-colors"
-          >
-            {status === "pending" ? "Confirming..." : "✍️ Leave your mark"}
-          </button>
-          {status === "success" && txHash && (
-            <span className="text-xs text-green-400">
-              Marked!{" "}
-              <a
-                href={`https://etherscan.io/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-green-300"
+        {supported === null ? (
+          <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
+            Checking contract compatibility...
+          </p>
+        ) : supported === false ? (
+          <p className="text-xs text-obsidian-400 leading-relaxed mb-3">
+            This contract&apos;s code rejects unknown function calls, so iWasHere is not available for this contract. Contracts that were selfdestructed or have permissive fallback functions support iWasHere.
+          </p>
+        ) : (
+          <>
+            <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
+              Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent. Costs only the transaction gas fee.
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={sendIWasHere}
+                disabled={status === "pending"}
+                className="px-4 py-2 rounded-lg bg-ether-600 hover:bg-ether-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm text-white font-medium transition-colors"
               >
-                View on Etherscan
-              </a>
-            </span>
-          )}
-          {status === "error" && errorMsg && (
-            <span className="text-xs text-red-400">{errorMsg}</span>
-          )}
-        </div>
+                {status === "pending" ? "Confirming..." : "✍️ Leave your mark"}
+              </button>
+              {status === "success" && txHash && (
+                <span className="text-xs text-green-400">
+                  Marked!{" "}
+                  <a
+                    href={`https://etherscan.io/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-green-300"
+                  >
+                    View on Etherscan
+                  </a>
+                </span>
+              )}
+              {status === "error" && errorMsg && (
+                <span className="text-xs text-red-400">{errorMsg}</span>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
