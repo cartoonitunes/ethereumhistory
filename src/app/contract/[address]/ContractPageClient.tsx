@@ -1527,7 +1527,7 @@ function ReadContractPanel({
 
   const connectWallet = async () => {
     if (!window.ethereum) {
-      setWalletError("No Ethereum wallet detected. Please install MetaMask.");
+      setWalletError("No Ethereum wallet detected. Please install a wallet like MetaMask or Coinbase Wallet.");
       return;
     }
     setConnecting(true);
@@ -1755,7 +1755,7 @@ function IWasHereButton({ address }: { address: string }) {
 
   const sendIWasHere = async () => {
     if (!window.ethereum) {
-      setErrorMsg("No Ethereum wallet detected. Please install MetaMask.");
+      setErrorMsg("No Ethereum wallet detected. Please install a wallet like MetaMask or Coinbase Wallet.");
       setStatus("error");
       return;
     }
@@ -1771,6 +1771,7 @@ function IWasHereButton({ address }: { address: string }) {
           to: address,
           data: "0x39ae461f", // iWasHere()
           value: "0x0",
+          gas: "0x7530", // 30000 - caps cost for contracts with code
         }],
       }) as string;
       setTxHash(hash);
