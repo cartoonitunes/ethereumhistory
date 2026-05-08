@@ -46,6 +46,7 @@ import { BytecodeViewer } from "@/components/BytecodeViewer";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { CONTRACT_CATEGORY_OPTIONS } from "@/lib/contract-categories";
+import { getEthereumProvider, NO_WALLET_MESSAGE } from "@/lib/wallet";
 import {
   formatAddress,
   formatDate,
@@ -858,16 +859,6 @@ function TabButton({
 // Interact Panel
 // =============================================================================
 
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      on: (event: string, handler: (...args: unknown[]) => void) => void;
-      removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
-    };
-  }
-}
-
 type AbiItem = {
   name: string;
   type: string;
@@ -1264,7 +1255,8 @@ function WriteFunctionRow({
   }, [fn, address, walletAddress, inputValues, ethValue, isPayable]);
 
   const sendTx = useCallback(async () => {
-    if (!walletAddress || !window.ethereum) return;
+    const provider = getEthereumProvider();
+    if (!walletAddress || !provider) return;
     setError(null);
     setTxHash(null);
     setStatus("simulating");
@@ -1274,7 +1266,7 @@ function WriteFunctionRow({
       const walletClient = createWalletClient({
         account: walletAddress as `0x${string}`,
         chain: mainnet,
-        transport: custom(window.ethereum),
+        transport: custom(provider),
       });
 
       const { request } = await publicClient.simulateContract({
@@ -1480,8 +1472,9 @@ function ReadContractPanel({
 
   // Check if already connected on mount
   useEffect(() => {
-    if (!window.ethereum) return;
-    window.ethereum.request({ method: "eth_accounts" }).then((accounts) => {
+    const provider = getEthereumProvider();
+    if (!provider) return;
+    provider.request({ method: "eth_accounts" }).then((accounts) => {
       const accs = accounts as string[];
       if (accs.length > 0) setWalletAddress(accs[0]);
     }).catch(() => {});
@@ -1489,24 +1482,26 @@ function ReadContractPanel({
 
   // Listen for account changes
   useEffect(() => {
-    if (!window.ethereum) return;
+    const provider = getEthereumProvider();
+    if (!provider?.on) return;
     const handler = (...args: unknown[]) => {
       const accs = args[0] as string[];
       setWalletAddress(accs.length > 0 ? accs[0] : null);
     };
-    window.ethereum.on("accountsChanged", handler);
-    return () => window.ethereum?.removeListener("accountsChanged", handler);
+    provider.on("accountsChanged", handler);
+    return () => provider.removeListener?.("accountsChanged", handler);
   }, []);
 
   const connectWallet = async () => {
-    if (!window.ethereum) {
-      setWalletError("No Ethereum wallet detected. Please install MetaMask.");
+    const provider = getEthereumProvider();
+    if (!provider) {
+      setWalletError(NO_WALLET_MESSAGE);
       return;
     }
     setConnecting(true);
     setWalletError(null);
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
       setWalletAddress(accounts[0]);
     } catch (err: unknown) {
       const e = err as { message?: string };
@@ -1727,17 +1722,18 @@ function IWasHereButton({ address }: { address: string }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const sendIWasHere = async () => {
-    if (!window.ethereum) {
-      setErrorMsg("No Ethereum wallet detected. Please install MetaMask.");
+    const provider = getEthereumProvider();
+    if (!provider) {
+      setErrorMsg(NO_WALLET_MESSAGE);
       setStatus("error");
       return;
     }
     setStatus("pending");
     setErrorMsg(null);
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
+      const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
       if (!accounts.length) throw new Error("No account connected");
-      const hash = await window.ethereum.request({
+      const hash = await provider.request({
         method: "eth_sendTransaction",
         params: [{
           from: accounts[0],
