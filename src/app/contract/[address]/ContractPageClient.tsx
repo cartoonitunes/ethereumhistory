@@ -1792,14 +1792,19 @@ function IWasHereButton({ address }: { address: string }) {
     try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" }) as string[];
       if (!accounts.length) throw new Error("No account connected");
+      const txParams: Record<string, string> = {
+        from: accounts[0],
+        to: address,
+        data: "0x39ae461f", // iWasHere()
+        value: "0x0",
+      };
+      // For contracts that will revert, cap gas low to keep costs minimal
+      if (supported === false) {
+        txParams.gas = "0x7530"; // 30000
+      }
       const hash = await window.ethereum.request({
         method: "eth_sendTransaction",
-        params: [{
-          from: accounts[0],
-          to: address,
-          data: "0x39ae461f", // iWasHere()
-          value: "0x0",
-        }],
+        params: [txParams],
       }) as string;
       setTxHash(hash);
       setStatus("success");
@@ -1836,12 +1841,13 @@ function IWasHereButton({ address }: { address: string }) {
           <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
             Checking contract compatibility...
           </p>
-        ) : supported === false ? (
-          <p className="text-xs text-obsidian-400 leading-relaxed mb-3">
-            This contract&apos;s code rejects unknown function calls, so iWasHere is not available for this contract. Contracts that were selfdestructed or have permissive fallback functions support iWasHere.
-          </p>
         ) : (
           <>
+            {supported === false && (
+              <p className="text-xs text-amber-400/80 leading-relaxed mb-2">
+                This contract rejects unknown function calls. Your iWasHere transaction will appear on Etherscan as a failed transaction, but the call data and your address will still be permanently visible on the contract&apos;s transaction page.
+              </p>
+            )}
             <p className="text-xs text-obsidian-500 leading-relaxed mb-3">
               Send a transaction to this contract that will be permanently recorded on-chain and visible on Etherscan as an &quot;iWasHere&quot; call. No ETH is sent. Costs only the transaction gas fee.
             </p>
