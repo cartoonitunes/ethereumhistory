@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { sql } from "drizzle-orm";
 
@@ -25,7 +25,7 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
     const header = req.headers.get("authorization") ?? "";
     if (header === `Bearer ${cronSecret}`) return true;
   }
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(req);
   return !!(me && me.active && me.role === "admin");
 }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import sharp from "sharp";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ function isRateLimited(historianId: number): boolean {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }

@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getPersonBySlugFromDb, upsertPersonFromDb } from "@/lib/db-client";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import type { ApiResponse, Person } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ): Promise<NextResponse<ApiResponse<{ person: Person }>>> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json(
       { data: null, error: "Unauthorized." },

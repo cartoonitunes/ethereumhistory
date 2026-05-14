@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/types";
 import type { ContractMedia } from "@/types";
 import { isValidAddress } from "@/lib/utils";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import {
   getContractMediaFromDb,
   addContractMediaFromDb,
@@ -39,7 +39,7 @@ export async function POST(
     return NextResponse.json({ data: null, error: "Invalid address." }, { status: 400 });
   }
 
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json({ data: null, error: "Unauthorized." }, { status: 401 });
   }
@@ -80,7 +80,7 @@ export async function DELETE(
     return NextResponse.json({ data: null, error: "Invalid address." }, { status: 400 });
   }
 
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json({ data: null, error: "Unauthorized." }, { status: 401 });
   }

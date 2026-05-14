@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAllPeopleFromDb, upsertPersonFromDb } from "@/lib/db-client";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { isValidAddress } from "@/lib/utils";
 import type { ApiResponse, Person } from "@/types";
 
@@ -31,7 +31,7 @@ export async function GET(): Promise<NextResponse<ApiResponse<{ people: Array<{ 
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ person: Person }>>> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json(
       { data: null, error: "Unauthorized." },

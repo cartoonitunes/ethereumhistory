@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, ContractHistoryData } from "@/types";
 import { isValidAddress } from "@/lib/utils";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import {
   addWalletToPersonFromDb,
   deleteHistoricalLinksFromDb,
@@ -56,7 +56,7 @@ export async function POST(
     );
   }
 
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json(
       { data: null, error: "Unauthorized." },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse, HistorianMe } from "@/types";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getHistorianByIdFromDb, historianRowToMe, updateHistorianProfileFromDb } from "@/lib/db-client";
 import { hashHistorianToken } from "@/lib/historian-auth";
 import { getDb } from "@/lib/db-client";
@@ -8,7 +8,7 @@ import * as schema from "@/lib/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<HistorianMe>>> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json(
       { data: null, error: "Unauthorized. Must be logged in as an active historian." },

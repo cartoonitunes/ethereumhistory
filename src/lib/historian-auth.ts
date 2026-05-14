@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import type { NextRequest } from "next/server";
 import { getHistorianByIdFromDb } from "./db-client";
 import type { HistorianMe } from "@/types";
 import { historianRowToMe } from "./db-client";
+import { validateApiKeyFromRequest } from "./api-key-auth";
 
 const COOKIE_NAME = "eh_historian";
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
@@ -102,5 +104,14 @@ export async function getHistorianMeFromCookies(): Promise<HistorianMe | null> {
   }
 
   return historianRowToMe(row);
+}
+
+export async function getHistorianMeFromRequest(req: NextRequest): Promise<HistorianMe | null> {
+  const apiKeyResult = await validateApiKeyFromRequest(req);
+  if (apiKeyResult.valid && apiKeyResult.historianId) {
+    const row = await getHistorianByIdFromDb(apiKeyResult.historianId);
+    return row && row.active ? historianRowToMe(row) : null;
+  }
+  return getHistorianMeFromCookies();
 }
 

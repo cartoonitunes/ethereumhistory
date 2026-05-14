@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/types";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -37,7 +37,7 @@ export async function POST(
     ApiResponse<{ contractsAffected: number; addresses: string[]; dryRun: boolean }>
   >
 > {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active || me.role !== "admin") {
     return NextResponse.json({ data: null, error: "Admin access required." }, { status: 403 });
   }
