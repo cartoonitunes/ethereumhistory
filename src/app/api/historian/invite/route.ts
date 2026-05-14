@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ApiResponse } from "@/types";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromCookies, getHistorianMeFromRequest } from "@/lib/historian-auth";
 import {
   createHistorianInvitationFromDb,
   getHistorianInvitationsByInviterFromDb,
 } from "@/lib/db-client";
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ inviteToken: string; inviteUrl: string }>>> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me || !me.active) {
     return NextResponse.json(
       { data: null, error: "Unauthorized. Must be logged in as an active historian." },

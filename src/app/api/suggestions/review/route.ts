@@ -16,7 +16,7 @@ import {
   getEditSuggestionByIdFromDb,
   applyApprovedSuggestionFromDb,
 } from "@/lib/db-client";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

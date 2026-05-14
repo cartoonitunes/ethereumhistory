@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { eq, and, isNull } from "drizzle-orm";
-import { getHistorianMeFromCookies } from "@/lib/historian-auth";
+import { getHistorianMeFromCookies, getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { hashApiKey } from "@/lib/api-key-auth";
 import * as schema from "@/lib/schema";
@@ -53,7 +53,7 @@ export async function GET(): Promise<NextResponse> {
 
 // POST — generate a new key
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me) return unauthorized();
   if (!isDatabaseConfigured()) return dbNotConfigured();
 
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 // DELETE — revoke a key
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
-  const me = await getHistorianMeFromCookies();
+  const me = await getHistorianMeFromRequest(request);
   if (!me) return unauthorized();
   if (!isDatabaseConfigured()) return dbNotConfigured();
 
