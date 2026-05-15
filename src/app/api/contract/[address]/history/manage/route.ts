@@ -44,6 +44,28 @@ const UNTRUSTED_ALLOWED_FIELDS = new Set([
   "tokenLogo",
 ]);
 
+/** Field names that callers commonly send — used to detect flat (unnested) request bodies. */
+const KNOWN_CONTRACT_FIELD_NAMES = [
+  "sourceCode",
+  "shortDescription",
+  "etherscanContractName",
+  "historicalSignificance",
+  "historicalContext",
+  "verificationMethod",
+  "compilerCommit",
+  "abi",
+  "verificationProofUrl",
+  "sourcifyMatch",
+];
+
+/** Verification fields that are immutable once `verificationMethod` has been set. */
+const VERIFICATION_LOCK_FIELDS = [
+  "verificationMethod",
+  "compilerCommit",
+  "sourceCode",
+  "verificationProofUrl",
+];
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ address: string }> }
@@ -67,7 +89,50 @@ export async function POST(
   const body = await request.json().catch(() => null);
   const normalized = address.toLowerCase();
 
+  // Reject flat request bodies that put contract fields at the root instead of
+  // nested under `contract` — these would otherwise silently 200 with no writes.
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const rootLevelContractFields = KNOWN_CONTRACT_FIELD_NAMES.filter(
+      (f) => body[f] !== undefined
+    );
+    const contractIsEmpty =
+      !body.contract ||
+      (typeof body.contract === "object" &&
+        !Array.isArray(body.contract) &&
+        Object.keys(body.contract).length === 0);
+    if (rootLevelContractFields.length > 0 && contractIsEmpty) {
+      return NextResponse.json(
+        {
+          data: null,
+          error:
+            "Fields must be nested under 'contract' key. Example: {\"contract\": {\"shortDescription\": \"...\"}}",
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const contractPatch = body?.contract || {};
+
+  // Once a contract has been verified, the verification fields are immutable
+  // via this endpoint — new proofs go through /api/contract/{address}/proof.
+  const attemptingVerificationFieldChange = VERIFICATION_LOCK_FIELDS.some(
+    (f) => contractPatch[f] !== undefined
+  );
+  if (attemptingVerificationFieldChange) {
+    const existing = await getContractByAddress(normalized);
+    if (existing?.verificationMethod) {
+      return NextResponse.json(
+        {
+          data: null,
+          error:
+            "Verification fields are locked for this contract. Only editorial fields (shortDescription, historicalSignificance, historicalContext) can be updated.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   const normalizedCategories =
     contractPatch.manualCategories !== undefined
       ? normalizeContractCategories(contractPatch.manualCategories)
