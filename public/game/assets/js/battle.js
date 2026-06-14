@@ -65,6 +65,7 @@
       hpAnimW: 1, hpAnimM: 1 // displayed HP fractions (animate toward real)
     };
     B.participants[window.EH_STATE.active] = true;
+    if (window.EH_AUDIO) window.EH_AUDIO.setTrack("battle");
     if (GB.current() !== scene) GB.push(scene);
   }
   // switch the active battler to party index j (B.mine follows). Costs a turn
@@ -243,6 +244,7 @@
     if (allDown) st.party.forEach(function (c) { c.stats.hp = c.stats.maxhp; });
     var cb = B.onEnd, win = B.didWin;
     if (window.EH_SAVE && window.EH_SAVE.persistLead) window.EH_SAVE.persistLead();
+    if (window.EH_AUDIO) window.EH_AUDIO.setTrack("overworld");
     GB.pop();
     if (allDown && window.EH_WORLD && window.EH_WORLD.recover) window.EH_WORLD.recover();
     if (cb) cb(win);
@@ -297,7 +299,7 @@
       B.t += dt;
       if (B.phase === "enter") {
         B.enterT += dt / 0.55;
-        if (B.enterT >= 1) { B.enterT = 1; say([B.trainer ? (shortName(B.wild) + " steps up to battle!") : ("Wild " + shortName(B.wild) + " appeared!")], toMenu); }
+        if (B.enterT >= 1) { B.enterT = 1; sfx("encounter"); say([B.trainer ? (shortName(B.wild) + " steps up to battle!") : ("Wild " + shortName(B.wild) + " appeared!")], toMenu); }
       }
       if (B.phase === "msg" && !B.msgDone) {
         B.msgRev += dt * MSG_SPEED;

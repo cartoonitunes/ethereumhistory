@@ -271,10 +271,12 @@
 
   // ---- DEX / collection scene -----------------------------------------
   function collectionCreatures() {
+    // build each at the level you actually have it (from the roster), so the Dex
+    // shows real levels + matching stats — not everything at the default 5.
     return EH_STATE.collection
       .map(function (a) { return window.EH_DATA.byAddr(a); })
       .filter(Boolean)
-      .map(function (c) { return window.EH_CREATURES.make(c); });
+      .map(function (c) { var r = EH_STATE.roster[c.addr]; return window.EH_CREATURES.make(c, r ? r.level : 5, r ? r.xp : 0); });
   }
 
   var dexScene = {

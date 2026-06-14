@@ -367,7 +367,7 @@
           { x: 4, y: 3, spr: "prof", name: "CURATOR", text: ["CURATOR|2015 was the experimental dawn. MISTCOIN - the token that inspired ERC-20. The GREETER from the tutorial. AyeAyeCoin. Each one a legend.", "CURATOR|Hundreds are documented here. Catch them, and their story joins your Dex forever."] },
           { x: 8, y: 5, spr: "blue", name: "SCHOLAR", text: ["SCHOLAR|Six 'zombie accounts' were the earliest null deployments on mainnet. Nobody is sure who made them or why. The frontier kept its secrets."] } ] },
         { name: "MIST CABIN", tpl: "shop", npcs: [
-          { x: 6, y: 3, spr: "green", name: "HISTORIAN", text: ["HISTORIAN|MISTCOIN was mined right in the Mist wallet - one of the first tokens anyone actually held. Fabian Vogelsteller's prototype became ERC-20."] } ] }
+          { x: 6, y: 3, spr: "green", name: "HISTORIAN", text: ["HISTORIAN|MISTCOIN was deployed and distributed through the Mist wallet - one of the first tokens anyone actually held. Fabian Vogelsteller's prototype became ERC-20."] } ] }
       ] },
     { id: "homestead", name: "HOMESTEAD", year: "2016", tpl: "valley", rate: 0.13,
       sign: "HOMESTEAD - 2016. Ethereum's first planned upgrade. Stable enough to BUILD on: ENS, early Maker, the first token-for-token swaps.  <<< FRONTIER   DAO FORK >>>",

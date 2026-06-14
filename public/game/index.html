@@ -27,7 +27,7 @@
 
   /* title-screen Google sign-in (DOM, overlaid near the bottom) */
   #signin {
-    position: fixed; left: 0; right: 0; bottom: 14px; z-index: 20;
+    position: fixed; left: 0; right: 0; bottom: 40px; z-index: 20;
     display: none; flex-direction: column; align-items: center; gap: 6px;
     pointer-events: none;
   }
@@ -55,9 +55,10 @@
   #ab { right: 16px; bottom: 36px; width: 132px; height: 96px; }
   #btn-a { right: 0;  bottom: 36px; width: 56px; height: 56px; border-radius: 50%; }
   #btn-b { right: 64px; bottom: 4px; width: 56px; height: 56px; border-radius: 50%; }
-  /* START, bottom-center */
-  #start-wrap { left: 50%; bottom: 6px; transform: translateX(-50%); width: 84px; height: 26px; }
-  #btn-start { left: 0; top: 0; width: 84px; height: 26px; border-radius: 13px; font-size: 11px; letter-spacing: 1px; }
+  /* SELECT + START, bottom-center */
+  #start-wrap { left: 50%; bottom: 6px; transform: translateX(-50%); width: 168px; height: 26px; }
+  #btn-select { left: 0;  top: 0; width: 80px; height: 26px; border-radius: 13px; font-size: 10px; letter-spacing: 1px; }
+  #btn-start  { right: 0; top: 0; width: 80px; height: 26px; border-radius: 13px; font-size: 11px; letter-spacing: 1px; }
 
   @media (pointer: coarse) { #touch { display: block; } }
   body.show-touch #touch { display: block; }
@@ -86,6 +87,7 @@
       <div id="btn-b">B</div>
     </div>
     <div id="start-wrap" class="pad">
+      <div id="btn-select">SELECT</div>
       <div id="btn-start">START</div>
     </div>
   </div>
@@ -96,13 +98,13 @@
   <!-- the game: engine first, then data → creatures → world → battle → save,
        then main.js boots everything. All plain JS, no build step. The ?v query
        busts the immutable asset cache (see vercel.json) — bump on each release. -->
-  <script src="assets/js/engine.js?v=20"></script>
-  <script src="assets/js/audio.js?v=20"></script>
-  <script src="assets/js/data.js?v=20"></script>
-  <script src="assets/js/creatures.js?v=20"></script>
-  <script src="assets/js/world.js?v=20"></script>
-  <script src="assets/js/battle.js?v=20"></script>
-  <script src="assets/js/save.js?v=20"></script>
-  <script src="assets/js/main.js?v=20"></script>
+  <script src="assets/js/engine.js?v=21"></script>
+  <script src="assets/js/audio.js?v=21"></script>
+  <script src="assets/js/data.js?v=21"></script>
+  <script src="assets/js/creatures.js?v=21"></script>
+  <script src="assets/js/world.js?v=21"></script>
+  <script src="assets/js/battle.js?v=21"></script>
+  <script src="assets/js/save.js?v=21"></script>
+  <script src="assets/js/main.js?v=21"></script>
 </body>
 </html>

@@ -8,14 +8,16 @@
   "use strict";
   var GB = window.GB;
 
-  // The three Frontier legends the professor offers as a starter.
+  // Three FAMOUS, recognizable contracts as starters (a GAME, an NFT, a DAO) —
+  // names a newcomer is likely to have heard of, which is part of why they're
+  // here to learn.
   function starterChoices() {
-    var want = ["mistcoin", "etheria", "greeter"], picks = [];
+    var want = ["cryptokitt", "cryptopunk", "^the dao$"], picks = [];
     want.forEach(function (k) {
       var c = window.EH_DATA.contracts.find(function (x) { return new RegExp(k, "i").test(x.name); });
       if (c && picks.indexOf(c) < 0) picks.push(c);
     });
-    window.EH_DATA.byZone("frontier").forEach(function (c) {     // fill any gaps
+    window.EH_DATA.featured().forEach(function (c) {            // fill any gaps with legends
       if (picks.length < 3 && picks.indexOf(c) < 0) picks.push(c);
     });
     return picks.slice(0, 3);
@@ -36,7 +38,7 @@
     window.EH_UI.dialog([
       "PROF. NAKAMOTO|{NAME}! A fine name. I study the smart contracts deployed across all of Ethereum's history.",
       "PROF. NAKAMOTO|Your quest: walk the seven eras, find these contracts in the wild, and record them in your Historian's Dex.",
-      "PROF. NAKAMOTO|Three Frontier legends rest on my table - all level 5. Choose the one that calls to you, {NAME}.",
+      "PROF. NAKAMOTO|Three of Ethereum's most famous contracts rest on my table - each just level 5. Choose the one that calls to you, {NAME}.",
       "PROF. NAKAMOTO|In tall grass you'll meet wild contracts. ANALYZE to weaken, STUDY to learn their story, then throw an ARCHIVE BALL."
     ], chooseStarter);
   }
@@ -244,7 +246,7 @@
 
   function setupTouch() {
     var map = { "btn-up": GB.BTN.up, "btn-down": GB.BTN.down, "btn-left": GB.BTN.left, "btn-right": GB.BTN.right,
-      "btn-a": GB.BTN.a, "btn-b": GB.BTN.b, "btn-start": GB.BTN.start };
+      "btn-a": GB.BTN.a, "btn-b": GB.BTN.b, "btn-start": GB.BTN.start, "btn-select": GB.BTN.select };
     Object.keys(map).forEach(function (id) {
       var el = document.getElementById(id); if (!el) return;
       var btn = map[id];
