@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { X } from "lucide-react";
 
-const STORAGE_KEY = "eh-collections-banner-dismissed";
+const STORAGE_KEY = "eh-game-banner-dismissed";
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -30,11 +29,11 @@ export function AnnouncementBanner() {
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         <p className="text-obsidian-200 leading-snug pr-6">
           <span className="font-semibold text-ether-400">NEW</span>
-          {" — Explore Collections — every contract deployed by Ethereum's earliest builders, documented and verified."}
+          {" — Play EH Explorer — catch real, documented Ethereum contracts as creatures in a Game Boy-style RPG."}
           {" "}
-          <Link href="/collections" className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap">
-            Browse Collections →
-          </Link>
+          <a href="/game" className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap">
+            Play now →
+          </a>
         </p>
         <button
           onClick={dismiss}
