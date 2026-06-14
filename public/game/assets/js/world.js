@@ -785,9 +785,9 @@
   }
   world.render = function () { render(); };
 
-  // ---------- START menu (DEX / BAG / SAVE / OPTIONS / EXIT) ------------
+  // ---------- START menu (DEX / BAG / SAVE / OPTIONS / WEBSITE / TITLE) ------------
   function openMenu() {
-    var items = ["DEX", "BAG", "SAVE", "OPTIONS", "EXIT"], sel = 0, msg = "", msgT = 0;
+    var items = ["DEX", "BAG", "SAVE", "OPTIONS", "WEBSITE", "TITLE"], sel = 0, msg = "", msgT = 0;
     var menu = {
       onPress: function (b) {
         if (b === GB.BTN.up) sel = (sel + items.length - 1) % items.length;
@@ -795,7 +795,8 @@
         else if (b === GB.BTN.b || b === GB.BTN.start) GB.pop();
         else if (b === GB.BTN.a) {
           var it = items[sel];
-          if (it === "EXIT") { GB.pop(); if (window.EH_GAME) window.EH_GAME.toTitle(); }
+          if (it === "TITLE") { GB.pop(); if (window.EH_GAME) window.EH_GAME.toTitle(); }
+          else if (it === "WEBSITE") { if (window.EH_SAVE) window.EH_SAVE.persistLead(); window.location.href = "/"; }
           else if (it === "DEX") { GB.pop(); window.EH_COLLECTION.open(); }
           else if (it === "BAG") { GB.pop(); openBag(); }
           else if (it === "OPTIONS") { GB.pop(); openOptions(); }

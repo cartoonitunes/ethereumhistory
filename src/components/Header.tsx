@@ -128,6 +128,12 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 </Link>
               ))}
               <a
+                href="/game"
+                className="text-sm transition-colors text-obsidian-400 hover:text-obsidian-100"
+              >
+                Game
+              </a>
+              <a
                 href="https://discord.gg/3KV6dt2euF"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -292,6 +298,13 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                   ) : label}
                 </Link>
               ))}
+
+              <a
+                href="/game"
+                className="px-3 py-3 rounded-lg text-sm font-medium transition-colors text-obsidian-300 hover:text-obsidian-100 hover:bg-obsidian-800/60"
+              >
+                Game
+              </a>
 
               <div className="border-t border-obsidian-800 my-2" />
 

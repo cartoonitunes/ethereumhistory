@@ -209,6 +209,12 @@
 
   // ---- Google Identity Services ---------------------------------------
   var gbtnEl = null, gsiReady = false, onAuthChange = null;
+  // Cloud save (Google sign-in) is OFF until a Google OAuth client id whose
+  // "Authorized JavaScript origins" include this site (e.g. https://www.ethereumhistory.com
+  // and http://localhost:PORT) is set in CLIENT_ID above. Until then GSI would
+  // throw "Access blocked: register the JavaScript origin", so we don't init it.
+  // The game still saves locally to its 3 slots. To enable: set AUTH_ENABLED = true.
+  var AUTH_ENABLED = false;
   function ready() { return !!(window.google && window.google.accounts && window.google.accounts.id); }
 
   function onCredential(resp) {
@@ -236,7 +242,7 @@
   }
 
   function initGsi() {
-    if (!ready()) return;
+    if (!AUTH_ENABLED || !ready()) return;
     try {
       window.google.accounts.id.initialize({
         client_id: CLIENT_ID, callback: onCredential,
@@ -248,7 +254,7 @@
   }
   function renderButton(container) {
     gbtnEl = container;
-    if (!gsiReady || !ready()) return;
+    if (!AUTH_ENABLED || !gsiReady || !ready()) return;
     try {
       container.innerHTML = "";
       window.google.accounts.id.renderButton(container, {
@@ -382,6 +388,7 @@
   }
 
   window.EH_AUTH = {
+    enabled: AUTH_ENABLED,
     renderButton: renderButton, signOut: signOut, onChange: function (fn) { onAuthChange = fn; },
     isSignedIn: function () { return EH_STATE.signedIn; }
   };

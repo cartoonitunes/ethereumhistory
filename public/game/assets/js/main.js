@@ -29,6 +29,25 @@
     if (picks[0]) { window.EH_SAVE.setStarter(picks[0].addr); }
   }
 
+  // Split a creature name onto up to two centred lines so it never gets cut off
+  // under a podium (CryptoKitties -> CRYPTO / KITTIES). Prefers a space, then the
+  // camelCase boundary nearest the middle, else a hard mid-split.
+  function nameLines(raw) {
+    var s = (raw || "").trim();
+    if (s.length <= 11) return [s.toUpperCase()];
+    var mid = Math.ceil(s.length / 2);
+    var sp = s.lastIndexOf(" ", mid + 3);
+    if (sp > 2) return [s.slice(0, sp).toUpperCase(), s.slice(sp + 1).toUpperCase()];
+    var best = -1, bestD = 99;
+    for (var i = 1; i < s.length; i++) {
+      if (s[i] >= "A" && s[i] <= "Z" && s[i - 1] >= "a" && s[i - 1] <= "z") {
+        var d = Math.abs(i - mid); if (d < bestD) { bestD = d; best = i; }
+      }
+    }
+    if (best > 2) return [s.slice(0, best).toUpperCase(), s.slice(best).toUpperCase()];
+    return [s.slice(0, mid).toUpperCase(), s.slice(mid).toUpperCase()];
+  }
+
   function labIntro() {
     window.EH_UI.dialog([
       "PROF. NAKAMOTO|Ah, you made it! Welcome to my lab. First - what should I call you, historian?"
@@ -106,7 +125,8 @@
           GB.rect(cx - 26, 92, 52, 4, "arenaD"); GB.rect(cx - 20, 96, 40, 3, "arena");
           if (on) GB.boxR(cx - 30, 26, 60, 64, "box", "red");
           GB.spriteO(window.EH_CREATURES.spriteFor(c), cx - 24, 40 + bob, 3, window.EH_CREATURES.rampFor(c));
-          GB.textCenter(window.EH_CREATURES.nameFor(c).slice(0, 10), cx, 100, on ? "ink" : "dim");
+          var nl = nameLines(window.EH_CREATURES.nameFor(c)), ny = nl.length > 1 ? 96 : 100;
+          for (var L = 0; L < nl.length; L++) GB.textCenter(nl[L], cx, ny + L * 8, on ? "ink" : "dim");
         }
         var cur = picks[sel];
         GB.boxR(4, 118, W - 8, 38);
@@ -130,7 +150,11 @@
   var signinEl = null;
   var title = {
     t: 0,
-    enter: function () { if (signinEl) { signinEl.style.display = "flex"; if (window.EH_AUTH) window.EH_AUTH.renderButton(signinEl.querySelector(".gbtn")); } },
+    enter: function () {
+      var authOn = window.EH_AUTH && window.EH_AUTH.enabled;
+      if (signinEl) signinEl.style.display = authOn ? "flex" : "none";
+      if (signinEl && authOn) window.EH_AUTH.renderButton(signinEl.querySelector(".gbtn"));
+    },
     exit: function () { if (signinEl) signinEl.style.display = "none"; },
     onPress: function (b) { if (b === GB.BTN.start || b === GB.BTN.a) openSlots(); },
     update: function (dt) { this.t += dt; },
@@ -156,8 +180,9 @@
         GB.spriteO(window.EH_CREATURES.spriteFor(c), W / 2 - 32, 50 + bob, 4, window.EH_CREATURES.rampFor(c));
         GB.textCenter(window.EH_CREATURES.nameFor(c), W / 2, 122, "ink");
       }
-      if (Math.floor(t * 1.6) % 2 === 0) GB.textCenter("PRESS  START", W / 2, 134, "ink");
-      GB.textCenter(window.EH_STATE.signedIn ? "HELLO, " + window.EH_STATE.name : window.EH_DATA.contracts.length + " CONTRACTS - CARTOONITUNES", W / 2, 150, "dim");
+      if (Math.floor(t * 1.6) % 2 === 0) GB.textCenter("PRESS  START", W / 2, 132, "ink");
+      GB.textCenter("A FUN WAY TO LEARN ETHEREUM HISTORY", W / 2, 143, "dim");
+      GB.textCenter(window.EH_STATE.signedIn ? "HELLO, " + window.EH_STATE.name : "BY CART00N.ETH", W / 2, 152, "dim");
     }
   };
 

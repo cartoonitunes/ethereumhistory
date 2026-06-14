@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History, Calendar, Layers } from "lucide-react";
+import { Archive, Search, Clock, Code, Users, BookOpen, Plug, History, Calendar, Layers, Gamepad2, Play, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { OmniSearch } from "@/components/OmniSearch";
 import { EraTimeline } from "@/components/EraTimeline";
@@ -344,6 +344,54 @@ export default function HomePageClient({
                 </span>
               </div>
             </Link>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Play the game — EH Explorer */}
+      <section className="py-16 border-t border-obsidian-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <a href="/game" className="block group">
+              <div className="relative overflow-hidden rounded-2xl border border-obsidian-700 bg-gradient-to-br from-obsidian-900/60 via-obsidian-900/40 to-[#0f380f]/25 p-8 md:p-10 hover:border-ether-500/40 transition-colors">
+                {/* faint pixel grid, a nod to the Game Boy screen */}
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-[0.06]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(#9bbc0f 1px, transparent 1px), linear-gradient(90deg, #9bbc0f 1px, transparent 1px)",
+                    backgroundSize: "12px 12px",
+                  }}
+                />
+                <div className="relative flex flex-col md:flex-row md:items-center gap-6">
+                  <div className="w-14 h-14 shrink-0 rounded-xl bg-ether-500/10 border border-ether-500/20 flex items-center justify-center text-ether-400">
+                    <Gamepad2 className="w-7 h-7" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="inline-flex items-center gap-2 mb-2 text-[11px] font-semibold uppercase tracking-wider text-[#9bbc0f]">
+                      <Sparkles className="w-3.5 h-3.5" /> New &middot; Game Boy-style RPG
+                    </div>
+                    <h2 className="text-2xl font-bold mb-2 group-hover:text-ether-400 transition-colors">
+                      EH Explorer &mdash; catch Ethereum history
+                    </h2>
+                    <p className="text-obsidian-400 max-w-2xl">
+                      A retro pixel adventure: walk the seven eras, meet real documented smart
+                      contracts as creatures, and record them in your Historian&apos;s Dex. Every
+                      creature is a true piece of Ethereum history &mdash; learn its story as you play.
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    <span className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-ether-600 group-hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30">
+                      <Play className="w-4 h-4" /> Play now
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </a>
           </motion.div>
         </div>
       </section>

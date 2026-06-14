@@ -84,7 +84,7 @@ window.EH_AUDIO = (function () {
     else if (kind === "crit") { tone(320, t, 0.05, "square", 0.22); tone(480, t + 0.04, 0.08, "square", 0.2); }
     else if (kind === "encounter") seq([392, 523, 659, 392, 523, 784], t, 0.07, 0.09, "square", 0.18); // a wild appeared!
     else if (kind === "catch") { seq([523, 659, 784, 1046], t, 0.09, 0.11, "square", 0.2); seq([392, 523, 659], t + 0.42, 0.1, 0.18, "triangle", 0.16); } // fanfare
-    else if (kind === "faint") { tone(330, t, 0.25, "triangle", 0.18); tone(196, t + 0.12, 0.35, "triangle", 0.14); }
+    else if (kind === "faint") { seq([440, 415, 392, 349], t, 0.17, 0.21, "triangle", 0.16); tone(330, t + 0.68, 0.24, "triangle", 0.15); tone(262, t + 0.92, 0.7, "triangle", 0.14); } // a sad little defeat tune
     else if (kind === "level") seq([659, 784, 988, 1318], t, 0.07, 0.13, "square", 0.18);
   }
 
