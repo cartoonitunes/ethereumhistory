@@ -44,11 +44,14 @@
 
   // ---- serialization ---------------------------------------------------
   function serialize() {
+    var lead = EH_STATE.party[0];
     return {
       collection: EH_STATE.collection.slice(),
       pos: EH_STATE.pos,
-      lead: EH_STATE.party[0] ? EH_STATE.party[0].contract.addr : null,
-      v: 1
+      lead: lead ? lead.contract.addr : null,
+      leadLevel: lead ? lead.level : null,
+      leadXp: lead ? lead.xp : null,
+      v: 2
     };
   }
   function applySave(data) {
@@ -61,7 +64,7 @@
     if (data.pos && window.EH_WORLD && window.EH_WORLD.ZONES[data.pos.zone]) EH_STATE.pos = data.pos;
     if (data.lead) {
       var c = window.EH_DATA.byAddr(data.lead);
-      if (c) EH_STATE.party = [window.EH_CREATURES.make(c)];
+      if (c) EH_STATE.party = [window.EH_CREATURES.make(c, data.leadLevel || 5, data.leadXp || 0)];
     }
   }
 

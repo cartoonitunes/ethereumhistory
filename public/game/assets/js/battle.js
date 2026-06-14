@@ -25,23 +25,19 @@
 
   function shortName(cr) { return cr.name.replace(/\s*\(.*$/, ""); }
 
+  // The player's lead creature IS the battler - its level/XP persist across
+  // fights (it's the same object as EH_STATE.party[0]). It enters every battle
+  // at full health.
   function getActive() {
     var st = window.EH_STATE;
-    if (st.active && st.active.stats.hp > 0) return st.active;
     var lead = st.party && st.party[0];
     if (!lead) {
-      var c = window.EH_DATA.byAddr("0xd0a6e6c54dbc68db5db3a091b171a77407ff7ccf")
-            || window.EH_DATA.contracts[0];
-      lead = window.EH_CREATURES.make(c);
+      lead = window.EH_CREATURES.make(window.EH_DATA.contracts[0], 5, 0);
       st.party = [lead];
     }
-    st.active = cloneFresh(lead);
-    return st.active;
-  }
-  function cloneFresh(cr) {
-    var n = window.EH_CREATURES.make(cr.contract);
-    n.stats.hp = n.stats.maxhp;
-    return n;
+    lead.stats.hp = lead.stats.maxhp;
+    st.active = lead;
+    return lead;
   }
 
   function start(wild) {
@@ -107,23 +103,34 @@
       say(msgs, function () { enemyTurn(toMenu); });
     }
   }
+  // STUDY is a safe action - observing a contract doesn't provoke a counterattack
+  // (you're not fighting). It teaches its real history AND raises catch odds, so
+  // learning genuinely helps. Returns straight to the menu, no enemy turn.
   function doStudy() {
     B.studied++;
     var w = B.wild, c = w.contract;
     var pages = [shortName(w) + " - a " + w.type + " from " + c.year + ". " + (c.rarity || "") + "."];
     if (c.blurb) pages.push(c.blurb);
     if (c.sig && c.sig !== c.blurb) pages.push(c.sig);
-    pages.push("Documented on Ethereum History. Studying raised your catch odds!");
-    say(pages, function () { enemyTurn(toMenu); });
+    pages.push("You studied it closely. Catch odds up! (STUDY is safe - no counter.)");
+    say(pages, toMenu);
+  }
+  // XP for documenting a contract - the lead levels up from catches
+  function awardWin(mult) {
+    var amt = B.wild.stats.lvl * 3.5 * (mult || 1);
+    return window.EH_CREATURES.gainXp(B.mine, amt);
   }
   function doCatch() {
     var p = catchChance();
     B.ballT = 1.1;
     if (Math.random() < p) {
       B.caught = true;
-      window.EH_SAVE.addCatch(B.wild);
-      say(["You used ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was caught!",
-           "Added to your HISTORIAN'S DEX."], end);
+      var lv = awardWin(1.2);
+      window.EH_SAVE.addCatch(B.wild);     // persists collection + lead level/XP
+      var msgs = ["You used ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was documented!"];
+      if (lv > 0) msgs.push(shortName(B.mine) + " grew to LV " + B.mine.level + "!");
+      msgs.push("Added to your HISTORIAN'S DEX.");
+      say(msgs, end);
     } else {
       say(["You used ARCHIVE BALL!", "Argh! " + shortName(B.wild) + " broke free!"],
           function () { enemyTurn(toMenu); });
@@ -222,7 +229,13 @@
     hpBar(x + 24, y + 19, w - 33, frac);
     if (numbers) {
       var hpStr = Math.ceil(cr.stats.hp) + "/" + cr.stats.maxhp;
-      GB.text(hpStr, x + w - 7 - GB.textWidth(hpStr), y + 27, "ink");
+      GB.text(hpStr, x + w - 7 - GB.textWidth(hpStr), y + 26, "ink");
+      // thin XP bar along the bottom of the player's plate
+      var need = window.EH_CREATURES.xpToNext(cr.level || cr.stats.lvl);
+      var xf = need ? Math.min(1, (cr.xp || 0) / need) : 0;
+      GB.text("XP", x + 7, y + 26, "blue");
+      GB.rect(x + 22, y + 28, w - 30, 3, "navy");
+      GB.rect(x + 22, y + 28, Math.round((w - 30) * xf), 3, "waterL");
     } else {
       GB.text(cr.type, x + 7, y + 26, "blue");
       for (var i = 0; i < cr.rarityInfo.stars; i++) GB.rect(x + w - 9 - i * 5, y + 26, 3, 3, "gold");

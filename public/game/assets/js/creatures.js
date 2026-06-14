@@ -278,21 +278,46 @@
     });
   }
 
-  // ---- stats ------------------------------------------------------------
-  // Tuned (with battle.js's damage formula) for SHORT, punchy fights - a wild
-  // contract goes down in ~2-4 hits, so encounters are quick learning beats and
-  // not slogs. Stats derive from real fields: bytecode size, deploy year, rarity.
+  // ---- stats & levelling ------------------------------------------------
+  // Stats scale with LEVEL (Pokémon-style). Your starter begins at level 5 and
+  // grows as it catches contracts; wild contracts are levelled to their era, so
+  // the region gets tougher as you travel east. Tuned with battle.js's punchy
+  // damage formula for short 2-4 turn fights.
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  function statsFor(c) {
+  function statsFor(c, level) {
+    level = level || 1;
     var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;   // 1..5
     var size = c.size || 400;
-    var hp  = clamp(Math.round(18 + size / 130 + stars * 4), 16, 66);
-    var atk = clamp(Math.round(12 + size / 600 + stars * 3), 10, 38);
-    var def = clamp(Math.round(3 + stars * 2), 3, 14);
-    var spd = clamp(Math.round(44 - size / 320 + stars * 3), 8, 60);
-    var lvl = clamp(Math.round(56 - (c.year - 2015) * 6 + stars * 2), 5, 60);
-    return { hp: hp, maxhp: hp, atk: atk, def: def, spd: spd, lvl: lvl };
+    var hp  = Math.round(14 + level * 1.5 + stars * 2 + Math.min(8, size / 900));
+    var atk = Math.round(5 + level * 0.7 + stars);
+    var def = Math.round(2 + level * 0.28 + stars);
+    var spd = Math.round(5 + level * 0.7 + Math.floor(stars / 2));
+    return { hp: hp, maxhp: hp, atk: atk, def: def, spd: spd, lvl: level };
+  }
+
+  // levelling curve + XP gain (mutates the creature in place, returns # levels)
+  function xpToNext(level) { return 6 + level * 5; }
+  function gainXp(cr, amount) {
+    cr.xp = (cr.xp || 0) + Math.max(0, Math.round(amount));
+    var gained = 0;
+    while (cr.level < 100 && cr.xp >= xpToNext(cr.level)) { cr.xp -= xpToNext(cr.level); cr.level++; gained++; }
+    if (gained) {
+      var frac = cr.stats.maxhp ? cr.stats.hp / cr.stats.maxhp : 1;
+      cr.stats = statsFor(cr.contract, cr.level);
+      cr.stats.hp = Math.max(1, Math.round(cr.stats.maxhp * Math.max(frac, 0.5)));
+    }
+    return gained;
+  }
+
+  // wild level by era: early eras are low-level, later eras tougher
+  var ZONE_ORDER = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium", "constantinople"];
+  var ZONE_LVL = [[4, 9], [8, 14], [12, 18], [16, 22], [20, 28], [26, 36], [34, 46]];
+  function zoneIndex(zone) { var i = ZONE_ORDER.indexOf(zone); return i < 0 ? 0 : i; }
+  function wildLevel(zone, c) {
+    var b = ZONE_LVL[zoneIndex(zone)] || [4, 10];
+    var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;
+    return clamp(b[0] + Math.floor(Math.random() * (b[1] - b[0] + 1)) + Math.max(0, stars - 2), 2, 60);
   }
 
   function nameFor(c) {
@@ -300,15 +325,16 @@
     return (c.addr.slice(0, 6) + ".." + c.addr.slice(-4)).toUpperCase();
   }
 
-  function make(c) {
-    var s = statsFor(c);
+  function make(c, level, xp) {
+    level = level || 5;
     return {
       contract: c,
       name: nameFor(c),
       type: (TYPES[c.cat] || TYPES.UNKNOWN).label,
       rarity: c.rarity,
       rarityInfo: RARITY[c.rarity] || RARITY.COMMON,
-      stats: s,
+      level: level, xp: xp || 0,
+      stats: statsFor(c, level),
       sprite: spriteFor(c),
       back: backSpriteFor(c),
       ramp: rampFor(c),
@@ -316,35 +342,45 @@
     };
   }
 
-  // Pick a wild contract for an era zone. Common contracts show up often, the
-  // rare/legendary ones seldom - so stumbling on The DAO or CryptoPunks feels
-  // special. Thin eras (e.g. Tangerine, Constantinople) borrow from the whole
-  // set so there's always variety to find.
-  function randomForZone(zone) {
+  // The encounter pool for a zone is that ERA's real contracts (era-accurate).
+  // Only when an era is too thin to be fun (Constantinople, Tangerine) do we
+  // borrow from the chronologically-NEAREST eras, so it never jumps to an
+  // unrelated decade.
+  function poolForZone(zone) {
     var pool = window.EH_DATA.byZone(zone);
-    if (pool.length < 8) {
-      var extra = window.EH_DATA.contracts.filter(function (c) { return c.zone !== zone; });
-      pool = pool.concat(extra);
+    if (pool.length >= 12) return pool;
+    var idx = zoneIndex(zone), extra = [];
+    for (var d = 1; d <= 6 && pool.length + extra.length < 12; d++) {
+      [idx - d, idx + d].forEach(function (j) {
+        if (j >= 0 && j < ZONE_ORDER.length) extra = extra.concat(window.EH_DATA.byZone(ZONE_ORDER[j]));
+      });
     }
+    return pool.concat(extra);
+  }
+  // Common contracts show up often, rare/legendary ones seldom - so stumbling on
+  // The DAO or CryptoPunks in its own era feels special.
+  function randomForZone(zone) {
+    var pool = poolForZone(zone);
     if (!pool.length) pool = window.EH_DATA.contracts;
     var weighted = [];
     pool.forEach(function (c) {
-      var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;   // 1..5
-      var w = 7 - stars;                                       // commons weigh ~6, legendaries ~2
+      var w = 7 - (RARITY[c.rarity] || RARITY.COMMON).stars; // commons ~6, legendaries ~2
       for (var i = 0; i < w; i++) weighted.push(c);
     });
     if (!weighted.length) return null;
-    return make(weighted[Math.floor(Math.random() * weighted.length)]);
+    var pick = weighted[Math.floor(Math.random() * weighted.length)];
+    return make(pick, wildLevel(zone, pick));
   }
 
-  // A specific contract as a wild encounter (Contract of the Day / legendary hunt)
-  function wildByAddr(addr) {
+  // A specific contract as a wild encounter (Contract of the Day), at zone level
+  function wildByAddr(addr, zone) {
     var c = window.EH_DATA.byAddr(addr);
-    return c ? make(c) : null;
+    return c ? make(c, wildLevel(zone || c.zone, c)) : null;
   }
 
   window.EH_CREATURES = {
     make: make,
+    gainXp: gainXp, xpToNext: xpToNext, wildLevel: wildLevel,
     randomForZone: randomForZone,
     wildByAddr: wildByAddr,
     spriteFor: spriteFor,

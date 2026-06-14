@@ -11,33 +11,80 @@
   function sawIntro() { try { return !!localStorage.getItem(INTRO_KEY); } catch (e) { return false; } }
   function setIntro() { try { localStorage.setItem(INTRO_KEY, "1"); } catch (e) {} }
 
-  // Pick a sensible starter from the live data: the Greeter if present, else a
-  // modest Frontier-era contract - fitting for a brand-new historian.
-  function pickStarter() {
-    var all = window.EH_DATA.contracts;
-    var greeter = all.find(function (c) { return /greeter/i.test(c.name); });
-    if (greeter) return greeter;
-    var soft = all.filter(function (c) { return c.zone === "frontier" && (c.rarity === "COMMON" || c.rarity === "UNCOMMON"); });
-    return soft[0] || all[0];
+  // The three Frontier legends the professor offers as a starter.
+  function starterChoices() {
+    var want = ["mistcoin", "etheria", "greeter"], picks = [];
+    want.forEach(function (k) {
+      var c = window.EH_DATA.contracts.find(function (x) { return new RegExp(k, "i").test(x.name); });
+      if (c && picks.indexOf(c) < 0) picks.push(c);
+    });
+    window.EH_DATA.byZone("frontier").forEach(function (c) {     // fill any gaps
+      if (picks.length < 3 && picks.indexOf(c) < 0) picks.push(c);
+    });
+    return picks.slice(0, 3);
   }
+  // returning-player / safety fallback: a level-5 lead if somehow none
   function ensureStarter() {
     if (window.EH_STATE.party && window.EH_STATE.party.length) return;
-    var c = pickStarter();
-    if (c) window.EH_STATE.party = [window.EH_CREATURES.make(c)];
+    var picks = starterChoices();
+    if (picks[0]) window.EH_STATE.party = [window.EH_CREATURES.make(picks[0], 5, 0)];
   }
 
   function labIntro() {
     setIntro();
-    var starter = pickStarter();
-    var sname = starter ? window.EH_CREATURES.nameFor(starter) : "GREETER";
     window.EH_UI.dialog([
       "PROF. NAKAMOTO|Ah, you made it! Welcome to my lab.",
       "PROF. NAKAMOTO|I study the smart contracts deployed across all of Ethereum's history - fossils of every idea anyone ever shipped on-chain.",
-      "PROF. NAKAMOTO|Over 800 are documented so far, and counting. Your quest: walk the seven eras, find them in the wild, and record them in the Historian's Dex.",
-      "PROF. NAKAMOTO|Here, take this one to start - " + sname + ", a relic of 2015. A fitting first companion.",
-      "PROF. NAKAMOTO|In tall grass you'll meet wild contracts. ANALYZE to weaken, STUDY to learn their real story, then throw an ARCHIVE BALL.",
-      "PROF. NAKAMOTO|The door to the south opens onto the FRONTIER. Go write some history!"
-    ], function () { ensureStarter(); });
+      "PROF. NAKAMOTO|Hundreds are documented so far. Your quest: walk the seven eras, find them in the wild, and record them in the Historian's Dex.",
+      "PROF. NAKAMOTO|Three Frontier legends rest on my table - all level 5, all green. Choose the one that calls to you, and raise it as you travel.",
+      "PROF. NAKAMOTO|In tall grass you'll meet wild contracts. ANALYZE to weaken, STUDY to learn their story (it's safe!), then throw an ARCHIVE BALL."
+    ], chooseStarter);
+  }
+
+  // ---- starter selection scene -----------------------------------------
+  function chooseStarter() {
+    var picks = starterChoices();
+    if (!picks.length) { ensureStarter(); return; }
+    var sel = 0, t = 0;
+    GB.push({
+      onPress: function (b) {
+        if (b === GB.BTN.left) sel = (sel + picks.length - 1) % picks.length;
+        else if (b === GB.BTN.right) sel = (sel + 1) % picks.length;
+        else if (b === GB.BTN.a) {
+          var c = picks[sel];
+          window.EH_STATE.party = [window.EH_CREATURES.make(c, 5, 0)];
+          GB.pop();
+          window.EH_UI.dialog([
+            "PROF. NAKAMOTO|" + window.EH_CREATURES.nameFor(c) + ", level 5 - an excellent choice!",
+            "PROF. NAKAMOTO|The door to the south opens onto the FRONTIER. Go document some history!"
+          ]);
+        }
+      },
+      update: function (dt) { t += dt; },
+      render: function () {
+        var W = GB.W;
+        GB.clear("sky");
+        GB.rect(0, 116, W, W, "grass"); GB.rect(0, 116, W, 2, "grassD");
+        GB.boxR(W / 2 - 96, 4, 192, 14);
+        GB.textCenter("CHOOSE YOUR FIRST CONTRACT", W / 2, 8, "ink");
+        for (var i = 0; i < picks.length; i++) {
+          var c = picks[i], cx = W / 2 + (i - 1) * 74, on = i === sel;
+          var bob = on ? Math.round(Math.sin(t * 3) * 2) : 0;
+          GB.rect(cx - 26, 92, 52, 4, "arenaD"); GB.rect(cx - 20, 96, 40, 3, "arena");
+          if (on) GB.boxR(cx - 30, 26, 60, 64, "box", "red");
+          GB.spriteO(window.EH_CREATURES.spriteFor(c), cx - 24, 40 + bob, 3, window.EH_CREATURES.rampFor(c));
+          GB.textCenter(window.EH_CREATURES.nameFor(c).slice(0, 10), cx, 100, on ? "ink" : "dim");
+        }
+        var cur = picks[sel];
+        GB.boxR(4, 118, W - 8, 38);
+        GB.text(window.EH_CREATURES.nameFor(cur).slice(0, 16), 10, 122, "ink");
+        var typ = (window.EH_CREATURES.TYPES[cur.cat] || { label: cur.cat }).label;
+        GB.text(typ + " - " + cur.rarity, 10, 132, "blue");
+        var bl = GB.wrap(cur.blurb || "", W - 20);
+        GB.text(bl[0] || "", 10, 143, "ink");
+        GB.text("< >: PICK   A: CHOOSE", W - 4 - GB.textWidth("< >: PICK   A: CHOOSE"), 122, "dim");
+      }
+    });
   }
 
   // ---- featured legendaries (dynamic, from the data) -------------------

@@ -525,15 +525,13 @@
 
   function maybeEncounter() {
     if (Math.random() >= world.zone.rate) return;
-    var wild = null, r = Math.random();
-    // the Contract of the Day spawns anywhere it isn't yet caught (a daily hunt)
-    if (r < 0.10) {
-      var daily = dailyContract();
-      if (daily && window.EH_STATE.collection.indexOf(daily.addr) === -1) wild = window.EH_CREATURES.wildByAddr(daily.addr);
-    } else if (r < 0.14) {
-      // a rare wandering LEGENDARY — a real thrill
-      var legends = window.EH_DATA.featured();
-      if (legends.length) wild = window.EH_CREATURES.make(legends[Math.floor(Math.random() * legends.length)]);
+    var wild = null, daily = dailyContract();
+    // the Contract of the Day appears ONLY in its own era, until you catch it.
+    // Every other encounter comes from THIS era's real contracts (era-accurate;
+    // rare legendaries are just weighted scarce within the era pool).
+    if (daily && daily.zone === world.zoneId &&
+        window.EH_STATE.collection.indexOf(daily.addr) === -1 && Math.random() < 0.14) {
+      wild = window.EH_CREATURES.wildByAddr(daily.addr, world.zoneId);
     }
     if (!wild) wild = window.EH_CREATURES.randomForZone(world.zoneId);
     if (wild) playEncounter(wild);

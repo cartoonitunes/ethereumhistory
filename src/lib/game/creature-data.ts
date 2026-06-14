@@ -49,8 +49,10 @@ export interface GameCreature {
 }
 
 // The seven canonical eras → game zones, in play order.
+// Eras are defined by hard-fork BLOCK ranges, not calendar years, so their date
+// spans straddle year boundaries (Frontier runs to the Homestead fork in Mar 2016).
 export const ZONES: { id: string; name: string; year: string }[] = [
-  { id: "frontier", name: "FRONTIER", year: "2015" },
+  { id: "frontier", name: "FRONTIER", year: "2015-16" },
   { id: "homestead", name: "HOMESTEAD", year: "2016" },
   { id: "dao", name: "DAO FORK", year: "2016" },
   { id: "tangerine", name: "TANGERINE WHISTLE", year: "2016" },
@@ -149,12 +151,17 @@ function deriveYear(row: ContractRow, zone: string): number {
   return { frontier: 2015, homestead: 2016, dao: 2016, tangerine: 2016, spurious: 2017, byzantium: 2018, constantinople: 2019 }[zone] || 2015;
 }
 
-function cleanName(row: ContractRow): string {
+function realName(row: ContractRow): string | null {
   const n = (row.token_name || row.etherscan_contract_name || "").trim();
   if (n && n !== "?" && n.toLowerCase() !== "unknown") return n;
   if (row.token_symbol && row.token_symbol.trim()) return row.token_symbol.trim();
-  return row.address.slice(0, 6) + "…" + row.address.slice(-4);
+  return null;
 }
+function cleanName(row: ContractRow): string {
+  return realName(row) || row.address.slice(0, 6) + "..." + row.address.slice(-4);
+}
+// Only contracts with an actual name/symbol become creatures — no bare 0x… ones.
+export function isNamed(row: ContractRow): boolean { return realName(row) !== null; }
 
 export function mapContract(row: ContractRow): GameCreature {
   const zone = normalizeEra(row.era_id);
@@ -184,7 +191,7 @@ export interface GameData {
 }
 
 export function buildGameData(rows: ContractRow[], generatedAt: string): GameData {
-  const docRows = rows.filter((r) => nonEmpty(r.short_description));
+  const docRows = rows.filter((r) => nonEmpty(r.short_description) && isNamed(r));
   const items = docRows.map((row) => ({
     creature: mapContract(row),
     featured: !!row.featured,
