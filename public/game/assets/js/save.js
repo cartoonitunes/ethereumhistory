@@ -18,7 +18,7 @@
   "use strict";
   var GB = window.GB;
   var CLIENT_ID = "316184838132-03rs2kuu774tjtts2gf8dje1vr59hiq3.apps.googleusercontent.com";
-  var API = "/api/save";
+  var API = "/api/game/save";
   var LS_KEY = "eh_game_save_v1";
   var TOKEN_KEY = "eh_g_token";
 
@@ -26,9 +26,11 @@
   var EH_STATE = window.EH_STATE = {
     signedIn: false, token: null, sub: null, name: "HISTORIAN",
     collection: [],          // array of caught contract addresses (deduped)
-    party: [],               // creatures (lead is party[0])
+    party: [],               // party[0] is the ACTIVE battler creature
     active: null,            // current battle creature w/ live HP
-    pos: { zone: "forest", x: 9, y: 12 }
+    activeAddr: null,        // addr of the active battler
+    roster: {},              // addr -> {level, xp}: per-contract progress (swap battler)
+    pos: { zone: "frontier", x: 1, y: 7 }
   };
 
   // ---- JWT decode (display only) --------------------------------------
@@ -43,30 +45,56 @@
   }
 
   // ---- serialization ---------------------------------------------------
-  function serialize() {
+  // write the live battler's level/XP back into the roster before saving
+  function syncLead() {
     var lead = EH_STATE.party[0];
+    if (lead && EH_STATE.activeAddr) EH_STATE.roster[EH_STATE.activeAddr] = { level: lead.level, xp: lead.xp };
+  }
+  function serialize() {
+    syncLead();
     return {
       collection: EH_STATE.collection.slice(),
       pos: EH_STATE.pos,
-      lead: lead ? lead.contract.addr : null,
-      leadLevel: lead ? lead.level : null,
-      leadXp: lead ? lead.xp : null,
-      v: 2
+      activeAddr: EH_STATE.activeAddr,
+      roster: EH_STATE.roster,
+      v: 3
     };
   }
   function applySave(data) {
     if (!data || typeof data !== "object") return;
+    var byAddr = window.EH_DATA.byAddr;
     if (Array.isArray(data.collection)) {
       EH_STATE.collection = data.collection
         .map(function (a) { return String(a).toLowerCase(); })
-        .filter(function (a) { return !!window.EH_DATA.byAddr(a); });
+        .filter(function (a) { return !!byAddr(a); });
     }
-    if (data.pos && window.EH_WORLD && window.EH_WORLD.ZONES[data.pos.zone]) EH_STATE.pos = data.pos;
-    if (data.lead) {
-      var c = window.EH_DATA.byAddr(data.lead);
-      if (c) EH_STATE.party = [window.EH_CREATURES.make(c, data.leadLevel || 5, data.leadXp || 0)];
+    if (data.pos && window.EH_WORLD && window.EH_WORLD.ZONES[data.pos.zone] && !window.EH_WORLD.ZONES[data.pos.zone].interior) EH_STATE.pos = data.pos;
+    if (data.roster && typeof data.roster === "object") {
+      EH_STATE.roster = {};
+      Object.keys(data.roster).forEach(function (a) { var k = a.toLowerCase(); if (byAddr(k)) EH_STATE.roster[k] = data.roster[a]; });
+    }
+    var active = (data.activeAddr || data.lead);                  // v3 or legacy v2
+    if (active) active = String(active).toLowerCase();
+    if (active && byAddr(active)) {
+      var r = EH_STATE.roster[active] || { level: data.leadLevel || 5, xp: data.leadXp || 0 };
+      EH_STATE.roster[active] = r;
+      EH_STATE.activeAddr = active;
+      EH_STATE.party = [window.EH_CREATURES.make(byAddr(active), r.level || 5, r.xp || 0)];
     }
   }
+  // swap the active battler to a caught contract (keeps each one's own level/XP)
+  function setActive(addr) {
+    addr = String(addr).toLowerCase();
+    var c = window.EH_DATA.byAddr(addr); if (!c) return false;
+    syncLead();
+    var r = EH_STATE.roster[addr] || { level: 5, xp: 0 };
+    EH_STATE.roster[addr] = r;
+    EH_STATE.activeAddr = addr;
+    EH_STATE.party = [window.EH_CREATURES.make(c, r.level || 5, r.xp || 0)];
+    save();
+    return true;
+  }
+  function persistLead() { syncLead(); save(); }
 
   function saveLocal() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(serialize())); } catch (e) {}
@@ -98,16 +126,19 @@
   function syncOnSignIn() {
     return loadRemote().then(function (remote) {
       if (remote) {
-        var localSet = {};
+        var byAddr = window.EH_DATA.byAddr, localSet = {};
         EH_STATE.collection.forEach(function (a) { localSet[a] = 1; });
         (remote.collection || []).forEach(function (a) { localSet[String(a).toLowerCase()] = 1; });
-        var merged = Object.keys(localSet).filter(function (a) { return !!window.EH_DATA.byAddr(a); });
-        EH_STATE.collection = merged;
-        if (remote.pos && window.EH_WORLD.ZONES[remote.pos.zone]) EH_STATE.pos = remote.pos;
-        if (remote.lead && !EH_STATE.party.length) {
-          var c = window.EH_DATA.byAddr(remote.lead);
-          if (c) EH_STATE.party = [window.EH_CREATURES.make(c)];
-        }
+        EH_STATE.collection = Object.keys(localSet).filter(function (a) { return !!byAddr(a); });
+        // merge roster, keeping the higher level for each contract
+        if (remote.roster) Object.keys(remote.roster).forEach(function (a) {
+          var k = a.toLowerCase(); if (!byAddr(k)) return;
+          var rr = remote.roster[a], cur = EH_STATE.roster[k];
+          if (!cur || (rr.level || 0) > (cur.level || 0)) EH_STATE.roster[k] = rr;
+        });
+        if (remote.pos && window.EH_WORLD.ZONES[remote.pos.zone] && !window.EH_WORLD.ZONES[remote.pos.zone].interior) EH_STATE.pos = remote.pos;
+        var active = remote.activeAddr || remote.lead;
+        if (active && byAddr(String(active).toLowerCase()) && !EH_STATE.party.length) setActive(active);
       }
       return save();
     });
@@ -116,7 +147,10 @@
   function addCatch(creature) {
     var a = creature.contract.addr;
     if (EH_STATE.collection.indexOf(a) === -1) EH_STATE.collection.push(a);
-    save(); // auto-save after each catch (per the brief)
+    // a freshly documented contract joins your roster at the level you caught it,
+    // so it's immediately fieldable (swap to it from the Dex)
+    if (!EH_STATE.roster[a]) EH_STATE.roster[a] = { level: creature.level || 5, xp: 0 };
+    save(); // auto-save after each catch
   }
 
   // ---- Google Identity Services ---------------------------------------
@@ -197,8 +231,12 @@
       var n = this.list.length;
       if (this.detail) {
         var maxS = Math.max(0, (this.dLines ? this.dLines.length : 0) - 3);
-        if (b === GB.BTN.b) { this.detail = null; this.dScroll = 0; this.dLines = null; }
+        if (b === GB.BTN.b) { this.detail = null; this.dScroll = 0; this.dLines = null; this.toast = 0; }
         else if (b === GB.BTN.a) { try { window.open(this.detail.link, "_blank", "noopener"); } catch (e) {} }
+        else if (b === GB.BTN.start) {        // make this contract your active battler
+          var addr = this.detail.contract.addr;
+          if (EH_STATE.activeAddr !== addr) { setActive(addr); this.toast = 2.4; }
+        }
         else if (b === GB.BTN.down) this.dScroll = Math.min(maxS, this.dScroll + 1);
         else if (b === GB.BTN.up) this.dScroll = Math.max(0, this.dScroll - 1);
         return;
@@ -251,15 +289,17 @@
     GB.boxR(8, 22, 74, 70, "gray1", "navy");
     GB.spriteO(cr.sprite, 16, 28, 4, cr.ramp);
     for (var s = 0; s < cr.rarityInfo.stars; s++) GB.rect(14 + s * 6, 84, 4, 4, "gold");
-    var x = 90, y = 22;
+    var x = 90, y = 22, isActive = EH_STATE.activeAddr === c.addr;
     GB.text(cr.name.slice(0, 22), x, y, "ink");
-    GB.text(cr.type + "  " + cr.rarityInfo.label, x, y + 11, "blue");
-    var st = cr.stats;
+    GB.text(cr.type + "  " + cr.rarityInfo.label + (c.copies ? "  x" + c.copies : ""), x, y + 11, "blue");
+    var st = cr.stats, r = EH_STATE.roster[c.addr];
+    var dexLvl = r ? r.level : st.lvl;
     GB.text("HP " + st.maxhp + "   ATK " + st.atk, x, y + 24, "ink");
     GB.text("DEF " + st.def + "   SPD " + st.spd, x, y + 34, "ink");
-    GB.text("LV " + st.lvl + "   YEAR " + c.year, x, y + 44, "ink");
+    GB.text("LV " + dexLvl + "   YEAR " + c.year, x, y + 44, "ink");
     GB.text(c.addr.slice(0, 8) + "..." + c.addr.slice(-6), x, y + 57, "dim");
-    if (c.deployer) GB.text("BY " + c.deployer.slice(0, 8) + "..", x, y + 66, "dim");
+    if (isActive) GB.text("* ACTIVE BATTLER *", x, y + 66, "red");
+    else if (c.deployer) GB.text("BY " + c.deployer.slice(0, 8) + "..", x, y + 66, "dim");
 
     // scrollable real history (short description + significance)
     if (!scene.dLines) {
@@ -274,7 +314,8 @@
       if (ln) GB.text(ln, 12, by + 5 + i * (GB.GLINE + 1), "ink");
     }
     if (scroll + rows < scene.dLines.length && Math.floor(t * 3) % 2 === 0) GB.triDown(GB.W - 14, by + bh - 8, "red");
-    GB.text("A: VIEW ON EH   B: BACK   UP/DN: MORE", 8, GB.H - 9, "dim");
+    if (scene.toast > 0) { scene.toast -= 1 / 60; GB.text("NOW YOUR ACTIVE BATTLER!", 8, GB.H - 9, "red"); }
+    else GB.text(isActive ? "A: EH  B: BACK  ^v: MORE" : "A: EH   B: BACK   START: USE IN BATTLE", 8, GB.H - 9, "dim");
   }
 
   window.EH_AUTH = {
@@ -283,6 +324,6 @@
   };
   // re-apply the local save once the contract data has loaded (data.js is async,
   // so the save read at boot couldn't resolve addresses → collection/party yet).
-  window.EH_SAVE = { save: save, addCatch: addCatch, serialize: serialize, rehydrate: loadLocal };
+  window.EH_SAVE = { save: save, addCatch: addCatch, serialize: serialize, rehydrate: loadLocal, setActive: setActive, persistLead: persistLead };
   window.EH_COLLECTION = { open: function () { GB.push(dexScene); }, scene: function () { return dexScene; } };
 })();

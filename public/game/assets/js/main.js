@@ -27,7 +27,7 @@
   function ensureStarter() {
     if (window.EH_STATE.party && window.EH_STATE.party.length) return;
     var picks = starterChoices();
-    if (picks[0]) window.EH_STATE.party = [window.EH_CREATURES.make(picks[0], 5, 0)];
+    if (picks[0]) { window.EH_STATE.roster[picks[0].addr] = { level: 5, xp: 0 }; window.EH_SAVE.setActive(picks[0].addr); }
   }
 
   function labIntro() {
@@ -52,7 +52,8 @@
         else if (b === GB.BTN.right) sel = (sel + 1) % picks.length;
         else if (b === GB.BTN.a) {
           var c = picks[sel];
-          window.EH_STATE.party = [window.EH_CREATURES.make(c, 5, 0)];
+          window.EH_STATE.roster[c.addr] = { level: 5, xp: 0 };
+          window.EH_SAVE.setActive(c.addr);
           GB.pop();
           window.EH_UI.dialog([
             "PROF. NAKAMOTO|" + window.EH_CREATURES.nameFor(c) + ", level 5 - an excellent choice!",

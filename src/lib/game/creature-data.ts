@@ -46,6 +46,7 @@ export interface GameCreature {
   deployer: string | null;
   featured: boolean;
   link: string;
+  copies?: number;       // # of byte/name-identical sibling deployments collapsed
 }
 
 // The seven canonical eras → game zones, in play order.
@@ -112,34 +113,67 @@ function keywordType(row: ContractRow): string | null {
   return null;
 }
 
+// Famous contracts whose TYPE the DB gets wrong (most pre-ERC-721 NFTs look
+// "erc20-like"). These name overrides win over everything. CryptoKitties is a
+// GAME (and gets the kitty sprite, fittingly).
+const NAME_TYPE: [RegExp, string][] = [
+  [/cryptokitt/i, "GAME"],
+  [/cryptopunk|mooncat|^curio|etheria|rare ?pepe|peperium/i, "NFT"],
+  [/^the ?dao$|^thedao|dark ?dao|protodao/i, "DAO"],
+];
 function mapType(row: ContractRow): string {
+  const hay = `${row.token_name || ""} ${row.etherscan_contract_name || ""}`;
+  for (const [re, t] of NAME_TYPE) if (re.test(hay)) return t;
   const cats = parseCats(row.manual_categories);
   for (const c of cats) if (TYPE_MAP[c]) return TYPE_MAP[c];
   const t = (row.contract_type || "").toLowerCase().trim();
-  if (TYPE_MAP[t]) return TYPE_MAP[t];
-  if (row.is_erc20_like || (row.token_symbol && row.token_symbol.trim())) return "TOKEN";
-  if (cats.includes("token")) return "TOKEN";
-  const kw = keywordType(row);
+  if (TYPE_MAP[t] && TYPE_MAP[t] !== "TOKEN") return TYPE_MAP[t]; // explicit non-token DB type
+  const kw = keywordType(row);                                   // keyword (incl. NFT) BEFORE erc20 fallback
   if (kw) return kw;
+  if (TYPE_MAP[t] === "TOKEN" || row.is_erc20_like || (row.token_symbol && row.token_symbol.trim())) return "TOKEN";
+  if (cats.includes("token")) return "TOKEN";
   return "UNKNOWN";
 }
 
 function nonEmpty(s?: string | null): boolean { return !!(s && s.trim().length > 0); }
 
-// A "notability" score — older, larger, more richly-documented contracts rank
-// higher. buildGameData() turns these scores into a rarity pyramid (lots of
-// commons, a handful of legendaries) so completing the Dex actually means
-// something. Featured contracts are always LEGENDARY regardless of score.
+// ---- editorial importance (the EH historian audit) -------------------------
+// Rarity should reflect HISTORICAL IMPORTANCE, not just age + bytecode. These
+// curated name patterns force the most coveted contracts (and their wrappers/
+// siblings, per the "a wrapper is as important as the original" principle) into
+// the top tiers regardless of the algorithmic score.
+const ALWAYS_LEGENDARY = /^the ?dao$|^thedao|cryptopunk|mooncat|^mistcoin|etheria v0|cryptokitt|ethereum name service|^ens$|^maker$|makerdao|^mkr$|digix gold/i;
+const ALWAYS_EPIC = /unicorn meat|^unicorns?\b|darkdao|the ?dao extra|digixdao|^dgd$|golem|^gnt$|augur|0xbitcoin|curio cards original|curio.*factory|gavcoin|etheria v1|wrapped ?ether|^weth$/i;
+// a project is "famous" (a notability nudge) if it matches either tier
+const FAMOUS = new RegExp(ALWAYS_LEGENDARY.source + "|" + ALWAYS_EPIC.source, "i");
+
+// Wrappers/reissues sometimes carry a modern deploy date + wrong era. Pin known
+// ones back to the era of the original they wrap (the WRAPPER principle).
+const ZONE_PIN: [RegExp, string][] = [
+  [/unicorn meat/i, "homestead"],
+];
+
+// reject auto-generated placeholder blurbs — a history game shouldn't teach with
+// "test_no_op" or "Foo contract." stubs.
+function isStubBlurb(b?: string | null): boolean {
+  const s = (b || "").trim();
+  return /^test_no_op$/i.test(s) || /^[\w .-]{1,24} contract\.?$/i.test(s) || s.length < 6;
+}
+
+// A "notability" score — importance-weighted. buildGameData() ranks these into a
+// PER-ZONE rarity pyramid (so every era has its own rares/epics), then the
+// curated lists above force the truly coveted contracts to the top.
 function notability(row: ContractRow, zone: string): number {
   let s = 0;
-  if (nonEmpty(row.historical_significance)) s += 3;
-  if (nonEmpty(row.description)) s += 2;
-  s += Math.min(3, (row.code_size_bytes || 0) / 4000);
+  if (nonEmpty(row.historical_significance)) s += 2;
+  if (nonEmpty(row.description)) s += 1.5;
+  s += Math.min(2.5, Math.log2((row.code_size_bytes || 1) + 1) / 5);    // size, gentle
   const blk = row.deployment_block || 9e9;
-  s += Math.max(0, 3.2 - Math.log10(Math.max(10, blk)) / 2); // earlier block = scarcer
-  if (zone === "frontier") s += 2.5; else if (zone === "homestead") s += 1.2; else if (zone === "dao") s += 0.6;
+  s += Math.max(0, 1.6 - Math.log10(Math.max(10, blk)) / 4);            // earliness, halved
+  if (zone === "frontier") s += 1.0; else if (zone === "homestead") s += 0.5; // reduced bias
   const nm = (row.token_name || row.etherscan_contract_name || "").trim();
-  if (nm && nm !== "?" && nm.toLowerCase() !== "unknown") s += 0.6;
+  if (nm && nm !== "?" && nm.toLowerCase() !== "unknown") s += 0.5;
+  if (FAMOUS.test(nm)) s += 3;                                          // editorial fame leaks in
   return s;
 }
 
@@ -167,7 +201,9 @@ function cleanName(row: ContractRow): string {
 export function isNamed(row: ContractRow): boolean { return realName(row) !== null; }
 
 export function mapContract(row: ContractRow): GameCreature {
-  const zone = normalizeEra(row.era_id);
+  let zone = normalizeEra(row.era_id);
+  const nm = (row.token_name || row.etherscan_contract_name || "");
+  for (const [re, z] of ZONE_PIN) if (re.test(nm)) { zone = z; break; }
   return {
     addr: row.address.toLowerCase(),
     name: cleanName(row),
@@ -193,24 +229,62 @@ export interface GameData {
   contracts: GameCreature[];
 }
 
+const RANK = ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"];
+function atLeast(cur: string, floor: string): string {
+  return RANK.indexOf(cur) >= RANK.indexOf(floor) ? cur : floor;
+}
+
 export function buildGameData(rows: ContractRow[], generatedAt: string): GameData {
-  const docRows = rows.filter((r) => nonEmpty(r.short_description) && isNamed(r));
-  const items = docRows.map((row) => ({
+  const docRows = rows.filter((r) => nonEmpty(r.short_description) && isNamed(r) && !isStubBlurb(r.short_description));
+  let items = docRows.map((row) => ({
     creature: mapContract(row),
     featured: !!row.featured,
     score: notability(row, normalizeEra(row.era_id)),
   }));
 
-  // Rank non-featured by notability and slice into a rarity pyramid.
-  const rest = items.filter((it) => !it.featured).sort((a, b) => b.score - a.score);
-  const n = rest.length;
-  const epicEnd = Math.round(n * 0.06);
-  const rareEnd = Math.round(n * 0.20);
-  const uncEnd = Math.round(n * 0.50);
-  rest.forEach((it, i) => {
-    it.creature.rarity = i < epicEnd ? "EPIC" : i < rareEnd ? "RARE" : i < uncEnd ? "UNCOMMON" : "COMMON";
-  });
-  items.forEach((it) => { if (it.featured) it.creature.rarity = "LEGENDARY"; });
+  // Collapse duplicate-name spam (50× Greeter, 11× Unicorns, …) into one
+  // canonical creature, keeping the most notable instance + a copies count.
+  const byName = new Map<string, typeof items[number]>();
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    const k = it.creature.name.toLowerCase();
+    counts.set(k, (counts.get(k) || 0) + 1);
+    const cur = byName.get(k);
+    if (!cur || it.score > cur.score) byName.set(k, it);
+  }
+  items = [...byName.values()];
+  for (const it of items) {
+    const c = counts.get(it.creature.name.toLowerCase()) || 1;
+    if (c > 1) it.creature.copies = c;
+  }
+
+  // Rank into a rarity pyramid PER ZONE — so every era has its own commons →
+  // epics to find (not all epics stranded in Frontier).
+  const byZone = new Map<string, typeof items>();
+  for (const it of items) {
+    if (it.featured) continue;
+    const z = it.creature.zone;
+    if (!byZone.has(z)) byZone.set(z, []);
+    byZone.get(z)!.push(it);
+  }
+  for (const list of byZone.values()) {
+    list.sort((a, b) => b.score - a.score);
+    const n = list.length;
+    const epicEnd = Math.max(1, Math.round(n * 0.06));
+    const rareEnd = Math.round(n * 0.20);
+    const uncEnd = Math.round(n * 0.50);
+    list.forEach((it, i) => {
+      it.creature.rarity = i < epicEnd ? "EPIC" : i < rareEnd ? "RARE" : i < uncEnd ? "UNCOMMON" : "COMMON";
+    });
+  }
+
+  // Curated overrides: featured → LEGENDARY; the coveted name lists force tiers.
+  for (const it of items) {
+    if (it.featured) it.creature.rarity = "LEGENDARY";
+    const nm = it.creature.name;
+    if (ALWAYS_LEGENDARY.test(nm)) it.creature.rarity = "LEGENDARY";
+    else if (ALWAYS_EPIC.test(nm)) it.creature.rarity = atLeast(it.creature.rarity, "EPIC");
+  }
 
   const contracts = items.map((it) => it.creature);
   return { generatedAt, count: contracts.length, zones: ZONES, contracts };

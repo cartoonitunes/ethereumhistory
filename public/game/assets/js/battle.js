@@ -24,6 +24,15 @@
   var B = null;
 
   function shortName(cr) { return cr.name.replace(/\s*\(.*$/, ""); }
+  // fit a name into `maxc` glyphs without an ugly mid-word cut (Pokémon never
+  // chops a name in half). Prefers a word boundary; only adds "." if truncated.
+  function fitName(name, maxc) {
+    if (name.length <= maxc) return name;
+    var cut = name.slice(0, maxc - 1);
+    var sp = cut.lastIndexOf(" ");
+    if (sp >= maxc - 7 && sp > 2) cut = cut.slice(0, sp);
+    return cut + ".";
+  }
 
   // The player's lead creature IS the battler - its level/XP persist across
   // fights (it's the same object as EH_STATE.party[0]). It enters every battle
@@ -35,15 +44,13 @@
       lead = window.EH_CREATURES.make(window.EH_DATA.contracts[0], 5, 0);
       st.party = [lead];
     }
-    lead.stats.hp = lead.stats.maxhp;
-    st.active = lead;
+    st.active = lead;       // HP is NOT reset — it persists between battles
     return lead;
   }
 
   function start(wild, opts) {
     opts = opts || {};
     var mine = getActive();
-    mine.stats.hp = mine.stats.maxhp;
     B = {
       wild: wild, mine: mine,
       sel: 0, msel: 0, studied: 0,
@@ -78,19 +85,25 @@
   }
 
   // ---- combat maths ----------------------------------------------------
-  // Punchy: a hit lands ~30-50% of a foe's HP, so fights resolve in 2-4 turns
-  // (with creatures.js's lower HP). Encounters are quick learning beats.
-  function damage(att, def) {
+  // Punchy: a hit lands ~30-50% of a foe's HP (× type effectiveness), so fights
+  // resolve in 2-4 turns.
+  function damage(att, def, mult) {
     var base = att.stats.atk * (0.72 + att.stats.lvl / 110);
-    var d = base * (0.85 + 0.30 * Math.random()) - def.stats.def * 0.35;
+    var d = (base * (0.85 + 0.30 * Math.random()) - def.stats.def * 0.35) * (mult || 1);
     return Math.max(2, Math.round(d));
   }
   function catchChance() {
     var w = B.wild, base = w.rarityInfo.catch;
     var hpFrac = w.stats.hp / w.stats.maxhp;
     var hpBoost = 1 + (1 - hpFrac) * 1.4;
-    var studyBoost = B.studied * 0.07;
-    return Math.max(0.04, Math.min(0.96, base * hpBoost + studyBoost));
+    var studyBoost = Math.min(0.30, B.studied * 0.08);   // capped — no STUDY-spam exploit
+    return Math.max(0.04, Math.min(0.95, base * hpBoost + studyBoost));
+  }
+  // a qualitative capture read (the player never sees raw %), shown after STUDY
+  // and when CATCH is highlighted, so the loop has feedback.
+  function catchRead() {
+    var p = catchChance();
+    return p < 0.2 ? "POOR" : p < 0.4 ? "FAIR" : p < 0.65 ? "GOOD" : "HIGH";
   }
 
   // ---- actions ---------------------------------------------------------
@@ -98,11 +111,14 @@
   // you earn XP but DON'T document it) — so to catch one you must leave it some
   // HP. ACQUIRE also softens it for capture.
   function applyMove(m) {
-    var dmg = Math.round(damage(B.mine, B.wild) * (m.pow || 1));
+    var mult = window.EH_CREATURES.typeMult(B.mine.type, B.wild.type);
+    var dmg = Math.round(damage(B.mine, B.wild, mult) * (m.pow || 1));
     B.wild.stats.hp = Math.max(0, B.wild.stats.hp - dmg);
     B.shakeWild = 0.45;
     if (m.catchBoost) B.studied++;
     var msgs = [shortName(B.mine) + " " + (m.verb || "hit") + " " + shortName(B.wild) + "!"];
+    if (mult > 1) msgs.push("It's super effective!");
+    else if (mult < 1) msgs.push("It's not very effective...");
     if (B.wild.stats.hp <= 0) {
       var lv = awardWin(1.0);
       msgs.push((B.trainer ? shortName(B.wild) + " was defeated!" : "Wild " + shortName(B.wild) + " fainted!"));
@@ -122,10 +138,16 @@
     var pages = [shortName(w) + " - a " + w.type + " from " + c.year + ". " + (c.rarity || "") + "."];
     if (c.blurb) pages.push(c.blurb);
     if (c.sig && c.sig !== c.blurb) pages.push(c.sig);
-    pages.push("You studied it closely. Its catch odds went up!");
+    pages.push("Studied! Catch read is now " + catchRead() + ".");
     say(pages, toMenu);
   }
-  function awardWin(mult) { return window.EH_CREATURES.gainXp(B.mine, B.wild.stats.lvl * 3.5 * (mult || 1)); }
+  // XP scales with the foe's level; the steeper curve (creatures.js) keeps a lead
+  // from snowballing. Low-level grinding gives little.
+  function awardWin(mult) {
+    var diff = B.wild.stats.lvl - B.mine.level;
+    var amt = B.wild.stats.lvl * 3.0 * (diff < -7 ? 0.3 : 1) * (mult || 1);
+    return window.EH_CREATURES.gainXp(B.mine, amt);
+  }
   function doCatch() {
     if (B.trainer) { say(["You can't document another HISTORIAN's contract!"], toMenu); return; }
     var p = catchChance();
@@ -152,18 +174,29 @@
   function enemyTurn(after) {
     var moves = window.EH_CREATURES.movesFor(B.wild);
     var m = moves[moves.length - 1] || { pow: 1, verb: "struck" };
-    var dmg = Math.round(damage(B.wild, B.mine) * (m.pow || 1));
+    var mult = window.EH_CREATURES.typeMult(B.wild.type, B.mine.type);
+    var dmg = Math.round(damage(B.wild, B.mine, mult) * (m.pow || 1));
     B.mine.stats.hp = Math.max(0, B.mine.stats.hp - dmg);
     B.flashMine = 0.45;
     var msgs = [(B.trainer ? "" : "Wild ") + shortName(B.wild) + " " + (m.verb || "struck") + " back!"];
     if (B.mine.stats.hp <= 0) {
-      msgs.push(shortName(B.mine) + " is overwhelmed!", "You retreat to study another day.");
+      msgs.push(shortName(B.mine) + " was knocked out!", "You black out and retreat to the nearest hall...");
       say(msgs, end);
     } else { say(msgs, after); }
   }
 
   function toMenu() { B.phase = "menu"; }
-  function end() { B.mine.stats.hp = B.mine.stats.maxhp; var cb = B.onEnd, win = B.didWin; GB.pop(); if (cb) cb(win); }
+  // HP PERSISTS between battles (attrition). If your lead was knocked out you
+  // black out: it's revived to full and you're sent back to the era's start.
+  function end() {
+    var blackout = B.mine.stats.hp <= 0;
+    if (blackout) B.mine.stats.hp = B.mine.stats.maxhp;
+    var cb = B.onEnd, win = B.didWin;
+    if (window.EH_SAVE && window.EH_SAVE.persistLead) window.EH_SAVE.persistLead(); // save level/XP gains
+    GB.pop();
+    if (blackout && window.EH_WORLD && window.EH_WORLD.recover) window.EH_WORLD.recover();
+    if (cb) cb(win);
+  }
 
   // ---- input -----------------------------------------------------------
   // Labels say what they do: ANALYZE weakens, STUDY teaches (and raises catch
@@ -238,11 +271,11 @@
 
   // the HP/name plate (Gen-3 rounded box). `numbers` adds the HP readout + XP bar.
   function plate(x, y, cr, frac, numbers) {
-    var w = 108, h = numbers ? 40 : 32;
+    var w = 116, h = numbers ? 40 : 32;
     GB.boxR(x, y, w, h);
-    var nm = shortName(cr), lvl = "=L" + cr.stats.lvl, lw = GB.textWidth(lvl);
-    var maxc = Math.floor((w - 16 - lw) / GB.GADV);
-    GB.text(nm.slice(0, maxc), x + 7, y + 5, "ink");
+    var lvl = "L" + cr.stats.lvl, lw = GB.textWidth(lvl);
+    var maxc = Math.floor((w - 15 - lw) / GB.GADV);
+    GB.text(fitName(shortName(cr), maxc), x + 7, y + 5, "ink");
     GB.text(lvl, x + w - 7 - lw, y + 5, "ink");
     GB.text("HP", x + 7, y + 16, "hpGreen");
     hpBar(x + 24, y + 17, w - 33, frac);
@@ -296,8 +329,8 @@
 
     // HP plates slide in from the screen edges, settle once the entry is done
     if (ep > 0.45) {
-      plate(10 - (1 - ep) * 120, 12, B.wild, B.hpAnimW, false);
-      plate(GB.W - 118 + (1 - ep) * 120, 80, B.mine, B.hpAnimM, true);
+      plate(8 - (1 - ep) * 130, 12, B.wild, B.hpAnimW, false);
+      plate(GB.W - 124 + (1 - ep) * 130, 80, B.mine, B.hpAnimM, true);
     }
     renderBottom();
   }
@@ -315,9 +348,15 @@
     }
     if (B.phase === "menu") {
       GB.boxR(0, by, 150, bh);                       // prompt window
-      GB.text("WHAT WILL", 9, by + 9, "ink");
-      GB.text(shortName(B.mine).slice(0, 11), 9, by + 21, "blue");
-      GB.text("DO?", 9 + GB.textWidth(shortName(B.mine).slice(0, 11)) + 6, by + 21, "ink");
+      if (TOP[B.sel] === "CATCH" && !B.trainer) {     // show the capture read
+        GB.text("CAPTURE READ:", 9, by + 9, "ink");
+        GB.text(catchRead(), 9, by + 21, "blue");
+        GB.text("(STUDY raises it)", 60, by + 21, "dim");
+      } else {
+        GB.text("WHAT WILL", 9, by + 9, "ink");
+        GB.text(shortName(B.mine).slice(0, 11), 9, by + 21, "blue");
+        GB.text("DO?", 9 + GB.textWidth(shortName(B.mine).slice(0, 11)) + 6, by + 21, "ink");
+      }
       cmdList(TOP, B.sel);
     } else if (B.phase === "moves") {
       var mv = window.EH_CREATURES.movesFor(B.mine);

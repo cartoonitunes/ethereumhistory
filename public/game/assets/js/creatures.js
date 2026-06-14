@@ -285,19 +285,41 @@
   // damage formula for short 2-4 turn fights.
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+  // each TYPE leans a different way (DAO tanky, DEFI fast, PONZI glassy…)
+  var TYPE_BIAS = {
+    TOKEN: { hp: 1.05, atk: 1.0, def: 1.0, spd: 1.0 }, NFT: { hp: 1.0, atk: 1.08, def: 0.95, spd: 1.0 },
+    DAO: { hp: 1.2, atk: 0.9, def: 1.18, spd: 0.8 }, GAME: { hp: 0.95, atk: 1.12, def: 0.9, spd: 1.18 },
+    DEFI: { hp: 1.0, atk: 1.0, def: 0.95, spd: 1.25 }, TOOL: { hp: 1.05, atk: 0.92, def: 1.12, spd: 0.95 },
+    PONZI: { hp: 0.85, atk: 1.25, def: 0.82, spd: 1.12 }, UNKNOWN: { hp: 1, atk: 1, def: 1, spd: 1 }
+  };
   function statsFor(c, level) {
     level = level || 1;
     var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;   // 1..5
-    var size = c.size || 400;
-    var hp  = Math.round(14 + level * 1.5 + stars * 2 + Math.min(8, size / 900));
-    var atk = Math.round(5 + level * 0.7 + stars);
-    var def = Math.round(2 + level * 0.28 + stars);
-    var spd = Math.round(5 + level * 0.7 + Math.floor(stars / 2));
-    return { hp: hp, maxhp: hp, atk: atk, def: def, spd: spd, lvl: level };
+    var size = c.size || 400, b = TYPE_BIAS[c.cat] || TYPE_BIAS.UNKNOWN;
+    // a deterministic per-contract "nature": ±12% spread per stat, so a given
+    // contract always has the same individual character (and catching a better
+    // roll of the same contract is worth it).
+    var rnd = GB.rng(GB.hashStr(c.addr + "|nature"));
+    function nat() { return 0.88 + rnd() * 0.24; }
+    var hp  = Math.round((16 + level * 1.6 + stars * 2 + Math.log2(size + 1) * 1.2) * b.hp * nat());
+    var atk = Math.round((5 + level * 0.75 + stars) * b.atk * nat());
+    var def = Math.round((2 + level * 0.30 + stars) * b.def * nat());
+    var spd = Math.round((5 + level * 0.70 + stars * 0.5) * b.spd * nat());
+    return { hp: hp, maxhp: hp, atk: Math.max(1, atk), def: Math.max(1, def), spd: Math.max(1, spd), lvl: level };
   }
 
-  // levelling curve + XP gain (mutates the creature in place, returns # levels)
-  function xpToNext(level) { return 6 + level * 5; }
+  // ---- type effectiveness (shallow on purpose; some types are scarce) -------
+  // ×2 super-effective, ×0.5 resisted, else ×1. EH-flavoured matchups.
+  var MATCHUP = {
+    TOKEN: { DAO: 2, DEFI: 0.5 }, NFT: { GAME: 2, TOOL: 0.5 }, DAO: { PONZI: 2, TOKEN: 0.5 },
+    GAME: { TOOL: 2, NFT: 0.5 }, DEFI: { TOKEN: 2, DAO: 0.5 }, TOOL: { DEFI: 2, GAME: 0.5 },
+    PONZI: { NFT: 2, DAO: 0.5 }, UNKNOWN: {}
+  };
+  function typeMult(att, def) { var m = MATCHUP[att]; return (m && m[def]) || 1; }
+
+  // levelling curve (steeper, so a single lead can't snowball past every era) +
+  // XP gain (mutates the creature in place, returns # levels gained)
+  function xpToNext(level) { return Math.round(8 + level * level * 1.1); }
   function gainXp(cr, amount) {
     cr.xp = (cr.xp || 0) + Math.max(0, Math.round(amount));
     var gained = 0;
@@ -320,11 +342,14 @@
     var p = window.EH_STATE && window.EH_STATE.party && window.EH_STATE.party[0];
     return p ? (p.level || 5) : 5;
   }
+  // Wild level is set by the ERA (so the region genuinely gets tougher as you
+  // travel east and there's a reason to prepare), with only a small floor nudge
+  // off your lead so you're never *totally* outmatched.
   function wildLevel(zone, c) {
     var b = ZONE_LVL[zoneIndex(zone)] || [4, 10];
     var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;
-    var target = leadLevel() + (Math.floor(Math.random() * 6) - 3) + Math.max(0, stars - 3);
-    return clamp(target, b[0], b[1]);
+    var lvl = b[0] + Math.floor(Math.random() * (b[1] - b[0] + 1)) + Math.max(0, stars - 2);
+    return clamp(lvl, 2, 60);
   }
 
   // ---- moves: learned as a creature LEVELS UP (last 4 known are usable) ------
@@ -403,7 +428,7 @@
 
   window.EH_CREATURES = {
     make: make,
-    gainXp: gainXp, xpToNext: xpToNext, wildLevel: wildLevel, movesFor: movesFor,
+    gainXp: gainXp, xpToNext: xpToNext, wildLevel: wildLevel, movesFor: movesFor, typeMult: typeMult,
     randomForZone: randomForZone,
     wildByAddr: wildByAddr,
     spriteFor: spriteFor,

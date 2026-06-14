@@ -307,15 +307,37 @@
       "T...R.........R....TTT",
       "T....R.....R.......TTT",
       "TTTTTTTTTTTTTTTTTTTTTT"
+    ],
+    // a VERTICAL valley — you travel north-south through it (warps top & bottom).
+    valley: [
+      "TTTTTTTTTTWTTTTTTTTTTT",
+      "T.....,,..P..,,,.....T",
+      "T.........P.........,T",
+      "T..rrr....P....rrr...T",
+      "T..HwH....P....HwH...T",
+      "T..HDH....P....HDH...T",
+      "T..PPPPPPPPPPPPPPP...T",
+      "T....,,...P...,,,...ST",
+      "T.........P.........,T",
+      "T..,,,....P....,,,...T",
+      "T..,,,....P....,,,...T",
+      "T.........P..........T",
+      "T....,,...P...,,.....T",
+      "T....,,...P...,,.....T",
+      "T.........P..........T",
+      "TTTTTTTTTTWTTTTTTTTTTT"
     ]
   };
-  // per-template geometry: warp tiles, arrival spawns, and the sign tile. lake &
-  // crag share the route geometry (horizontal path on row 7).
+  // per-template geometry, in ENTRY/EXIT terms so routes can connect on any side:
+  //  - horizontal templates: entry = west edge, exit = east edge
+  //  - vertical (valley):    entry = top edge,  exit = bottom edge
+  // The chain wires prev.exit → this.entry and this.exit → next.entry.
   var GEOM = {
-    route: { warpW: { x: 0, y: 7 }, warpE: { x: 21, y: 7 }, spawnW: { x: 1, y: 7 }, spawnE: { x: 20, y: 7 }, sign: { x: 19, y: 5 } },
-    town:  { warpW: { x: 0, y: 6 }, warpE: { x: 21, y: 6 }, spawnW: { x: 1, y: 6 }, spawnE: { x: 20, y: 6 }, sign: { x: 10, y: 11 } }
+    route:  { entry: { warp: { x: 0, y: 7 }, spawn: { x: 1, y: 7 } },  exit: { warp: { x: 21, y: 7 }, spawn: { x: 20, y: 7 } }, sign: { x: 19, y: 5 } },
+    town:   { entry: { warp: { x: 0, y: 6 }, spawn: { x: 1, y: 6 } },  exit: { warp: { x: 21, y: 6 }, spawn: { x: 20, y: 6 } }, sign: { x: 10, y: 11 } },
+    valley: { entry: { warp: { x: 10, y: 0 }, spawn: { x: 10, y: 1 } }, exit: { warp: { x: 10, y: 15 }, spawn: { x: 10, y: 14 } }, sign: { x: 20, y: 7 } }
   };
-  function geomFor(tpl) { return tpl === "town" ? GEOM.town : GEOM.route; }
+  function geomFor(tpl) { return GEOM[tpl] || GEOM.route; }
   // era ground tints (null = default lush green) - subtle per-era mood
   var TINTS = {
     frontier: null,
@@ -346,7 +368,7 @@
         { name: "MIST CABIN", tpl: "shop", npcs: [
           { x: 6, y: 3, spr: "green", name: "HISTORIAN", text: ["HISTORIAN|MISTCOIN was mined right in the Mist wallet - one of the first tokens anyone actually held. Fabian Vogelsteller's prototype became ERC-20."] } ] }
       ] },
-    { id: "homestead", name: "HOMESTEAD", year: "2016", tpl: "town", rate: 0.13,
+    { id: "homestead", name: "HOMESTEAD", year: "2016", tpl: "valley", rate: 0.13,
       sign: "HOMESTEAD - 2016. Ethereum's first planned upgrade. Stable enough to BUILD on: ENS, early Maker, the first token-for-token swaps.  <<< FRONTIER   DAO FORK >>>",
       npcs: [
         { spr: "blue", name: "BUILDER", text: ["BUILDER|Homestead made the chain solid. Real projects appeared - name services, lending experiments, the first decentralized exchanges."] },
@@ -424,7 +446,7 @@
   // ---------- the lab (start) ------------------------------------------
   var ZONES = {
     lab: {
-      name: "PROF. NAKAMOTO'S LAB", year: "", rate: 0, interior: true, w: 12, h: 9,
+      name: "PROF. NAKAMOTO'S LAB", year: "", rate: 0, interior: true, heal: true, w: 12, h: 9,
       start: { x: 5, y: 6 },
       rows: ["MMMMMMMMMMMM","MKKKKLLKKKKM","MOOOOOOOOOOM","MOOO====OOOM","MOOOOOOOOOOM","MOOOOOOOOOOM","MOOOOOOOOOOM","MLOOOOOOOOLM","MMMMMXMMMMMM"],
       exits: [{ x: 5, y: 8, to: { zone: "frontier", x: 1, y: 7 } }],
@@ -460,34 +482,35 @@
   var BUILDING_DEFS = {};
   ERAS.forEach(function (era, i) {
     var g = geomFor(era.tpl);
-    var townish = era.tpl === "town";
+    var townish = era.tpl === "town", vert = era.tpl === "valley";
     var rows = TPL_OUT[era.tpl].slice();
     var npcs = era.npcs.map(function (n, k) {
-      var pos = townish ? [{ x: 7, y: 5 }, { x: 14, y: 9 }][k] : [{ x: 6, y: 5 }, { x: 14, y: 9 }][k];
+      var pos = (vert ? [{ x: 6, y: 8 }, { x: 14, y: 11 }] : townish ? [{ x: 7, y: 5 }, { x: 14, y: 9 }] : [{ x: 6, y: 5 }, { x: 14, y: 9 }])[k];
       return { x: pos.x, y: pos.y, spr: n.spr, name: n.name, text: n.text };
     });
     if (TRAINERS[era.id]) {
-      var tr = TRAINERS[era.id];
-      npcs.push({ x: 10, y: 5, spr: tr.spr, name: tr.name, trainer: tr });
+      var tr = TRAINERS[era.id], tp = vert ? { x: 7, y: 11 } : { x: 10, y: 5 };
+      npcs.push({ x: tp.x, y: tp.y, spr: tr.spr, name: tr.name, trainer: tr });
     }
     var z = {
       name: era.name, year: era.year, rate: era.rate, w: 22, h: 16,
       tint: TINTS[era.id] || null, era: era.id,
-      rows: rows, start: { x: g.spawnW.x, y: g.spawnW.y },
+      rows: rows, start: { x: g.entry.spawn.x, y: g.entry.spawn.y },
       warps: [], npcs: npcs,
       signs: [{ x: g.sign.x, y: g.sign.y, text: era.sign }]
     };
-    // west warp → previous era's east arrival (frontier's west → the lab)
-    var west = i === 0 ? { zone: "lab", x: 5, y: 6 }
-      : { zone: ERAS[i - 1].id, x: geomFor(ERAS[i - 1].tpl).spawnE.x, y: geomFor(ERAS[i - 1].tpl).spawnE.y };
-    z.warps.push({ x: g.warpW.x, y: g.warpW.y, to: west });
-    // east warp → next era's west arrival (last era: wall off the east edge)
+    // entry warp → previous era's EXIT arrival (frontier's entry → the lab)
+    var back = i === 0 ? { zone: "lab", x: 5, y: 6 }
+      : { zone: ERAS[i - 1].id, x: geomFor(ERAS[i - 1].tpl).exit.spawn.x, y: geomFor(ERAS[i - 1].tpl).exit.spawn.y };
+    z.warps.push({ x: g.entry.warp.x, y: g.entry.warp.y, to: back });
+    // exit warp → next era's ENTRY arrival (last era: wall off the exit edge)
     if (i < ERAS.length - 1) {
-      z.warps.push({ x: g.warpE.x, y: g.warpE.y, to: { zone: ERAS[i + 1].id, x: geomFor(ERAS[i + 1].tpl).spawnW.x, y: geomFor(ERAS[i + 1].tpl).spawnW.y } });
+      var ng = geomFor(ERAS[i + 1].tpl);
+      z.warps.push({ x: g.exit.warp.x, y: g.exit.warp.y, to: { zone: ERAS[i + 1].id, x: ng.entry.spawn.x, y: ng.entry.spawn.y } });
     } else {
-      var wch = era.tpl === "town" ? "F" : "T";
-      var r = z.rows[g.warpE.y];
-      z.rows[g.warpE.y] = r.slice(0, g.warpE.x) + wch + r.slice(g.warpE.x + 1);
+      var wch = townish ? "F" : "T";
+      var r = z.rows[g.exit.warp.y];
+      z.rows[g.exit.warp.y] = r.slice(0, g.exit.warp.x) + wch + r.slice(g.exit.warp.x + 1);
     }
     ZONES[era.id] = z;
     BUILDING_DEFS[era.id] = era.buildings;
@@ -505,6 +528,7 @@
       oz.exits.push({ x: d.x, y: d.y, to: { zone: iid, x: 5, y: 6 } });
       ZONES[iid] = {
         name: def.name, year: "", rate: 0, interior: true, w: 12, h: 9,
+        heal: def.tpl === "hall",            // era HALLs double as healing centres
         start: { x: 5, y: 6 }, rows: TPL[def.tpl || "shop"].slice(),
         exits: [{ x: 5, y: 8, to: { zone: zoneId, x: d.x, y: d.y + 1 } }],
         signs: [], npcs: def.npcs || [],
@@ -546,6 +570,21 @@
     if (window.EH_STATE && !world.zone.interior) window.EH_STATE.pos = { zone: id, x: world.px, y: world.py };
   }
 
+  // restore the lead to full HP (returns true if any healing was needed)
+  function healParty() {
+    var p = window.EH_STATE && window.EH_STATE.party && window.EH_STATE.party[0];
+    if (!p) return false;
+    var need = p.stats.hp < p.stats.maxhp;
+    p.stats.hp = p.stats.maxhp;
+    return need;
+  }
+  // black-out: send the player back to the start of the current era (or frontier)
+  function recover() {
+    var id = (world.zone && !world.zone.interior) ? world.zoneId : "frontier";
+    if (!ZONES[id] || ZONES[id].interior) id = "frontier";
+    loadZone(id, ZONES[id].start, 1);
+  }
+
   function exitAt(z, x, y) {
     return (z.exits || []).find(function (e) { return e.x === x && e.y === y; });
   }
@@ -572,8 +611,10 @@
     if (ex) {
       var tz = ZONES[ex.to.zone];
       var greet = tz && tz.interior && tz.enterText && !tz._seen;
+      var healed = tz && tz.heal && healParty();   // halls restore your contract
       loadZone(ex.to.zone, { x: ex.to.x, y: ex.to.y }, z.interior ? 1 : 0);
       if (greet) { tz._seen = true; dialog(tz.enterText); }
+      else if (healed) dialog([tz.name + "|Your contract was restored to full health."]);
       return;
     }
     if (tileAt(z, world.px, world.py) === ",") maybeEncounter();
@@ -586,6 +627,20 @@
     if (n) { if (n.trainer) startTrainerTalk(n); else dialog(n.text); return; }
     var s = signAt(z, nx, ny);
     if (s) { dialog(s.text); return; }
+    if (tileAt(z, nx, ny) === "~") { goFishing(); return; }   // cast into water
+  }
+
+  // FISHING: face water + A. A second encounter mode, drawing DEFI/"liquidity"
+  // contracts — gives the lake eras a reason to exist beyond decoration.
+  function goFishing() {
+    dialog(["You cast a line into the liquidity pool..."], function () {
+      if (Math.random() < 0.6) {
+        var pool = window.EH_DATA.contracts.filter(function (c) { return c.cat === "DEFI" || c.cat === "TOKEN"; });
+        if (!pool.length) pool = window.EH_DATA.contracts;
+        var c = pool[Math.floor(Math.random() * pool.length)];
+        playEncounter(window.EH_CREATURES.make(c, window.EH_CREATURES.wildLevel(world.zoneId, c)));
+      } else dialog(["...not even a nibble. Try again later."]);
+    });
   }
 
   // pick a notable real contract of the era for a Historian to battle with
@@ -596,18 +651,52 @@
     var src = notable.length ? notable : (pool.length ? pool : window.EH_DATA.contracts);
     return src[Math.floor(Math.random() * src.length)];
   }
+  // Historians fight at a FIXED level near the top of their era's band — a real
+  // gate-check you can lose and come back to (not a rubber-band). Constantinople's
+  // Prof. Nakamoto is the CHAMPION; beating him rolls the Hall of Fame.
+  var TRAINER_LVL = { frontier: 8, homestead: 13, dao: 17, tangerine: 22, spurious: 28, byzantium: 36, constantinople: 44 };
   function startTrainerTalk(n) {
-    var tr = n.trainer;
+    var tr = n.trainer, zone = world.zoneId;
     var intro = n._met ? [tr.name + "|Ready for another round?"] : tr.intro;
     n._met = true;
     dialog(intro, function () {
-      var c = pickTrainerContract(world.zoneId, tr.use);
+      var c = pickTrainerContract(zone, tr.use);
       if (!c) { dialog([tr.name + "|...I've misplaced my contract. Another time!"]); return; }
-      var lead = window.EH_STATE.party[0];
-      var lvl = Math.max(6, (lead ? lead.level : 5) + 2);   // a small step up: beatable, good XP
-      window.EH_BATTLE.startTrainer(window.EH_CREATURES.make(c, lvl, 0), { win: tr.win });
+      var lvl = TRAINER_LVL[zone] || ((window.EH_STATE.party[0] ? window.EH_STATE.party[0].level : 5) + 2);
+      var champion = zone === "constantinople";
+      window.EH_BATTLE.startTrainer(window.EH_CREATURES.make(c, lvl, 0), {
+        win: tr.win,
+        onEnd: function (won) { if (won && champion) hallOfFame(); }
+      });
     });
   }
+
+  // ---------- Hall of Fame (the win condition) -------------------------
+  function hallOfFame() {
+    var caught = window.EH_STATE.collection.map(function (a) { return window.EH_DATA.byAddr(a); }).filter(Boolean);
+    caught.sort(function (a, b) { return rarityRank(b) - rarityRank(a); });
+    var top = caught.slice(0, 6).map(function (c) { return window.EH_CREATURES.make(c, 50, 0); });
+    var t = 0;
+    GB.push({
+      onPress: function (b) { if (b === GB.BTN.a || b === GB.BTN.b || b === GB.BTN.start) GB.pop(); },
+      update: function (dt) { t += dt; },
+      render: function () {
+        GB.clear("navy");
+        GB.rect(0, 0, GB.W, 2, "gold"); GB.rect(0, GB.H - 2, GB.W, 2, "gold");
+        GB.textCenter("- HISTORIAN CHAMPION -", GB.W / 2, 7, "gold");
+        GB.textCenter("You documented " + window.EH_STATE.collection.length + " contracts", GB.W / 2, 20, "white");
+        GB.textCenter("across all seven eras of Ethereum.", GB.W / 2, 30, "white");
+        top.forEach(function (cr, i) {
+          var cx = 36 + (i % 3) * 78, cy = 46 + ((i / 3) | 0) * 44;
+          GB.spriteO(cr.sprite, cx, cy, 2, cr.ramp);
+          GB.textCenter(cr.name.slice(0, 11), cx + 16, cy + 34, "white");
+        });
+        GB.textCenter("Thank you for being a historian!", GB.W / 2, GB.H - 16, "gold");
+        if (Math.floor(t * 1.5) % 2 === 0) GB.textCenter("PRESS A", GB.W / 2, GB.H - 7, "white");
+      }
+    });
+  }
+  function rarityRank(c) { return ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY"].indexOf(c.rarity); }
 
   function maybeEncounter() {
     if (Math.random() >= world.zone.rate) return;
@@ -754,6 +843,6 @@
             "OPTIONS|Progress auto-saves on every catch. Sign in on the title screen to sync across devices."]);
   }
 
-  window.EH_WORLD = { scene: function () { return world; }, loadZone: loadZone, dialog: dialog, ZONES: ZONES };
+  window.EH_WORLD = { scene: function () { return world; }, loadZone: loadZone, dialog: dialog, ZONES: ZONES, recover: recover, healParty: healParty };
   window.EH_UI = { dialog: dialog, boxAtBottom: boxAtBottom };
 })();
