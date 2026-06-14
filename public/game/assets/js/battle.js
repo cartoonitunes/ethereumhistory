@@ -22,6 +22,7 @@
   var MSG_SPEED = 34; // chars/sec for the typewriter
 
   var B = null;
+  function sfx(k) { if (window.EH_AUDIO) window.EH_AUDIO.sfx(k); }
 
   function shortName(cr) { return cr.name.replace(/\s*\(.*$/, ""); }
   // fit a name into `maxc` glyphs without an ugly mid-word cut (Pokémon never
@@ -39,13 +40,13 @@
   // at full health.
   function getActive() {
     var st = window.EH_STATE;
-    var lead = st.party && st.party[0];
-    if (!lead) {
-      lead = window.EH_CREATURES.make(window.EH_DATA.contracts[0], 5, 0);
-      st.party = [lead];
+    if (!st.party || !st.party.length) {           // emergency fallback
+      st.team = [window.EH_DATA.contracts[0].addr]; st.active = 0;
+      st.roster = st.roster || {}; st.roster[st.team[0]] = { level: 5, xp: 0 };
+      st.party = [window.EH_CREATURES.make(window.EH_DATA.byAddr(st.team[0]), 5, 0)];
     }
-    st.active = lead;       // HP is NOT reset — it persists between battles
-    return lead;
+    if (st.active == null || st.active >= st.party.length) st.active = 0;
+    return st.party[st.active];   // HP is NOT reset — it persists between battles
   }
 
   function start(wild, opts) {
@@ -53,7 +54,8 @@
     var mine = getActive();
     B = {
       wild: wild, mine: mine,
-      sel: 0, msel: 0, studied: 0,
+      sel: 0, msel: 0, sw: 0, studied: 0,
+      participants: {}, mineStage: { atk: 0, spd: 0, crit: 0 }, wildStage: { atk: 0, spd: 0, crit: 0 },
       phase: "enter", enterT: 0,
       queue: [], after: null,
       msgText: "", msgRev: 0, msgDone: false,
@@ -62,7 +64,22 @@
       onEnd: opts.onEnd || null, didWin: false,
       hpAnimW: 1, hpAnimM: 1 // displayed HP fractions (animate toward real)
     };
+    B.participants[window.EH_STATE.active] = true;
     if (GB.current() !== scene) GB.push(scene);
+  }
+  // switch the active battler to party index j (B.mine follows). Costs a turn
+  // unless `free` (a forced switch after a faint).
+  function switchTo(j, free) {
+    var st = window.EH_STATE;
+    st.active = j; B.mine = st.party[j]; B.participants[j] = true;
+    B.mineStage = { atk: 0, spd: 0, crit: 0 };
+    var msg = ["Go, " + shortName(B.mine) + "!"];
+    if (free) { say(msg, toMenu); } else { say(msg, function () { enemyTurn(toMenu); }); }
+  }
+  function aliveOthers() {
+    var st = window.EH_STATE, out = [];
+    for (var i = 0; i < st.party.length; i++) if (i !== st.active && st.party[i].stats.hp > 0) out.push(i);
+    return out;
   }
 
   // ---- message queue + typewriter -------------------------------------
@@ -87,9 +104,13 @@
   // ---- combat maths ----------------------------------------------------
   // Punchy: a hit lands ~30-50% of a foe's HP (× type effectiveness), so fights
   // resolve in 2-4 turns.
-  function damage(att, def, mult) {
-    var base = att.stats.atk * (0.72 + att.stats.lvl / 110);
-    var d = (base * (0.85 + 0.30 * Math.random()) - def.stats.def * 0.35) * (mult || 1);
+  function clampStage(s) { return Math.max(-3, Math.min(3, s || 0)); }
+  function atkMult(stage) { return 1 + clampStage(stage) * 0.25; }
+  function critChance(stage) { return 0.06 + Math.max(0, clampStage(stage)) * 0.15; }
+  function effSpd(cr, stage) { return cr.stats.spd * (1 + clampStage(stage) * 0.2); }
+  function damage(att, def, mult, crit, atkStage) {
+    var base = att.stats.atk * atkMult(atkStage) * (0.85 + att.stats.lvl / 90);
+    var d = (base * (0.85 + 0.30 * Math.random()) - def.stats.def * 0.3) * (mult || 1) * (crit ? 1.6 : 1);
     return Math.max(2, Math.round(d));
   }
   function catchChance() {
@@ -107,16 +128,26 @@
   }
 
   // ---- actions ---------------------------------------------------------
-  // Use a learned move. If it drains the foe to 0 HP the foe FAINTS (battle ends,
-  // you earn XP but DON'T document it) — so to catch one you must leave it some
-  // HP. ACQUIRE also softens it for capture.
+  function clamp3(s) { return Math.max(-3, Math.min(3, s)); }
+  // Use a learned move. STATUS moves (m.stage) shift stat stages; damage moves can
+  // land a CRITICAL HIT (boosted by SNIPE). Draining the foe to 0 HP makes it
+  // FAINT (you earn XP, can't document it) — leave HP to catch. ACQUIRE softens.
   function applyMove(m) {
+    if (m.stage && (m.pow || 0) === 0) {                 // pure status move
+      if (m.self) B.mineStage[m.stage] = clamp3(B.mineStage[m.stage] + m.self);
+      if (m.foe) B.wildStage[m.stage] = clamp3(B.wildStage[m.stage] + m.foe);
+      say([shortName(B.mine) + " used " + m.name + "! " + (m.msg || "")], function () { enemyTurn(toMenu); });
+      return;
+    }
+    if (m.catchBoost) B.studied++;
     var mult = window.EH_CREATURES.typeMult(B.mine.type, B.wild.type);
-    var dmg = Math.round(damage(B.mine, B.wild, mult) * (m.pow || 1));
+    var crit = Math.random() < critChance(B.mineStage.crit);
+    var dmg = Math.round(damage(B.mine, B.wild, mult, crit, B.mineStage.atk) * (m.pow || 1));
+    sfx(crit ? "crit" : "hit");
     B.wild.stats.hp = Math.max(0, B.wild.stats.hp - dmg);
     B.shakeWild = 0.45;
-    if (m.catchBoost) B.studied++;
     var msgs = [shortName(B.mine) + " " + (m.verb || "hit") + " " + shortName(B.wild) + "!"];
+    if (crit) msgs.push("A critical hit!");
     if (mult > 1) msgs.push("It's super effective!");
     else if (mult < 1) msgs.push("It's not very effective...");
     if (B.wild.stats.hp <= 0) {
@@ -141,12 +172,19 @@
     pages.push("Studied! Catch read is now " + catchRead() + ".");
     say(pages, toMenu);
   }
-  // XP scales with the foe's level; the steeper curve (creatures.js) keeps a lead
-  // from snowballing. Low-level grinding gives little.
+  // XP is SPLIT among every party member that battled (all who "faced" the foe).
+  // Scales with the foe's level; the steep curve keeps a lead from snowballing.
   function awardWin(mult) {
+    var st = window.EH_STATE, ids = Object.keys(B.participants);
     var diff = B.wild.stats.lvl - B.mine.level;
-    var amt = B.wild.stats.lvl * 3.0 * (diff < -7 ? 0.3 : 1) * (mult || 1);
-    return window.EH_CREATURES.gainXp(B.mine, amt);
+    var total = B.wild.stats.lvl * 3.2 * (diff < -7 ? 0.3 : 1) * (mult || 1);
+    var each = total / Math.max(1, ids.length), leadGain = 0;
+    ids.forEach(function (k) {
+      var cr = st.party[+k]; if (!cr) return;
+      var g = window.EH_CREATURES.gainXp(cr, each);
+      if (+k === st.active) leadGain = g;
+    });
+    return leadGain;
   }
   function doCatch() {
     if (B.trainer) { say(["You can't document another HISTORIAN's contract!"], toMenu); return; }
@@ -155,7 +193,8 @@
     if (Math.random() < p) {
       B.caught = true;
       var lv = awardWin(1.2);
-      window.EH_SAVE.addCatch(B.wild);     // persists collection + lead level/XP
+      sfx("catch");
+      window.EH_SAVE.addCatch(B.wild);
       var msgs = ["You threw an ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was documented!"];
       if (lv > 0) msgs.push(shortName(B.mine) + " grew to LV " + B.mine.level + "!");
       msgs.push("Added to your HISTORIAN'S DEX.");
@@ -172,36 +211,50 @@
   }
 
   function enemyTurn(after) {
-    var moves = window.EH_CREATURES.movesFor(B.wild);
+    // SPEED: if your active is much faster (e.g. after FRONTRUN), the foe may be
+    // too slow to act this turn.
+    if (effSpd(B.mine, B.mineStage.spd) > effSpd(B.wild, B.wildStage.spd) * 1.35 && Math.random() < 0.4) {
+      say([(B.trainer ? "" : "Wild ") + shortName(B.wild) + " was too slow to act!"], after); return;
+    }
+    var moves = window.EH_CREATURES.movesFor(B.wild).filter(function (m) { return (m.pow || 0) > 0; });
     var m = moves[moves.length - 1] || { pow: 1, verb: "struck" };
+    var crit = Math.random() < critChance(B.wildStage.crit);
     var mult = window.EH_CREATURES.typeMult(B.wild.type, B.mine.type);
-    var dmg = Math.round(damage(B.wild, B.mine, mult) * (m.pow || 1));
+    var dmg = Math.round(damage(B.wild, B.mine, mult, crit, B.wildStage.atk) * (m.pow || 1));
+    sfx(crit ? "crit" : "hit");
     B.mine.stats.hp = Math.max(0, B.mine.stats.hp - dmg);
     B.flashMine = 0.45;
     var msgs = [(B.trainer ? "" : "Wild ") + shortName(B.wild) + " " + (m.verb || "struck") + " back!"];
+    if (crit) msgs.push("A critical hit!");
     if (B.mine.stats.hp <= 0) {
-      msgs.push(shortName(B.mine) + " was knocked out!", "You black out and retreat to the nearest hall...");
-      say(msgs, end);
+      msgs.push(shortName(B.mine) + " was knocked out!"); sfx("faint");
+      var others = aliveOthers();
+      if (others.length) { say(msgs, function () { B.phase = "forceswitch"; B.sw = others[0]; }); }
+      else { msgs.push("Your whole team is down! You black out..."); say(msgs, end); }
     } else { say(msgs, after); }
   }
 
   function toMenu() { B.phase = "menu"; }
-  // HP PERSISTS between battles (attrition). If your lead was knocked out you
-  // black out: it's revived to full and you're sent back to the era's start.
+  // HP PERSISTS between battles. If your WHOLE team is knocked out you black out:
+  // the team is revived and you're sent back to the era's start.
   function end() {
-    var blackout = B.mine.stats.hp <= 0;
-    if (blackout) B.mine.stats.hp = B.mine.stats.maxhp;
+    var st = window.EH_STATE;
+    var allDown = st.party.every(function (c) { return c.stats.hp <= 0; });
+    if (allDown) st.party.forEach(function (c) { c.stats.hp = c.stats.maxhp; });
     var cb = B.onEnd, win = B.didWin;
-    if (window.EH_SAVE && window.EH_SAVE.persistLead) window.EH_SAVE.persistLead(); // save level/XP gains
+    if (window.EH_SAVE && window.EH_SAVE.persistLead) window.EH_SAVE.persistLead();
     GB.pop();
-    if (blackout && window.EH_WORLD && window.EH_WORLD.recover) window.EH_WORLD.recover();
+    if (allDown && window.EH_WORLD && window.EH_WORLD.recover) window.EH_WORLD.recover();
     if (cb) cb(win);
   }
 
   // ---- input -----------------------------------------------------------
   // Labels say what they do: ANALYZE weakens, STUDY teaches (and raises catch
   // odds), CATCH throws an Archive Ball, RUN flees.
-  var TOP = ["FIGHT", "STUDY", "CATCH", "RUN"];   // FIGHT opens the move list
+  // the top command menu — SWITCH only appears when you carry more than one
+  function topMenu() {
+    return window.EH_STATE.party.length > 1 ? ["FIGHT", "SWITCH", "STUDY", "CATCH", "RUN"] : ["FIGHT", "STUDY", "CATCH", "RUN"];
+  }
   var scene = {
     onPress: function (b) {
       if (!B) return;
@@ -210,11 +263,14 @@
         return;
       }
       if (B.phase === "menu") {
+        var TOP = topMenu();
+        if (B.sel >= TOP.length) B.sel = 0;
         if (b === GB.BTN.up) B.sel = (B.sel + TOP.length - 1) % TOP.length;
         else if (b === GB.BTN.down) B.sel = (B.sel + 1) % TOP.length;
         else if (b === GB.BTN.a) {
           var m = TOP[B.sel];
           if (m === "FIGHT") { B.phase = "moves"; B.msel = 0; }
+          else if (m === "SWITCH") { B.phase = "switch"; B.sw = window.EH_STATE.active; }
           else if (m === "STUDY") doStudy();
           else if (m === "CATCH") doCatch();
           else if (m === "RUN") doRun();
@@ -225,6 +281,15 @@
         else if (b === GB.BTN.down) B.msel = (B.msel + 1) % mv.length;
         else if (b === GB.BTN.b) B.phase = "menu";
         else if (b === GB.BTN.a) applyMove(mv[B.msel]);
+      } else if (B.phase === "switch" || B.phase === "forceswitch") {
+        var party = window.EH_STATE.party, n = party.length;
+        if (b === GB.BTN.up) B.sw = (B.sw + n - 1) % n;
+        else if (b === GB.BTN.down) B.sw = (B.sw + 1) % n;
+        else if (b === GB.BTN.b && B.phase === "switch") B.phase = "menu";   // can't cancel a forced switch
+        else if (b === GB.BTN.a) {
+          if (party[B.sw].stats.hp <= 0 || B.sw === window.EH_STATE.active) return;  // pick a fresh one
+          switchTo(B.sw, B.phase === "forceswitch");
+        }
       }
     },
     update: function (dt) {
@@ -339,14 +404,15 @@
     var by = 122, bh = GB.H - by - 2;
     function cmdList(items, sel) {
       GB.boxR(150, by, GB.W - 150, bh, "panel", "navy");
-      var mx = 164, my0 = by + 5;
+      var mx = 164, my0 = by + 4, sp = items.length > 4 ? 7 : 8;
       for (var i = 0; i < items.length; i++) {
-        var ty = my0 + i * 8;
+        var ty = my0 + i * sp;
         if (i === sel) GB.cursor(mx - 9, ty, "white");
         GB.text(items[i], mx, ty, "white");
       }
     }
     if (B.phase === "menu") {
+      var TOP = topMenu();
       GB.boxR(0, by, 150, bh);                       // prompt window
       if (TOP[B.sel] === "CATCH" && !B.trainer) {     // show the capture read
         GB.text("CAPTURE READ:", 9, by + 9, "ink");
@@ -364,6 +430,18 @@
       GB.text("CHOOSE A MOVE", 9, by + 9, "ink");
       GB.text("B: BACK", 9, by + 21, "dim");
       cmdList(mv.map(function (m) { return m.name; }), B.msel);
+    } else if (B.phase === "switch" || B.phase === "forceswitch") {
+      // a full-width party list: name, level, HP
+      GB.boxR(0, by, GB.W, bh);
+      GB.text(B.phase === "forceswitch" ? "SEND OUT WHO?" : "SWITCH TO?  (B: BACK)", 8, by + 8, "ink");
+      var party = window.EH_STATE.party;
+      for (var i = 0; i < party.length && i < 6; i++) {
+        var cr = party[i], col = i % 3, row = (i / 3) | 0;
+        var tx = 8 + col * 78, ty = by + 19 + row * 11, fainted = cr.stats.hp <= 0;
+        if (i === B.sw) GB.cursor(tx - 7, ty, "red");
+        var c2 = fainted ? "dim" : (i === window.EH_STATE.active ? "blue" : "ink");
+        GB.text(shortName(cr).slice(0, 6) + " " + Math.ceil(cr.stats.hp) + "/" + cr.stats.maxhp, tx, ty, c2);
+      }
     } else {
       GB.boxR(0, by, GB.W, bh);
       var lines = B.msgText.split("\n");

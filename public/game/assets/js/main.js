@@ -7,9 +7,6 @@
 (function () {
   "use strict";
   var GB = window.GB;
-  var INTRO_KEY = "eh_seen_intro_v2";
-  function sawIntro() { try { return !!localStorage.getItem(INTRO_KEY); } catch (e) { return false; } }
-  function setIntro() { try { localStorage.setItem(INTRO_KEY, "1"); } catch (e) {} }
 
   // The three Frontier legends the professor offers as a starter.
   function starterChoices() {
@@ -27,18 +24,52 @@
   function ensureStarter() {
     if (window.EH_STATE.party && window.EH_STATE.party.length) return;
     var picks = starterChoices();
-    if (picks[0]) { window.EH_STATE.roster[picks[0].addr] = { level: 5, xp: 0 }; window.EH_SAVE.setActive(picks[0].addr); }
+    if (picks[0]) { window.EH_SAVE.setStarter(picks[0].addr); }
   }
 
   function labIntro() {
-    setIntro();
     window.EH_UI.dialog([
-      "PROF. NAKAMOTO|Ah, you made it! Welcome to my lab.",
-      "PROF. NAKAMOTO|I study the smart contracts deployed across all of Ethereum's history - fossils of every idea anyone ever shipped on-chain.",
-      "PROF. NAKAMOTO|Hundreds are documented so far. Your quest: walk the seven eras, find them in the wild, and record them in the Historian's Dex.",
-      "PROF. NAKAMOTO|Three Frontier legends rest on my table - all level 5, all green. Choose the one that calls to you, and raise it as you travel.",
-      "PROF. NAKAMOTO|In tall grass you'll meet wild contracts. ANALYZE to weaken, STUDY to learn their story (it's safe!), then throw an ARCHIVE BALL."
+      "PROF. NAKAMOTO|Ah, you made it! Welcome to my lab. First - what should I call you, historian?"
+    ], function () { nameEntry(function () { afterName(); }); });
+  }
+  function afterName() {
+    window.EH_UI.dialog([
+      "PROF. NAKAMOTO|{NAME}! A fine name. I study the smart contracts deployed across all of Ethereum's history.",
+      "PROF. NAKAMOTO|Your quest: walk the seven eras, find these contracts in the wild, and record them in your Historian's Dex.",
+      "PROF. NAKAMOTO|Three Frontier legends rest on my table - all level 5. Choose the one that calls to you, {NAME}.",
+      "PROF. NAKAMOTO|In tall grass you'll meet wild contracts. ANALYZE to weaken, STUDY to learn their story, then throw an ARCHIVE BALL."
     ], chooseStarter);
+  }
+
+  // ---- name-entry scene (GBA on-screen keyboard) -----------------------
+  function nameEntry(onDone) {
+    var rows = ["ABCDEFGHI", "JKLMNOPQR", "STUVWXYZ.", "0123456789"], name = "", cr = 0, cc = 0, MAX = 9, t = 0;
+    GB.push({
+      onPress: function (b) {
+        if (b === GB.BTN.up) cr = (cr + rows.length - 1) % rows.length;
+        else if (b === GB.BTN.down) cr = (cr + 1) % rows.length;
+        else if (b === GB.BTN.left) cc = (cc + rows[cr].length - 1) % rows[cr].length;
+        else if (b === GB.BTN.right) cc = (cc + 1) % rows[cr].length;
+        else if (b === GB.BTN.a) { if (name.length < MAX) name += rows[cr][Math.min(cc, rows[cr].length - 1)]; }
+        else if (b === GB.BTN.b) { name = name.slice(0, -1); }
+        else if (b === GB.BTN.start) { window.EH_STATE.name = (name.trim() || "HISTORIAN").toUpperCase(); window.EH_SAVE.save(); GB.pop(); if (onDone) onDone(); }
+        if (cc >= rows[cr].length) cc = rows[cr].length - 1;
+      },
+      update: function (dt) { t += dt; },
+      render: function () {
+        GB.clear("box");
+        GB.rect(0, 0, GB.W, 16, "blue"); GB.rect(0, 16, GB.W, 1, "navy");
+        GB.text("NAME YOUR HISTORIAN", 8, 5, "white");
+        GB.boxR(40, 24, 160, 16);
+        GB.text(name.toUpperCase() + (Math.floor(t * 2) % 2 ? "_" : ""), 48, 28, "ink");
+        for (var ri = 0; ri < rows.length; ri++) for (var ci = 0; ci < rows[ri].length; ci++) {
+          var gx = 28 + ci * 21, gy = 52 + ri * 16;
+          if (ri === cr && ci === cc) GB.cursor(gx - 8, gy, "red");
+          GB.text(rows[ri][ci], gx, gy, "ink");
+        }
+        GB.text("A: type   B: delete   START: OK", 14, GB.H - 10, "dim");
+      }
+    });
   }
 
   // ---- starter selection scene -----------------------------------------
@@ -52,8 +83,7 @@
         else if (b === GB.BTN.right) sel = (sel + 1) % picks.length;
         else if (b === GB.BTN.a) {
           var c = picks[sel];
-          window.EH_STATE.roster[c.addr] = { level: 5, xp: 0 };
-          window.EH_SAVE.setActive(c.addr);
+          window.EH_SAVE.setStarter(c.addr);
           GB.pop();
           window.EH_UI.dialog([
             "PROF. NAKAMOTO|" + window.EH_CREATURES.nameFor(c) + ", level 5 - an excellent choice!",
@@ -100,7 +130,7 @@
     t: 0,
     enter: function () { if (signinEl) { signinEl.style.display = "flex"; if (window.EH_AUTH) window.EH_AUTH.renderButton(signinEl.querySelector(".gbtn")); } },
     exit: function () { if (signinEl) signinEl.style.display = "none"; },
-    onPress: function (b) { if (b === GB.BTN.start || b === GB.BTN.a) startGame(); },
+    onPress: function (b) { if (b === GB.BTN.start || b === GB.BTN.a) openSlots(); },
     update: function (dt) { this.t += dt; },
     render: function () {
       var t = this.t, W = GB.W, feats = featList();
@@ -129,16 +159,43 @@
     }
   };
 
-  function startGame() {
-    if (!sawIntro()) {
-      window.EH_WORLD.loadZone("lab");
-      GB.replace(window.EH_WORLD.scene());
-      labIntro();
-    } else {
-      ensureStarter();
-      GB.replace(window.EH_WORLD.scene());
-    }
+  // ---- save-slot select (CONTINUE / NEW GAME) --------------------------
+  function openSlots() {
+    var sel = 0, t = 0;
+    GB.push({
+      onPress: function (b) {
+        if (b === GB.BTN.up) sel = (sel + 2) % 3;
+        else if (b === GB.BTN.down) sel = (sel + 1) % 3;
+        else if (b === GB.BTN.b) GB.pop();
+        else if (b === GB.BTN.select) { if (window.EH_SAVE.hasSlot(sel + 1)) window.EH_SAVE.newGame(sel + 1); }  // erase
+        else if (b === GB.BTN.a) {
+          var n = sel + 1;
+          if (window.EH_SAVE.hasSlot(n)) { window.EH_SAVE.setSlot(n); GB.pop(); startContinue(); }
+          else { window.EH_SAVE.newGame(n); GB.pop(); startNew(); }
+        }
+      },
+      update: function (dt) { t += dt; },
+      render: function () {
+        GB.clear("sky");
+        GB.rect(0, 116, GB.W, GB.H - 116, "grass"); GB.rect(0, 116, GB.W, 2, "grassD");
+        GB.boxR(GB.W / 2 - 72, 6, 144, 14); GB.textCenter("CHOOSE A SAVE SLOT", GB.W / 2, 10, "ink");
+        for (var i = 0; i < 3; i++) {
+          var n = i + 1, y = 30, sum = window.EH_SAVE.slotSummary(n);
+          y = 30 + i * 26;
+          GB.boxR(18, y, GB.W - 36, 22, i === sel ? "gray1" : "box", i === sel ? "red" : "boxBorder");
+          GB.text("SLOT " + n, 26, y + 4, "ink");
+          if (sum) { GB.text(sum.name.slice(0, 10) + "  " + sum.docs + " DOCS", 26, y + 13, "blue"); GB.text(sum.zone.toUpperCase().slice(0, 8), GB.W - 90, y + 13, "dim"); }
+          else GB.text("- NEW GAME -", 26, y + 13, "dim");
+          if (i === sel) GB.triDown(GB.W - 28, y + 8, "red");
+        }
+        GB.text("A: play   SELECT: erase   B: back", 18, GB.H - 9, "dim");
+      }
+    });
   }
+  function startContinue() { ensureStarter(); GB.replace(window.EH_WORLD.scene()); }
+  function startNew() { window.EH_WORLD.loadZone("lab"); GB.replace(window.EH_WORLD.scene()); labIntro(); }
+  // return to the title (the EXIT menu option) — saves first
+  window.EH_GAME = { toTitle: function () { if (window.EH_SAVE) window.EH_SAVE.persistLead(); GB.replace(title); } };
 
   // ---- loading / error scenes (wait for the archive to load) -----------
   var loading = {

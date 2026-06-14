@@ -296,15 +296,16 @@
     level = level || 1;
     var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;   // 1..5
     var size = c.size || 400, b = TYPE_BIAS[c.cat] || TYPE_BIAS.UNKNOWN;
-    // a deterministic per-contract "nature": ±12% spread per stat, so a given
-    // contract always has the same individual character (and catching a better
-    // roll of the same contract is worth it).
+    // a deterministic per-contract "nature": a small ±8% spread per stat, so a
+    // creature has individual character without making a level edge unreliable.
     var rnd = GB.rng(GB.hashStr(c.addr + "|nature"));
-    function nat() { return 0.88 + rnd() * 0.24; }
-    var hp  = Math.round((16 + level * 1.6 + stars * 2 + Math.log2(size + 1) * 1.2) * b.hp * nat());
-    var atk = Math.round((5 + level * 0.75 + stars) * b.atk * nat());
-    var def = Math.round((2 + level * 0.30 + stars) * b.def * nat());
-    var spd = Math.round((5 + level * 0.70 + stars * 0.5) * b.spd * nat());
+    function nat() { return 0.92 + rnd() * 0.16; }
+    // lower HP base + stronger ATK + level-weighted damage → a level advantage is
+    // decisive (an L5 cleanly beats an L3) and fights stay short.
+    var hp  = Math.round((10 + level * 2.0 + stars * 1.5 + Math.log2(size + 1) * 0.8) * b.hp * nat());
+    var atk = Math.round((6 + level * 1.0 + stars * 1.2) * b.atk * nat());
+    var def = Math.round((1 + level * 0.25 + stars * 0.8) * b.def * nat());
+    var spd = Math.round((5 + level * 0.8 + stars * 0.5) * b.spd * nat());
     return { hp: hp, maxhp: hp, atk: Math.max(1, atk), def: Math.max(1, def), spd: Math.max(1, spd), lvl: level };
   }
 
@@ -355,13 +356,18 @@
   // ---- moves: learned as a creature LEVELS UP (last 4 known are usable) ------
   // EH-flavoured: ANALYZE reads it, CRACK breaks its bytecode open, ACQUIRE buys
   // in (and softens it for capture), BURN/REENTER/FORK hit harder.
+  // Damage moves (pow>0) and STATUS moves (pow 0, change stat stages). `self`/
+  // `foe` adjust the named stage on you / the opponent. crit raises crit chance.
   var MOVELIST = [
     { name: "ANALYZE", lv: 1, pow: 1.0, verb: "analyzed" },
-    { name: "CRACK", lv: 6, pow: 1.35, verb: "cracked open" },
-    { name: "ACQUIRE", lv: 12, pow: 1.1, verb: "acquired a stake in", catchBoost: true },
-    { name: "BURN", lv: 18, pow: 1.6, verb: "burned" },
-    { name: "REENTER", lv: 26, pow: 1.95, verb: "reentered" },
-    { name: "FORK", lv: 34, pow: 2.3, verb: "forked" }
+    { name: "CRACK", lv: 5, pow: 1.35, verb: "cracked open" },
+    { name: "FRONTRUN", lv: 8, pow: 0, verb: "front-ran", stage: "spd", self: 1, foe: -1, msg: "Speed up, foe slowed!" },
+    { name: "ACQUIRE", lv: 11, pow: 1.05, verb: "acquired a stake in", catchBoost: true },
+    { name: "BURN", lv: 15, pow: 1.6, verb: "burned" },
+    { name: "SNIPE", lv: 19, pow: 0, verb: "took aim at", stage: "crit", self: 2, msg: "Critical-hit chance up!" },
+    { name: "RUGPULL", lv: 23, pow: 0.85, verb: "rug-pulled", stage: "atk", foe: -1, msg: "Foe's power fell!" },
+    { name: "REENTER", lv: 28, pow: 1.95, verb: "reentered" },
+    { name: "FORK", lv: 34, pow: 2.4, verb: "forked" }
   ];
   function movesFor(cr) {
     var lv = cr.level || (cr.stats && cr.stats.lvl) || 1;

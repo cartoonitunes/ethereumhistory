@@ -34,6 +34,7 @@
       if (bar > 0 && bar < 18 && p.slice(0, bar) === p.slice(0, bar).toUpperCase()) {
         speaker = p.slice(0, bar); body = p.slice(bar + 1);
       }
+      body = body.replace(/\{NAME\}/g, (window.EH_STATE && window.EH_STATE.name) || "HISTORIAN");
       var lines = wrap(body);
       for (var i = 0; i < lines.length; i += 2) groups.push({ sp: speaker, lines: lines.slice(i, i + 2) });
     });
@@ -453,7 +454,7 @@
       signs: [],
       npcs: [
         { x: 5, y: 3, spr: "prof", name: "PROF. NAKAMOTO", text: ["PROF. NAKAMOTO|Welcome to my lab! I study the contracts deployed across Ethereum's history.", "PROF. NAKAMOTO|Every contract is a fossil of an idea. Most have never been documented.", "PROF. NAKAMOTO|That's YOUR quest: explore the seven eras, encounter the contracts, and CATCH them for the Historian's Dex."] },
-        { x: 9, y: 7, spr: "kid", name: "AIDE", text: ["AIDE|Walk into tall grass to find wild contracts. Walk into a door to go inside. Press A to read signs and talk to folks. START opens your menu!"] }
+        { x: 9, y: 7, spr: "kid", name: "AIDE", text: ["AIDE|Hi {NAME}! Walk into tall grass to find wild contracts. Walk into doors to go inside. Press A to read signs and talk to folks. START opens your menu!"] }
       ]
     }
   };
@@ -570,12 +571,12 @@
     if (window.EH_STATE && !world.zone.interior) window.EH_STATE.pos = { zone: id, x: world.px, y: world.py };
   }
 
-  // restore the lead to full HP (returns true if any healing was needed)
+  // restore the WHOLE party to full HP (returns true if any healing was needed)
   function healParty() {
-    var p = window.EH_STATE && window.EH_STATE.party && window.EH_STATE.party[0];
-    if (!p) return false;
-    var need = p.stats.hp < p.stats.maxhp;
-    p.stats.hp = p.stats.maxhp;
+    var party = window.EH_STATE && window.EH_STATE.party;
+    if (!party || !party.length) return false;
+    var need = false;
+    party.forEach(function (c) { if (c.stats.hp < c.stats.maxhp) need = true; c.stats.hp = c.stats.maxhp; });
     return need;
   }
   // black-out: send the player back to the start of the current era (or frontier)
@@ -662,7 +663,8 @@
     dialog(intro, function () {
       var c = pickTrainerContract(zone, tr.use);
       if (!c) { dialog([tr.name + "|...I've misplaced my contract. Another time!"]); return; }
-      var lvl = TRAINER_LVL[zone] || ((window.EH_STATE.party[0] ? window.EH_STATE.party[0].level : 5) + 2);
+      var lead = window.EH_STATE.party[window.EH_STATE.active];
+      var lvl = TRAINER_LVL[zone] || ((lead ? lead.level : 5) + 2);
       var champion = zone === "constantinople";
       window.EH_BATTLE.startTrainer(window.EH_CREATURES.make(c, lvl, 0), {
         win: tr.win,
@@ -793,7 +795,7 @@
         else if (b === GB.BTN.b || b === GB.BTN.start) GB.pop();
         else if (b === GB.BTN.a) {
           var it = items[sel];
-          if (it === "EXIT") GB.pop();
+          if (it === "EXIT") { GB.pop(); if (window.EH_GAME) window.EH_GAME.toTitle(); }
           else if (it === "DEX") { GB.pop(); window.EH_COLLECTION.open(); }
           else if (it === "BAG") { GB.pop(); openBag(); }
           else if (it === "OPTIONS") { GB.pop(); openOptions(); }
@@ -833,14 +835,38 @@
     function line(z, nm) { return nm + " " + (ec.got[z] || 0) + "/" + (ec.totals[z] || 0); }
     dialog([
       "BAG|ARCHIVE BALLS: unlimited. Each one documents a contract into your Dex.",
-      "BAG|DOCUMENTED: " + st.collection.length + " / " + window.EH_DATA.contracts.length + " contracts.  LEAD: " + (st.party[0] ? st.party[0].name : "NONE") + ".",
+      "BAG|DOCUMENTED: " + st.collection.length + " / " + window.EH_DATA.contracts.length + " contracts.  TEAM: " + st.team.length + "/6, led by " + (st.party[st.active] ? st.party[st.active].name : "NONE") + ".",
       "PROGRESS|" + line("frontier", "FRONTIER") + "   " + line("homestead", "HOMESTEAD") + "   " + line("dao", "DAO") + "   " + line("byzantium", "BYZANTIUM"),
       "DAILY|CONTRACT OF THE DAY: " + (daily ? daily.name + " (" + daily.zone.toUpperCase() + "). " + daily.blurb : "loading...") + " Find it in the wild today!"
     ]);
   }
   function openOptions() {
-    dialog(["OPTIONS|TEXT SPEED: NORMAL.   SOUND: OFF (silent build).",
-            "OPTIONS|Progress auto-saves on every catch. Sign in on the title screen to sync across devices."]);
+    var items = ["SOUND & MUSIC", "BACK"], sel = 0;
+    GB.push({
+      onPress: function (b) {
+        if (b === GB.BTN.up) sel = (sel + items.length - 1) % items.length;
+        else if (b === GB.BTN.down) sel = (sel + 1) % items.length;
+        else if (b === GB.BTN.b || b === GB.BTN.start) GB.pop();
+        else if (b === GB.BTN.left || b === GB.BTN.right || b === GB.BTN.a) {
+          if (sel === 0 && window.EH_AUDIO) window.EH_AUDIO.toggle();
+          else if (sel === 1 && b === GB.BTN.a) GB.pop();
+        }
+      },
+      render: function () {
+        GB.clear("box");
+        GB.rect(0, 0, GB.W, 16, "blue"); GB.rect(0, 16, GB.W, 1, "navy");
+        GB.text("OPTIONS", 8, 5, "white");
+        var on = window.EH_AUDIO && window.EH_AUDIO.isEnabled();
+        for (var i = 0; i < items.length; i++) {
+          var y = 44 + i * 18;
+          if (i === sel) GB.cursor(20, y, "red");
+          GB.text(items[i], 30, y, "ink");
+          if (i === 0) GB.text(on ? "ON" : "OFF", 160, y, on ? "hpGreen" : "dim");
+        }
+        GB.text("A / LEFT-RIGHT: toggle    B: back", 14, GB.H - 24, "dim");
+        GB.text("Music is original 8-bit chiptune.", 14, GB.H - 12, "dim");
+      }
+    });
   }
 
   window.EH_WORLD = { scene: function () { return world; }, loadZone: loadZone, dialog: dialog, ZONES: ZONES, recover: recover, healParty: healParty };

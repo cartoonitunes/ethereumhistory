@@ -142,8 +142,11 @@ function nonEmpty(s?: string | null): boolean { return !!(s && s.trim().length >
 // curated name patterns force the most coveted contracts (and their wrappers/
 // siblings, per the "a wrapper is as important as the original" principle) into
 // the top tiers regardless of the algorithmic score.
-const ALWAYS_LEGENDARY = /^the ?dao$|^thedao|cryptopunk|mooncat|^mistcoin|etheria v0|cryptokitt|ethereum name service|^ens$|^maker$|makerdao|^mkr$|digix gold/i;
-const ALWAYS_EPIC = /unicorn meat|^unicorns?\b|darkdao|the ?dao extra|digixdao|^dgd$|golem|^gnt$|augur|0xbitcoin|curio cards original|curio.*factory|gavcoin|etheria v1|wrapped ?ether|^weth$/i;
+// Unicorns + Unicorn Meat are LEGENDARY: alongside MistCoin they're the only
+// contracts made by the Ethereum team/Foundation itself (avsa), and they shaped
+// how developers thought about tokens and on-chain swaps at the time.
+const ALWAYS_LEGENDARY = /^the ?dao$|^thedao|cryptopunk|mooncat|^mistcoin|etheria v0|cryptokitt|ethereum name service|^ens$|^maker$|makerdao|^mkr$|digix gold|unicorn/i;
+const ALWAYS_EPIC = /darkdao|the ?dao extra|digixdao|^dgd$|golem|^gnt$|augur|0xbitcoin|curio cards original|curio.*factory|gavcoin|etheria v1|wrapped ?ether|^weth$/i;
 // a project is "famous" (a notability nudge) if it matches either tier
 const FAMOUS = new RegExp(ALWAYS_LEGENDARY.source + "|" + ALWAYS_EPIC.source, "i");
 
