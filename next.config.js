@@ -27,6 +27,12 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      // the EH Explorer game is a static canvas app served from public/game/
+      { source: "/game", destination: "/game/index.html" },
+    ];
+  },
 };
 
 module.exports = nextConfig;

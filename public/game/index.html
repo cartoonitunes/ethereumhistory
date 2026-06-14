@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<base href="/game/"/>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
+<meta name="theme-color" content="#0f380f"/>
+<meta name="description" content="A Game Boy-style RPG where you explore Ethereum's history, encounter historic smart contracts as creatures, and catch them for your collection."/>
+<title>Ethereum History — Explorer</title>
+<link rel="manifest" href="manifest.json"/>
+<style>
+  :root { --gb0:#9bbc0f; --gb3:#0f380f; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; width: 100%; overflow: hidden;
+    background: #0b1a0b; color: #9bbc0f;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  /* the GB screen — letterboxed, pixel-crisp, positioned by engine.js */
+  #screen {
+    position: absolute; image-rendering: pixelated; image-rendering: crisp-edges;
+    background: #0f380f;
+    box-shadow: 0 0 0 4px #1a1a1a, 0 0 40px rgba(0,0,0,.6);
+  }
+
+  /* title-screen Google sign-in (DOM, overlaid near the bottom) */
+  #signin {
+    position: fixed; left: 0; right: 0; bottom: 14px; z-index: 20;
+    display: none; flex-direction: column; align-items: center; gap: 6px;
+    pointer-events: none;
+  }
+  #signin .gbtn { pointer-events: auto; min-height: 40px; }
+  #signin .signed { display: none; }
+
+  /* touch controls — only shown on touch / small screens */
+  #touch { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
+  .pad { position: absolute; pointer-events: auto; }
+  .pad div {
+    position: absolute; background: rgba(15,56,15,.55); border: 2px solid rgba(155,188,15,.5);
+    border-radius: 8px; color: #9bbc0f; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-family: ui-monospace, monospace; font-size: 18px;
+  }
+  .pad div.on { background: rgba(155,188,15,.6); color: #0f380f; }
+  /* d-pad, lower-left */
+  #dpad { left: 16px; bottom: 24px; width: 132px; height: 132px; }
+  #btn-up    { left: 46px; top: 0;    width: 40px; height: 44px; border-radius: 8px 8px 0 0; }
+  #btn-down  { left: 46px; top: 88px; width: 40px; height: 44px; border-radius: 0 0 8px 8px; }
+  #btn-left  { left: 0;    top: 46px; width: 44px; height: 40px; border-radius: 8px 0 0 8px; }
+  #btn-right { left: 88px; top: 46px; width: 44px; height: 40px; border-radius: 0 8px 8px 0; }
+  #btn-mid   { left: 46px; top: 46px; width: 40px; height: 40px; background: rgba(15,56,15,.55); border: 2px solid rgba(155,188,15,.5); }
+  /* A / B, lower-right */
+  #ab { right: 16px; bottom: 36px; width: 132px; height: 96px; }
+  #btn-a { right: 0;  bottom: 36px; width: 56px; height: 56px; border-radius: 50%; }
+  #btn-b { right: 64px; bottom: 4px; width: 56px; height: 56px; border-radius: 50%; }
+  /* START, bottom-center */
+  #start-wrap { left: 50%; bottom: 6px; transform: translateX(-50%); width: 84px; height: 26px; }
+  #btn-start { left: 0; top: 0; width: 84px; height: 26px; border-radius: 13px; font-size: 11px; letter-spacing: 1px; }
+
+  @media (pointer: coarse) { #touch { display: block; } }
+  body.show-touch #touch { display: block; }
+</style>
+</head>
+<body>
+  <canvas id="screen" width="240" height="160"></canvas>
+
+  <!-- Google Sign-In (title screen only). The game plays signed-out too. -->
+  <div id="signin">
+    <div class="gbtn"></div>
+    <div class="signed">SAVING TO YOUR ACCOUNT</div>
+  </div>
+
+  <!-- on-screen controls for touch devices -->
+  <div id="touch" aria-hidden="true">
+    <div id="dpad" class="pad">
+      <div id="btn-up">▲</div>
+      <div id="btn-down">▼</div>
+      <div id="btn-left">◀</div>
+      <div id="btn-right">▶</div>
+      <div id="btn-mid"></div>
+    </div>
+    <div id="ab" class="pad">
+      <div id="btn-a">A</div>
+      <div id="btn-b">B</div>
+    </div>
+    <div id="start-wrap" class="pad">
+      <div id="btn-start">START</div>
+    </div>
+  </div>
+
+  <!-- Google Identity Services (loads async; calls window.onGoogleLibraryLoad) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- the game: engine first, then data → creatures → world → battle → save,
+       then main.js boots everything. All plain JS, no build step. The ?v query
+       busts the immutable asset cache (see vercel.json) — bump on each release. -->
+  <script src="assets/js/engine.js?v=14"></script>
+  <script src="assets/js/data.js?v=14"></script>
+  <script src="assets/js/creatures.js?v=14"></script>
+  <script src="assets/js/world.js?v=14"></script>
+  <script src="assets/js/battle.js?v=14"></script>
+  <script src="assets/js/save.js?v=14"></script>
+  <script src="assets/js/main.js?v=14"></script>
+</body>
+</html>

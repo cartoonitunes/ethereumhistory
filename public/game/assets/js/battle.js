@@ -1,0 +1,302 @@
+/* battle.js - a faithful Pokémon Red / Blue battle screen.
+ *
+ * Layout (the Gen-1 arrangement, exactly):
+ *   - enemy HP/name box  : top-LEFT       (name + level + HP bar, no numbers)
+ *   - enemy sprite        : top-RIGHT      on a curved platform
+ *   - player sprite (back): bottom-LEFT    on a curved platform
+ *   - player HP/name box  : bottom-RIGHT   (name + level + HP bar + HP numbers)
+ *   - message / menu box  : full-width bottom window
+ *   - action menu         : FIGHT / ITEM / CATCH / RUN, 2x2, bottom-right
+ *
+ * Entry animation: the enemy slides in from the right and your creature slides
+ * in from the left, then the "Wild X appeared!" text types out. Messages use
+ * the typewriter reveal with the blinking ▼ continue arrow.
+ *
+ * The four actions keep the original mechanics under Pokémon-flavoured labels:
+ *   FIGHT → ANALYZE attack   ITEM → STUDY the contract (Pokédex-style)
+ *   CATCH → throw an ARCHIVE BALL   RUN → flee
+ */
+(function () {
+  "use strict";
+  var GB = window.GB;
+  var MSG_SPEED = 34; // chars/sec for the typewriter
+
+  var B = null;
+
+  function shortName(cr) { return cr.name.replace(/\s*\(.*$/, ""); }
+
+  function getActive() {
+    var st = window.EH_STATE;
+    if (st.active && st.active.stats.hp > 0) return st.active;
+    var lead = st.party && st.party[0];
+    if (!lead) {
+      var c = window.EH_DATA.byAddr("0xd0a6e6c54dbc68db5db3a091b171a77407ff7ccf")
+            || window.EH_DATA.contracts[0];
+      lead = window.EH_CREATURES.make(c);
+      st.party = [lead];
+    }
+    st.active = cloneFresh(lead);
+    return st.active;
+  }
+  function cloneFresh(cr) {
+    var n = window.EH_CREATURES.make(cr.contract);
+    n.stats.hp = n.stats.maxhp;
+    return n;
+  }
+
+  function start(wild) {
+    var mine = getActive();
+    mine.stats.hp = mine.stats.maxhp;
+    B = {
+      wild: wild, mine: mine,
+      sel: 0, studied: 0,
+      phase: "enter", enterT: 0,
+      queue: [], after: null,
+      msgText: "", msgRev: 0, msgDone: false,
+      t: 0, shakeWild: 0, flashMine: 0, ballT: 0, caught: false,
+      hpAnimW: 1, hpAnimM: 1 // displayed HP fractions (animate toward real)
+    };
+    if (GB.current() !== scene) GB.push(scene);
+  }
+
+  // ---- message queue + typewriter -------------------------------------
+  function say(msgs, after) {
+    B.queue = (typeof msgs === "string") ? [msgs] : msgs.slice();
+    B.after = after || null;
+    B.phase = "msg";
+    loadMsg(B.queue[0] || "");
+  }
+  function loadMsg(str) {
+    var lines = GB.wrap(str, GB.W - 18).slice(0, 2);
+    B.msgText = lines.join("\n");
+    B.msgRev = 0; B.msgDone = false;
+  }
+  function advanceMsg() {
+    if (!B.msgDone) { B.msgRev = GB.glyphCount(B.msgText); B.msgDone = true; return; }
+    B.queue.shift();
+    if (B.queue.length) { loadMsg(B.queue[0]); }
+    else { var fn = B.after; B.after = null; if (fn) fn(); else toMenu(); }
+  }
+
+  // ---- combat maths ----------------------------------------------------
+  // Punchy: a hit lands ~30-50% of a foe's HP, so fights resolve in 2-4 turns
+  // (with creatures.js's lower HP). Encounters are quick learning beats.
+  function damage(att, def) {
+    var base = att.stats.atk * (0.72 + att.stats.lvl / 110);
+    var d = base * (0.85 + 0.30 * Math.random()) - def.stats.def * 0.35;
+    return Math.max(2, Math.round(d));
+  }
+  function catchChance() {
+    var w = B.wild, base = w.rarityInfo.catch;
+    var hpFrac = w.stats.hp / w.stats.maxhp;
+    var hpBoost = 1 + (1 - hpFrac) * 1.4;
+    var studyBoost = B.studied * 0.07;
+    return Math.max(0.04, Math.min(0.96, base * hpBoost + studyBoost));
+  }
+
+  // ---- actions ---------------------------------------------------------
+  function doFight() {
+    var dmg = damage(B.mine, B.wild);
+    B.wild.stats.hp = Math.max(0, B.wild.stats.hp - dmg);
+    B.shakeWild = 0.45;
+    var msgs = [shortName(B.mine) + " used ANALYZE!"];
+    if (B.wild.stats.hp <= 0) {
+      msgs.push("Enemy " + shortName(B.wild) + " is fully exposed! Catch it now!");
+      say(msgs, toMenu);
+    } else {
+      say(msgs, function () { enemyTurn(toMenu); });
+    }
+  }
+  function doStudy() {
+    B.studied++;
+    var w = B.wild, c = w.contract;
+    var pages = [shortName(w) + " - a " + w.type + " from " + c.year + ". " + (c.rarity || "") + "."];
+    if (c.blurb) pages.push(c.blurb);
+    if (c.sig && c.sig !== c.blurb) pages.push(c.sig);
+    pages.push("Documented on Ethereum History. Studying raised your catch odds!");
+    say(pages, function () { enemyTurn(toMenu); });
+  }
+  function doCatch() {
+    var p = catchChance();
+    B.ballT = 1.1;
+    if (Math.random() < p) {
+      B.caught = true;
+      window.EH_SAVE.addCatch(B.wild);
+      say(["You used ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was caught!",
+           "Added to your HISTORIAN'S DEX."], end);
+    } else {
+      say(["You used ARCHIVE BALL!", "Argh! " + shortName(B.wild) + " broke free!"],
+          function () { enemyTurn(toMenu); });
+    }
+  }
+  function doRun() { say(["Got away safely!"], end); }
+
+  function enemyTurn(after) {
+    var dmg = damage(B.wild, B.mine);
+    B.mine.stats.hp = Math.max(0, B.mine.stats.hp - dmg);
+    B.flashMine = 0.45;
+    var msgs = ["Enemy " + shortName(B.wild) + " strikes back!"];
+    if (B.mine.stats.hp <= 0) {
+      msgs.push(shortName(B.mine) + " is overwhelmed!", "You retreat to study another day.");
+      say(msgs, end);
+    } else { say(msgs, after); }
+  }
+
+  function toMenu() { B.phase = "menu"; }
+  function end() { B.mine.stats.hp = B.mine.stats.maxhp; GB.pop(); }
+
+  // ---- input -----------------------------------------------------------
+  // Labels say what they do: ANALYZE weakens, STUDY teaches (and raises catch
+  // odds), CATCH throws an Archive Ball, RUN flees.
+  var MOVES = ["ANALYZE", "STUDY", "CATCH", "RUN"];
+  var scene = {
+    onPress: function (b) {
+      if (!B) return;
+      if (B.phase === "msg") {
+        if (b === GB.BTN.a || b === GB.BTN.b) advanceMsg();
+        return;
+      }
+      if (B.phase === "menu") {
+        if (b === GB.BTN.up) B.sel = (B.sel + MOVES.length - 1) % MOVES.length;
+        else if (b === GB.BTN.down) B.sel = (B.sel + 1) % MOVES.length;
+        else if (b === GB.BTN.a) {
+          var m = MOVES[B.sel];
+          if (m === "ANALYZE") doFight();
+          else if (m === "STUDY") doStudy();
+          else if (m === "CATCH") doCatch();
+          else if (m === "RUN") doRun();
+        }
+      }
+    },
+    update: function (dt) {
+      if (!B) return;
+      B.t += dt;
+      if (B.phase === "enter") {
+        B.enterT += dt / 0.55;
+        if (B.enterT >= 1) { B.enterT = 1; say(["Wild " + shortName(B.wild) + " appeared!"], toMenu); }
+      }
+      if (B.phase === "msg" && !B.msgDone) {
+        B.msgRev += dt * MSG_SPEED;
+        if (B.msgRev >= GB.glyphCount(B.msgText)) { B.msgRev = GB.glyphCount(B.msgText); B.msgDone = true; }
+      }
+      if (B.shakeWild > 0) B.shakeWild -= dt;
+      if (B.flashMine > 0) B.flashMine -= dt;
+      if (B.ballT > 0) B.ballT -= dt;
+      // ease the displayed HP bars toward the true values
+      var tw = B.wild.stats.hp / B.wild.stats.maxhp;
+      var tm = B.mine.stats.hp / B.mine.stats.maxhp;
+      B.hpAnimW += (tw - B.hpAnimW) * Math.min(1, dt * 6);
+      B.hpAnimM += (tm - B.hpAnimM) * Math.min(1, dt * 6);
+    },
+    render: function () { render(); }
+  };
+
+  // ---- rendering -------------------------------------------------------
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function hpBar(x, y, w, frac) {
+    GB.rect(x - 1, y - 1, w + 2, 7, "ink");        // dark frame
+    GB.rect(x, y, w, 5, "navy");
+    GB.rect(x, y, w, 1, "white"); GB.rect(x, y + 1, w, 3, "white"); // white track
+    var fw = Math.max(0, Math.round(w * frac));
+    var fill = frac > 0.5 ? "hpGreen" : frac > 0.2 ? "hpYellow" : "hpRed";
+    GB.rect(x, y + 1, fw, 3, fill); GB.rect(x, y + 1, fw, 1, "white");
+  }
+  // a green battle-field platform under a creature (FireRed oval-ish pad)
+  function platform(cx, y, w) {
+    GB.rect(cx - w / 2 + 6, y, w - 12, 3, "arenaD");
+    GB.rect(cx - w / 2, y + 3, w, 4, "arena");
+    GB.rect(cx - w / 2, y + 3, w, 1, "arenaD");
+    GB.rect(cx - w / 2 + 8, y + 7, w - 16, 2, "grassD");
+  }
+
+  // the HP/name plate (Gen-3 rounded box). `numbers` adds the HP readout.
+  function plate(x, y, cr, frac, numbers) {
+    var w = 108, h = numbers ? 36 : 30;
+    GB.boxR(x, y, w, h);
+    var nm = shortName(cr), lvl = "=L" + cr.stats.lvl, lw = GB.textWidth(lvl);
+    var maxc = Math.floor((w - 16 - lw) / GB.GADV);
+    GB.text(nm.slice(0, maxc), x + 7, y + 6, "ink");
+    GB.text(lvl, x + w - 7 - lw, y + 6, "ink");
+    GB.text("HP", x + 7, y + 18, "hpGreen");
+    hpBar(x + 24, y + 19, w - 33, frac);
+    if (numbers) {
+      var hpStr = Math.ceil(cr.stats.hp) + "/" + cr.stats.maxhp;
+      GB.text(hpStr, x + w - 7 - GB.textWidth(hpStr), y + 27, "ink");
+    } else {
+      GB.text(cr.type, x + 7, y + 26, "blue");
+      for (var i = 0; i < cr.rarityInfo.stars; i++) GB.rect(x + w - 9 - i * 5, y + 26, 3, 3, "gold");
+    }
+  }
+
+  function render() {
+    if (!B) return;
+    // FireRed-style field: pale sky top, green grass field on a soft horizon
+    GB.clear("sky");
+    GB.rect(0, 44, GB.W, 4, "skyD");
+    GB.rect(0, 48, GB.W, GB.H - 48, "arena");
+    GB.rect(0, 48, GB.W, 2, "arenaD");
+    GB.rect(0, 70, GB.W, 1, "grassD"); GB.rect(0, 92, GB.W, 1, "grassD");
+
+    var ep = B.phase === "enter" ? easeOut(B.enterT) : 1;
+    var enemyOff = (1 - ep) * 150;   // slides in from the right
+    var mineOff = (1 - ep) * 150;    // slides in from the left
+
+    // enemy sprite + platform (top-right)
+    var ecx = 178, ey = 12;
+    platform(ecx + enemyOff, 62, 76);
+    var ejit = B.shakeWild > 0 ? (Math.floor(B.t * 40) % 2 ? 2 : -2) : 0;
+    var ballHide = B.ballT > 0 && B.caught && B.ballT < 0.7;
+    if (!ballHide) GB.spriteO(B.wild.sprite, ecx - 32 + enemyOff + ejit, ey, 4, B.wild.ramp);
+
+    // player back sprite + platform (bottom-left)
+    var mcx = 58, my = 70;
+    platform(mcx - mineOff, 118, 76);
+    if (!(B.flashMine > 0 && Math.floor(B.t * 40) % 2)) GB.spriteO(B.mine.back, mcx - 32 - mineOff, my, 4, B.mine.ramp);
+
+    // archive-ball toss (arc from player toward the enemy) when catching
+    if (B.ballT > 0) {
+      var bp = 1 - (B.ballT / 1.1);
+      var bx = 56 + bp * 110, by = 96 - Math.sin(bp * Math.PI) * 64;
+      GB.rect(bx, by, 8, 8, "red"); GB.rect(bx + 1, by + 1, 6, 3, "redD");
+      GB.rect(bx + 1, by + 4, 6, 3, "white"); GB.rect(bx, by + 3, 8, 2, "ink");
+      GB.rect(bx + 3, by + 3, 2, 2, "gray1");
+    }
+
+    // HP plates slide in from the screen edges, settle once the entry is done
+    if (ep > 0.45) {
+      plate(10 - (1 - ep) * 120, 12, B.wild, B.hpAnimW, false);
+      plate(GB.W - 118 + (1 - ep) * 120, 86, B.mine, B.hpAnimM, true);
+    }
+    renderBottom();
+  }
+
+  function renderBottom() {
+    var by = 122, bh = GB.H - by - 2;
+    if (B.phase === "menu") {
+      GB.boxR(0, by, 150, bh);                       // prompt window
+      GB.text("WHAT WILL", 9, by + 9, "ink");
+      GB.text(shortName(B.mine).slice(0, 11), 9, by + 21, "blue");
+      GB.text("DO?", 9 + GB.textWidth(shortName(B.mine).slice(0, 11)) + 6, by + 21, "ink");
+      GB.boxR(150, by, GB.W - 150, bh, "panel", "navy"); // blue command menu
+      var mx = 164, my0 = by + 5;                          // vertical list (labels are long)
+      for (var i = 0; i < MOVES.length; i++) {
+        var ty = my0 + i * 8;
+        if (i === B.sel) GB.cursor(mx - 9, ty, "white");
+        GB.text(MOVES[i], mx, ty, "white");
+      }
+    } else {
+      GB.boxR(0, by, GB.W, bh);
+      var lines = B.msgText.split("\n");
+      var shown = Math.floor(B.msgRev), used = 0;
+      for (var L = 0; L < lines.length; L++) {
+        var room = Math.max(0, shown - used);
+        GB.text(lines[L], 10, by + 10 + L * (GB.GLINE + 2), "ink", room);
+        used += lines[L].length;
+      }
+      if (B.msgDone && B.queue.length && Math.floor(B.t * 3) % 2 === 0) GB.triDown(GB.W - 14, by + bh - 9, "red");
+    }
+  }
+
+  window.EH_BATTLE = { start: start, scene: function () { return scene; } };
+})();
