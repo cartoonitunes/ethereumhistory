@@ -269,13 +269,53 @@
       "F..................,.F",
       "F....,,......,,.....,F",
       "FFFFFFFFFFFFFFFFFFFFFF"
+    ],
+    // a lakeside route — a wide body of water below the path (water is impassable)
+    lake: [
+      "TTTTTTTTTTTTTTTTTTTTTT",
+      "T...rrr......rrr....TT",
+      "T...HwH......HwH....TT",
+      "T...HDH......HDH....TT",
+      "TPPPPPPPPPPPPPPPPPPPPT",
+      "T..,,....P....,,...STT",
+      "T........P.........TTT",
+      "WPPPPPPPPPPPPPPPPPPPPW",
+      "T..~~~~~......,,....TT",
+      "T.~~~~~~~~....,,....TT",
+      "T.~~~~~~~~.........TTT",
+      "T..~~~~~~....,,,....TT",
+      "T...~~~~....,,,.....TT",
+      "T.........,,.......TTT",
+      "T..................TTT",
+      "TTTTTTTTTTTTTTTTTTTTTT"
+    ],
+    // a rocky crag — boulders strewn across the route (rocks are impassable)
+    crag: [
+      "TTTTTTTTTTTTTTTTTTTTTT",
+      "T...rrr......rrr....TT",
+      "T...HwH......HwH....TT",
+      "T...HDH......HDH....TT",
+      "TPPPPPPPPPPPPPPPPPPPPT",
+      "T.R,,....P....,,.R.STT",
+      "T..,,..R.P..R.,,...TTT",
+      "WPPPPPPPPPPPPPPPPPPPPW",
+      "T..,,..R....R.,,....TT",
+      "T.R,,....RR...,,..R.TT",
+      "T....RR......RR....TTT",
+      "T..,,,...RR....,,,..TT",
+      "T..,,,.R.....R.,,,..TT",
+      "T...R.........R....TTT",
+      "T....R.....R.......TTT",
+      "TTTTTTTTTTTTTTTTTTTTTT"
     ]
   };
-  // per-template geometry: warp tiles, arrival spawns, and the sign tile.
+  // per-template geometry: warp tiles, arrival spawns, and the sign tile. lake &
+  // crag share the route geometry (horizontal path on row 7).
   var GEOM = {
     route: { warpW: { x: 0, y: 7 }, warpE: { x: 21, y: 7 }, spawnW: { x: 1, y: 7 }, spawnE: { x: 20, y: 7 }, sign: { x: 19, y: 5 } },
     town:  { warpW: { x: 0, y: 6 }, warpE: { x: 21, y: 6 }, spawnW: { x: 1, y: 6 }, spawnE: { x: 20, y: 6 }, sign: { x: 10, y: 11 } }
   };
+  function geomFor(tpl) { return tpl === "town" ? GEOM.town : GEOM.route; }
   // era ground tints (null = default lush green) - subtle per-era mood
   var TINTS = {
     frontier: null,
@@ -318,7 +358,7 @@
         { name: "SWAP SHED", tpl: "shop", npcs: [
           { x: 6, y: 3, spr: "gold", name: "MECHANIC", text: ["MECHANIC|Bok Consulting's TokenTraderFactory spun up a trading contract per token. Early DEX plumbing, years before AMMs."] } ] }
       ] },
-    { id: "dao", name: "DAO FORK", year: "2016", tpl: "route", rate: 0.13,
+    { id: "dao", name: "DAO FORK", year: "2016", tpl: "crag", rate: 0.13,
       sign: "DAO FORK - July 2016. THE DAO raised 12.7M ETH, then a reentrancy bug drained it. The chain hard-forked to claw it back. ETH and ETC were born here.  <<< HOMESTEAD   TANGERINE >>>",
       npcs: [
         { spr: "purple", name: "INVESTOR", text: ["INVESTOR|I put ETH into The DAO. 'Code is law', we all said... until $60M walked straight out the door through a recursive call."] },
@@ -331,7 +371,7 @@
         { name: "FORK CAMP", tpl: "shop", npcs: [
           { x: 6, y: 3, spr: "teal", name: "MINER", text: ["MINER|Block 1,920,000. That's where the two chains split. I had to choose which one to point my rigs at. We all did."] } ] }
       ] },
-    { id: "tangerine", name: "TANGERINE WHISTLE", year: "2016", tpl: "town", rate: 0.15,
+    { id: "tangerine", name: "TANGERINE WHISTLE", year: "2016", tpl: "lake", rate: 0.15,
       sign: "TANGERINE WHISTLE - Oct 2016. A wave of DoS spam hammered the chain. EIP-150 repriced gas overnight to stop it. Survival, written into the protocol.  <<< DAO   SPURIOUS >>>",
       npcs: [
         { spr: "teal", name: "ATTACKER", text: ["ATTACKER|The 'Shanghai attacks' spammed cheap opcodes - EXTCODESIZE, SUICIDE - to grind every node to a crawl. Blocks took forever."] },
@@ -367,7 +407,7 @@
         { name: "NFT GALLERY", tpl: "shop", npcs: [
           { x: 6, y: 3, spr: "purple", name: "ARTIST", text: ["ARTIST|CryptoKitties. MoonCats. Etheria reborn. The non-fungible token standard, ERC-721, was forged right here in the chaos."] } ] }
       ] },
-    { id: "constantinople", name: "CONSTANTINOPLE", year: "2019", tpl: "route", rate: 0.18,
+    { id: "constantinople", name: "CONSTANTINOPLE", year: "2019", tpl: "lake", rate: 0.18,
       sign: "CONSTANTINOPLE - Feb 2019. Gas costs tuned, the chain matures, DeFi stirs. The story is still being written - so go and document it.  <<< BYZANTIUM",
       npcs: [
         { spr: "blue", name: "BUILDER", text: ["BUILDER|MakerDAO, 0x, the ancestors of Compound and Aave. The quiet plumbing being laid here becomes 'DeFi summer' in 2020."] },
@@ -397,14 +437,39 @@
   };
 
   // ---------- generate the era zones + chain them together -------------
+  // Historian trainers — one per era. Repeatable battles for XP; they fight with
+  // a real, notable contract of their era (no catching theirs). Placed on the
+  // grass just off the path at (10,5).
+  var TRAINERS = {
+    frontier: { name: "HISTORIAN LINA", spr: "prof", use: /greeter|mistcoin|etheria|ayeaye/i,
+      intro: ["HISTORIAN LINA|A fellow historian! Let's see how your contract handles a frontier relic. For the record!"], win: "HISTORIAN LINA|Beautifully documented. Keep at it!" },
+    homestead: { name: "HISTORIAN ABE", spr: "blue", use: /unicorn|maker|registrar|grinder/i,
+      intro: ["HISTORIAN ABE|Homestead is where the building began. Prove your contract has grown!"], win: "HISTORIAN ABE|Sharp work. The Dex grows." },
+    dao: { name: "HISTORIAN VIK", spr: "purple", use: /dao/i,
+      intro: ["HISTORIAN VIK|Every historian must understand the fork. Battle me, and learn what it cost!"], win: "HISTORIAN VIK|'Code is law'... but you fight well." },
+    tangerine: { name: "HISTORIAN GASPER", spr: "gold", use: null,
+      intro: ["HISTORIAN GASPER|Survived the spam wars, did you? Let's spar - winner buys the gas."], win: "HISTORIAN GASPER|Resilient. Just like the chain." },
+    spurious: { name: "HISTORIAN SORA", spr: "teal", use: null,
+      intro: ["HISTORIAN SORA|The ICO dawn is breaking. Show me your strongest contract!"], win: "HISTORIAN SORA|A worthy document indeed." },
+    byzantium: { name: "HISTORIAN NEO", spr: "pink", use: /kitt|punk|mooncat|nft/i,
+      intro: ["HISTORIAN NEO|This is the WILD era! Can your contract keep up with the mania?"], win: "HISTORIAN NEO|Legendary run. Onward!" },
+    constantinople: { name: "PROF. NAKAMOTO", spr: "prof", use: /maker|weth|0x|compound/i,
+      intro: ["PROF. NAKAMOTO|You've come so far, historian. One last battle - for old times' sake!"], win: "PROF. NAKAMOTO|Magnificent. You're a true historian now. Thank you for everything." }
+  };
+
   var BUILDING_DEFS = {};
   ERAS.forEach(function (era, i) {
-    var g = GEOM[era.tpl];
+    var g = geomFor(era.tpl);
+    var townish = era.tpl === "town";
     var rows = TPL_OUT[era.tpl].slice();
     var npcs = era.npcs.map(function (n, k) {
-      var pos = era.tpl === "route" ? [{ x: 6, y: 5 }, { x: 14, y: 9 }][k] : [{ x: 7, y: 5 }, { x: 14, y: 9 }][k];
+      var pos = townish ? [{ x: 7, y: 5 }, { x: 14, y: 9 }][k] : [{ x: 6, y: 5 }, { x: 14, y: 9 }][k];
       return { x: pos.x, y: pos.y, spr: n.spr, name: n.name, text: n.text };
     });
+    if (TRAINERS[era.id]) {
+      var tr = TRAINERS[era.id];
+      npcs.push({ x: 10, y: 5, spr: tr.spr, name: tr.name, trainer: tr });
+    }
     var z = {
       name: era.name, year: era.year, rate: era.rate, w: 22, h: 16,
       tint: TINTS[era.id] || null, era: era.id,
@@ -414,11 +479,11 @@
     };
     // west warp → previous era's east arrival (frontier's west → the lab)
     var west = i === 0 ? { zone: "lab", x: 5, y: 6 }
-      : { zone: ERAS[i - 1].id, x: GEOM[ERAS[i - 1].tpl].spawnE.x, y: GEOM[ERAS[i - 1].tpl].spawnE.y };
+      : { zone: ERAS[i - 1].id, x: geomFor(ERAS[i - 1].tpl).spawnE.x, y: geomFor(ERAS[i - 1].tpl).spawnE.y };
     z.warps.push({ x: g.warpW.x, y: g.warpW.y, to: west });
     // east warp → next era's west arrival (last era: wall off the east edge)
     if (i < ERAS.length - 1) {
-      z.warps.push({ x: g.warpE.x, y: g.warpE.y, to: { zone: ERAS[i + 1].id, x: GEOM[ERAS[i + 1].tpl].spawnW.x, y: GEOM[ERAS[i + 1].tpl].spawnW.y } });
+      z.warps.push({ x: g.warpE.x, y: g.warpE.y, to: { zone: ERAS[i + 1].id, x: geomFor(ERAS[i + 1].tpl).spawnW.x, y: geomFor(ERAS[i + 1].tpl).spawnW.y } });
     } else {
       var wch = era.tpl === "town" ? "F" : "T";
       var r = z.rows[g.warpE.y];
@@ -518,9 +583,30 @@
     var dx = world.dir === 2 ? -1 : world.dir === 3 ? 1 : 0, dy = world.dir === 0 ? -1 : world.dir === 1 ? 1 : 0;
     var z = world.zone, nx = world.px + dx, ny = world.py + dy;
     var n = npcAt(z, nx, ny);
-    if (n) { dialog(n.text); return; }
+    if (n) { if (n.trainer) startTrainerTalk(n); else dialog(n.text); return; }
     var s = signAt(z, nx, ny);
     if (s) { dialog(s.text); return; }
+  }
+
+  // pick a notable real contract of the era for a Historian to battle with
+  function pickTrainerContract(zone, useRe) {
+    var pool = window.EH_DATA.byZone(zone);
+    if (useRe) { var m = pool.filter(function (c) { return useRe.test(c.name); }); if (m.length) return m[Math.floor(Math.random() * m.length)]; }
+    var notable = pool.filter(function (c) { return c.rarity === "LEGENDARY" || c.rarity === "EPIC"; });
+    var src = notable.length ? notable : (pool.length ? pool : window.EH_DATA.contracts);
+    return src[Math.floor(Math.random() * src.length)];
+  }
+  function startTrainerTalk(n) {
+    var tr = n.trainer;
+    var intro = n._met ? [tr.name + "|Ready for another round?"] : tr.intro;
+    n._met = true;
+    dialog(intro, function () {
+      var c = pickTrainerContract(world.zoneId, tr.use);
+      if (!c) { dialog([tr.name + "|...I've misplaced my contract. Another time!"]); return; }
+      var lead = window.EH_STATE.party[0];
+      var lvl = Math.max(6, (lead ? lead.level : 5) + 2);   // a small step up: beatable, good XP
+      window.EH_BATTLE.startTrainer(window.EH_CREATURES.make(c, lvl, 0), { win: tr.win });
+    });
   }
 
   function maybeEncounter() {

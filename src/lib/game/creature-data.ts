@@ -151,10 +151,13 @@ function deriveYear(row: ContractRow, zone: string): number {
   return { frontier: 2015, homestead: 2016, dao: 2016, tangerine: 2016, spurious: 2017, byzantium: 2018, constantinople: 2019 }[zone] || 2015;
 }
 
+function prettyName(s: string): string {
+  return s.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+}
 function realName(row: ContractRow): string | null {
   const n = (row.token_name || row.etherscan_contract_name || "").trim();
-  if (n && n !== "?" && n.toLowerCase() !== "unknown") return n;
-  if (row.token_symbol && row.token_symbol.trim()) return row.token_symbol.trim();
+  if (n && n !== "?" && n.toLowerCase() !== "unknown") return prettyName(n);
+  if (row.token_symbol && row.token_symbol.trim()) return prettyName(row.token_symbol.trim());
   return null;
 }
 function cleanName(row: ContractRow): string {

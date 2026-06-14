@@ -310,14 +310,37 @@
     return gained;
   }
 
-  // wild level by era: early eras are low-level, later eras tougher
+  // wild level by era: early eras low-level, later eras tougher. The level also
+  // TRACKS the player's lead (within the era band), so encounters stay beatable —
+  // you never get stuck facing only foes you can't dent.
   var ZONE_ORDER = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium", "constantinople"];
-  var ZONE_LVL = [[4, 9], [8, 14], [12, 18], [16, 22], [20, 28], [26, 36], [34, 46]];
+  var ZONE_LVL = [[3, 7], [7, 12], [11, 16], [15, 21], [19, 27], [25, 35], [33, 45]];
   function zoneIndex(zone) { var i = ZONE_ORDER.indexOf(zone); return i < 0 ? 0 : i; }
+  function leadLevel() {
+    var p = window.EH_STATE && window.EH_STATE.party && window.EH_STATE.party[0];
+    return p ? (p.level || 5) : 5;
+  }
   function wildLevel(zone, c) {
     var b = ZONE_LVL[zoneIndex(zone)] || [4, 10];
     var stars = (RARITY[c.rarity] || RARITY.COMMON).stars;
-    return clamp(b[0] + Math.floor(Math.random() * (b[1] - b[0] + 1)) + Math.max(0, stars - 2), 2, 60);
+    var target = leadLevel() + (Math.floor(Math.random() * 6) - 3) + Math.max(0, stars - 3);
+    return clamp(target, b[0], b[1]);
+  }
+
+  // ---- moves: learned as a creature LEVELS UP (last 4 known are usable) ------
+  // EH-flavoured: ANALYZE reads it, CRACK breaks its bytecode open, ACQUIRE buys
+  // in (and softens it for capture), BURN/REENTER/FORK hit harder.
+  var MOVELIST = [
+    { name: "ANALYZE", lv: 1, pow: 1.0, verb: "analyzed" },
+    { name: "CRACK", lv: 6, pow: 1.35, verb: "cracked open" },
+    { name: "ACQUIRE", lv: 12, pow: 1.1, verb: "acquired a stake in", catchBoost: true },
+    { name: "BURN", lv: 18, pow: 1.6, verb: "burned" },
+    { name: "REENTER", lv: 26, pow: 1.95, verb: "reentered" },
+    { name: "FORK", lv: 34, pow: 2.3, verb: "forked" }
+  ];
+  function movesFor(cr) {
+    var lv = cr.level || (cr.stats && cr.stats.lvl) || 1;
+    return MOVELIST.filter(function (m) { return m.lv <= lv; }).slice(-4);
   }
 
   function nameFor(c) {
@@ -380,7 +403,7 @@
 
   window.EH_CREATURES = {
     make: make,
-    gainXp: gainXp, xpToNext: xpToNext, wildLevel: wildLevel,
+    gainXp: gainXp, xpToNext: xpToNext, wildLevel: wildLevel, movesFor: movesFor,
     randomForZone: randomForZone,
     wildByAddr: wildByAddr,
     spriteFor: spriteFor,

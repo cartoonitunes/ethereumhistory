@@ -40,16 +40,19 @@
     return lead;
   }
 
-  function start(wild) {
+  function start(wild, opts) {
+    opts = opts || {};
     var mine = getActive();
     mine.stats.hp = mine.stats.maxhp;
     B = {
       wild: wild, mine: mine,
-      sel: 0, studied: 0,
+      sel: 0, msel: 0, studied: 0,
       phase: "enter", enterT: 0,
       queue: [], after: null,
       msgText: "", msgRev: 0, msgDone: false,
       t: 0, shakeWild: 0, flashMine: 0, ballT: 0, caught: false,
+      trainer: !!opts.trainer, trainerWin: opts.trainerWin || null,
+      onEnd: opts.onEnd || null, didWin: false,
       hpAnimW: 1, hpAnimM: 1 // displayed HP fractions (animate toward real)
     };
     if (GB.current() !== scene) GB.push(scene);
@@ -91,58 +94,68 @@
   }
 
   // ---- actions ---------------------------------------------------------
-  function doFight() {
-    var dmg = damage(B.mine, B.wild);
+  // Use a learned move. If it drains the foe to 0 HP the foe FAINTS (battle ends,
+  // you earn XP but DON'T document it) — so to catch one you must leave it some
+  // HP. ACQUIRE also softens it for capture.
+  function applyMove(m) {
+    var dmg = Math.round(damage(B.mine, B.wild) * (m.pow || 1));
     B.wild.stats.hp = Math.max(0, B.wild.stats.hp - dmg);
     B.shakeWild = 0.45;
-    var msgs = [shortName(B.mine) + " used ANALYZE!"];
+    if (m.catchBoost) B.studied++;
+    var msgs = [shortName(B.mine) + " " + (m.verb || "hit") + " " + shortName(B.wild) + "!"];
     if (B.wild.stats.hp <= 0) {
-      msgs.push("Enemy " + shortName(B.wild) + " is fully exposed! Catch it now!");
-      say(msgs, toMenu);
+      var lv = awardWin(1.0);
+      msgs.push((B.trainer ? shortName(B.wild) + " was defeated!" : "Wild " + shortName(B.wild) + " fainted!"));
+      if (lv > 0) msgs.push(shortName(B.mine) + " grew to LV " + B.mine.level + "!");
+      if (B.trainer && B.trainerWin) msgs.push(B.trainerWin);
+      B.didWin = true;
+      say(msgs, end);
     } else {
       say(msgs, function () { enemyTurn(toMenu); });
     }
   }
-  // STUDY is a safe action - observing a contract doesn't provoke a counterattack
-  // (you're not fighting). It teaches its real history AND raises catch odds, so
-  // learning genuinely helps. Returns straight to the menu, no enemy turn.
+  // STUDY: a safe observation — teaches the contract's real history and raises
+  // catch odds, no counterattack.
   function doStudy() {
     B.studied++;
     var w = B.wild, c = w.contract;
     var pages = [shortName(w) + " - a " + w.type + " from " + c.year + ". " + (c.rarity || "") + "."];
     if (c.blurb) pages.push(c.blurb);
     if (c.sig && c.sig !== c.blurb) pages.push(c.sig);
-    pages.push("You studied it closely. Catch odds up! (STUDY is safe - no counter.)");
+    pages.push("You studied it closely. Its catch odds went up!");
     say(pages, toMenu);
   }
-  // XP for documenting a contract - the lead levels up from catches
-  function awardWin(mult) {
-    var amt = B.wild.stats.lvl * 3.5 * (mult || 1);
-    return window.EH_CREATURES.gainXp(B.mine, amt);
-  }
+  function awardWin(mult) { return window.EH_CREATURES.gainXp(B.mine, B.wild.stats.lvl * 3.5 * (mult || 1)); }
   function doCatch() {
+    if (B.trainer) { say(["You can't document another HISTORIAN's contract!"], toMenu); return; }
     var p = catchChance();
     B.ballT = 1.1;
     if (Math.random() < p) {
       B.caught = true;
       var lv = awardWin(1.2);
       window.EH_SAVE.addCatch(B.wild);     // persists collection + lead level/XP
-      var msgs = ["You used ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was documented!"];
+      var msgs = ["You threw an ARCHIVE BALL!", "Gotcha! " + shortName(B.wild) + " was documented!"];
       if (lv > 0) msgs.push(shortName(B.mine) + " grew to LV " + B.mine.level + "!");
       msgs.push("Added to your HISTORIAN'S DEX.");
+      B.didWin = true;
       say(msgs, end);
     } else {
-      say(["You used ARCHIVE BALL!", "Argh! " + shortName(B.wild) + " broke free!"],
+      say(["You threw an ARCHIVE BALL!", "Argh! " + shortName(B.wild) + " broke free!"],
           function () { enemyTurn(toMenu); });
     }
   }
-  function doRun() { say(["Got away safely!"], end); }
+  function doRun() {
+    if (B.trainer) { say(["There's no running from a HISTORIAN's challenge!"], toMenu); return; }
+    say(["Got away safely!"], end);
+  }
 
   function enemyTurn(after) {
-    var dmg = damage(B.wild, B.mine);
+    var moves = window.EH_CREATURES.movesFor(B.wild);
+    var m = moves[moves.length - 1] || { pow: 1, verb: "struck" };
+    var dmg = Math.round(damage(B.wild, B.mine) * (m.pow || 1));
     B.mine.stats.hp = Math.max(0, B.mine.stats.hp - dmg);
     B.flashMine = 0.45;
-    var msgs = ["Enemy " + shortName(B.wild) + " strikes back!"];
+    var msgs = [(B.trainer ? "" : "Wild ") + shortName(B.wild) + " " + (m.verb || "struck") + " back!"];
     if (B.mine.stats.hp <= 0) {
       msgs.push(shortName(B.mine) + " is overwhelmed!", "You retreat to study another day.");
       say(msgs, end);
@@ -150,12 +163,12 @@
   }
 
   function toMenu() { B.phase = "menu"; }
-  function end() { B.mine.stats.hp = B.mine.stats.maxhp; GB.pop(); }
+  function end() { B.mine.stats.hp = B.mine.stats.maxhp; var cb = B.onEnd, win = B.didWin; GB.pop(); if (cb) cb(win); }
 
   // ---- input -----------------------------------------------------------
   // Labels say what they do: ANALYZE weakens, STUDY teaches (and raises catch
   // odds), CATCH throws an Archive Ball, RUN flees.
-  var MOVES = ["ANALYZE", "STUDY", "CATCH", "RUN"];
+  var TOP = ["FIGHT", "STUDY", "CATCH", "RUN"];   // FIGHT opens the move list
   var scene = {
     onPress: function (b) {
       if (!B) return;
@@ -164,15 +177,21 @@
         return;
       }
       if (B.phase === "menu") {
-        if (b === GB.BTN.up) B.sel = (B.sel + MOVES.length - 1) % MOVES.length;
-        else if (b === GB.BTN.down) B.sel = (B.sel + 1) % MOVES.length;
+        if (b === GB.BTN.up) B.sel = (B.sel + TOP.length - 1) % TOP.length;
+        else if (b === GB.BTN.down) B.sel = (B.sel + 1) % TOP.length;
         else if (b === GB.BTN.a) {
-          var m = MOVES[B.sel];
-          if (m === "ANALYZE") doFight();
+          var m = TOP[B.sel];
+          if (m === "FIGHT") { B.phase = "moves"; B.msel = 0; }
           else if (m === "STUDY") doStudy();
           else if (m === "CATCH") doCatch();
           else if (m === "RUN") doRun();
         }
+      } else if (B.phase === "moves") {
+        var mv = window.EH_CREATURES.movesFor(B.mine);
+        if (b === GB.BTN.up) B.msel = (B.msel + mv.length - 1) % mv.length;
+        else if (b === GB.BTN.down) B.msel = (B.msel + 1) % mv.length;
+        else if (b === GB.BTN.b) B.phase = "menu";
+        else if (b === GB.BTN.a) applyMove(mv[B.msel]);
       }
     },
     update: function (dt) {
@@ -180,7 +199,7 @@
       B.t += dt;
       if (B.phase === "enter") {
         B.enterT += dt / 0.55;
-        if (B.enterT >= 1) { B.enterT = 1; say(["Wild " + shortName(B.wild) + " appeared!"], toMenu); }
+        if (B.enterT >= 1) { B.enterT = 1; say([B.trainer ? (shortName(B.wild) + " steps up to battle!") : ("Wild " + shortName(B.wild) + " appeared!")], toMenu); }
       }
       if (B.phase === "msg" && !B.msgDone) {
         B.msgRev += dt * MSG_SPEED;
@@ -217,28 +236,27 @@
     GB.rect(cx - w / 2 + 8, y + 7, w - 16, 2, "grassD");
   }
 
-  // the HP/name plate (Gen-3 rounded box). `numbers` adds the HP readout.
+  // the HP/name plate (Gen-3 rounded box). `numbers` adds the HP readout + XP bar.
   function plate(x, y, cr, frac, numbers) {
-    var w = 108, h = numbers ? 36 : 30;
+    var w = 108, h = numbers ? 40 : 32;
     GB.boxR(x, y, w, h);
     var nm = shortName(cr), lvl = "=L" + cr.stats.lvl, lw = GB.textWidth(lvl);
     var maxc = Math.floor((w - 16 - lw) / GB.GADV);
-    GB.text(nm.slice(0, maxc), x + 7, y + 6, "ink");
-    GB.text(lvl, x + w - 7 - lw, y + 6, "ink");
-    GB.text("HP", x + 7, y + 18, "hpGreen");
-    hpBar(x + 24, y + 19, w - 33, frac);
+    GB.text(nm.slice(0, maxc), x + 7, y + 5, "ink");
+    GB.text(lvl, x + w - 7 - lw, y + 5, "ink");
+    GB.text("HP", x + 7, y + 16, "hpGreen");
+    hpBar(x + 24, y + 17, w - 33, frac);
     if (numbers) {
       var hpStr = Math.ceil(cr.stats.hp) + "/" + cr.stats.maxhp;
-      GB.text(hpStr, x + w - 7 - GB.textWidth(hpStr), y + 26, "ink");
-      // thin XP bar along the bottom of the player's plate
+      GB.text(hpStr, x + w - 7 - GB.textWidth(hpStr), y + 24, "ink");   // HP numbers, own line
       var need = window.EH_CREATURES.xpToNext(cr.level || cr.stats.lvl);
       var xf = need ? Math.min(1, (cr.xp || 0) / need) : 0;
-      GB.text("XP", x + 7, y + 26, "blue");
-      GB.rect(x + 22, y + 28, w - 30, 3, "navy");
-      GB.rect(x + 22, y + 28, Math.round((w - 30) * xf), 3, "waterL");
+      GB.text("XP", x + 7, y + 32, "blue");                              // XP bar, own line below
+      GB.rect(x + 22, y + 33, w - 30, 3, "navy");
+      GB.rect(x + 22, y + 33, Math.round((w - 30) * xf), 3, "waterL");
     } else {
-      GB.text(cr.type, x + 7, y + 26, "blue");
-      for (var i = 0; i < cr.rarityInfo.stars; i++) GB.rect(x + w - 9 - i * 5, y + 26, 3, 3, "gold");
+      GB.text(cr.type, x + 7, y + 24, "blue");                          // type fits inside h=32
+      for (var i = 0; i < cr.rarityInfo.stars; i++) GB.rect(x + w - 9 - i * 5, y + 25, 3, 3, "gold");
     }
   }
 
@@ -279,25 +297,34 @@
     // HP plates slide in from the screen edges, settle once the entry is done
     if (ep > 0.45) {
       plate(10 - (1 - ep) * 120, 12, B.wild, B.hpAnimW, false);
-      plate(GB.W - 118 + (1 - ep) * 120, 86, B.mine, B.hpAnimM, true);
+      plate(GB.W - 118 + (1 - ep) * 120, 80, B.mine, B.hpAnimM, true);
     }
     renderBottom();
   }
 
   function renderBottom() {
     var by = 122, bh = GB.H - by - 2;
+    function cmdList(items, sel) {
+      GB.boxR(150, by, GB.W - 150, bh, "panel", "navy");
+      var mx = 164, my0 = by + 5;
+      for (var i = 0; i < items.length; i++) {
+        var ty = my0 + i * 8;
+        if (i === sel) GB.cursor(mx - 9, ty, "white");
+        GB.text(items[i], mx, ty, "white");
+      }
+    }
     if (B.phase === "menu") {
       GB.boxR(0, by, 150, bh);                       // prompt window
       GB.text("WHAT WILL", 9, by + 9, "ink");
       GB.text(shortName(B.mine).slice(0, 11), 9, by + 21, "blue");
       GB.text("DO?", 9 + GB.textWidth(shortName(B.mine).slice(0, 11)) + 6, by + 21, "ink");
-      GB.boxR(150, by, GB.W - 150, bh, "panel", "navy"); // blue command menu
-      var mx = 164, my0 = by + 5;                          // vertical list (labels are long)
-      for (var i = 0; i < MOVES.length; i++) {
-        var ty = my0 + i * 8;
-        if (i === B.sel) GB.cursor(mx - 9, ty, "white");
-        GB.text(MOVES[i], mx, ty, "white");
-      }
+      cmdList(TOP, B.sel);
+    } else if (B.phase === "moves") {
+      var mv = window.EH_CREATURES.movesFor(B.mine);
+      GB.boxR(0, by, 150, bh);
+      GB.text("CHOOSE A MOVE", 9, by + 9, "ink");
+      GB.text("B: BACK", 9, by + 21, "dim");
+      cmdList(mv.map(function (m) { return m.name; }), B.msel);
     } else {
       GB.boxR(0, by, GB.W, bh);
       var lines = B.msgText.split("\n");
@@ -311,5 +338,12 @@
     }
   }
 
-  window.EH_BATTLE = { start: start, scene: function () { return scene; } };
+  window.EH_BATTLE = {
+    start: start,
+    startTrainer: function (creature, opts) {
+      opts = opts || {};
+      start(creature, { trainer: true, trainerWin: opts.win || null, onEnd: opts.onEnd || null });
+    },
+    scene: function () { return scene; }
+  };
 })();
