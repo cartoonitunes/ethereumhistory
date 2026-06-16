@@ -99,7 +99,7 @@ export async function getHistorianByEthereumAddressFromDb(address: string): Prom
 export async function createHistorianFromOAuth(params: {
   email: string;
   name: string;
-  authProvider: string;
+  authProvider?: string | null;
   googleId?: string;
   ethereumAddress?: string;
 }): Promise<schema.Historian> {
@@ -109,7 +109,7 @@ export async function createHistorianFromOAuth(params: {
     .values({
       email: params.email.trim().toLowerCase(),
       name: params.name.trim(),
-      authProvider: params.authProvider,
+      authProvider: params.authProvider ?? null,
       googleId: params.googleId || null,
       ethereumAddress: params.ethereumAddress || null,
       active: true,
@@ -426,6 +426,102 @@ export async function updateHistorianTrustedStatusFromDb(params: {
       updatedAt: new Date(),
     })
     .where(eq(schema.historians.id, params.historianId));
+}
+
+/**
+ * Trust levels managed by super admins.
+ * - "standard": untrusted contributor (edits go to review queue)
+ * - "trusted": established contributor (edits publish immediately, can review/invite)
+ * - "admin": full access (super admin)
+ */
+export type AdminTrustLevel = "standard" | "trusted" | "admin";
+
+/**
+ * Set a historian's trust level atomically, keeping `role`, `trusted`, and
+ * `trustedOverride` consistent. Setting a level is always a manual decision,
+ * so `trustedOverride` is recorded (false for standard, true otherwise) to keep
+ * the auto-promotion logic from overriding the admin's choice.
+ */
+export async function setHistorianTrustLevelFromDb(
+  historianId: number,
+  level: AdminTrustLevel
+): Promise<void> {
+  const database = getDb();
+  const trusted = level !== "standard";
+  const role = level === "admin" ? "admin" : level === "trusted" ? "trusted" : "historian";
+  const trustedOverride = level !== "standard";
+  await database
+    .update(schema.historians)
+    .set({ trusted, role, trustedOverride, updatedAt: new Date() })
+    .where(eq(schema.historians.id, historianId));
+}
+
+export interface AdminHistorianSummary {
+  id: number;
+  name: string;
+  email: string;
+  role: string | null;
+  trusted: boolean;
+  trustedOverride: boolean | null;
+  active: boolean;
+  authProvider: string | null;
+  ethereumAddress: string | null;
+  githubUsername: string | null;
+  avatarUrl: string | null;
+  createdAt: string | null;
+  editCount: number;
+}
+
+/**
+ * List all historian accounts with their trust info and edit counts.
+ * Used by the super admin management UI.
+ */
+export async function getAllHistoriansForAdminFromDb(): Promise<AdminHistorianSummary[]> {
+  const database = getDb();
+
+  const rows = await database
+    .select({
+      id: schema.historians.id,
+      name: schema.historians.name,
+      email: schema.historians.email,
+      role: schema.historians.role,
+      trusted: schema.historians.trusted,
+      trustedOverride: schema.historians.trustedOverride,
+      active: schema.historians.active,
+      authProvider: schema.historians.authProvider,
+      ethereumAddress: schema.historians.ethereumAddress,
+      githubUsername: schema.historians.githubUsername,
+      avatarUrl: schema.historians.avatarUrl,
+      createdAt: schema.historians.createdAt,
+    })
+    .from(schema.historians)
+    .orderBy(desc(schema.historians.createdAt));
+
+  const counts = await database
+    .select({
+      historianId: schema.contractEdits.historianId,
+      editCount: sql<number>`COUNT(*)::int`,
+    })
+    .from(schema.contractEdits)
+    .groupBy(schema.contractEdits.historianId);
+
+  const countByHistorian = new Map(counts.map((c) => [c.historianId, c.editCount]));
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    role: r.role || null,
+    trusted: r.trusted ?? false,
+    trustedOverride: r.trustedOverride ?? null,
+    active: r.active ?? true,
+    authProvider: r.authProvider || null,
+    ethereumAddress: r.ethereumAddress || null,
+    githubUsername: r.githubUsername || null,
+    avatarUrl: r.avatarUrl || null,
+    createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+    editCount: countByHistorian.get(r.id) ?? 0,
+  }));
 }
 
 /**

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { Loader2, ArrowLeft, Save, UserPlus, LogOut, ClipboardCheck, ExternalLink, Github, Key, Plus, Copy, Check, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Save, UserPlus, LogOut, ClipboardCheck, ExternalLink, Github, Key, Plus, Copy, Check, Trash2, ShieldCheck } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface ApiKeyRow {
@@ -372,6 +372,15 @@ export default function HistorianProfilePage() {
                   <ClipboardCheck className="w-4 h-4" />
                   Review Edits
                 </Link>
+                {me.role === "admin" && (
+                  <Link
+                    href="/admin/historians"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-ether-500/40 bg-ether-600/10 hover:bg-ether-600/20 text-ether-300 text-sm font-medium transition-colors"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Manage Trusted Users
+                  </Link>
+                )}
               </div>
             )}
           </div>
