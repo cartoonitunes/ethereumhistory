@@ -63,7 +63,7 @@ function DocumentedCard({ contract, index }: { contract: CollectionContract; ind
 
         {/* Short description */}
         {contract.shortDescription && (
-          <p className="text-xs text-obsidian-400 line-clamp-2 mb-3">
+          <p className="text-xs text-obsidian-400 mb-3">
             {contract.shortDescription}
           </p>
         )}

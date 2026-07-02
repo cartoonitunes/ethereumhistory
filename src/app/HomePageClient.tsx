@@ -264,7 +264,7 @@ export default function HomePageClient({
                       )}
                     </div>
                     {contractOfTheDay.shortDescription && (
-                      <p className="text-obsidian-300 mb-3 line-clamp-2">{contractOfTheDay.shortDescription}</p>
+                      <p className="text-obsidian-300 mb-3">{contractOfTheDay.shortDescription}</p>
                     )}
                     <div className="flex items-center gap-4 text-sm text-obsidian-500">
                       <code className="font-mono">{formatAddress(contractOfTheDay.address, 8)}</code>

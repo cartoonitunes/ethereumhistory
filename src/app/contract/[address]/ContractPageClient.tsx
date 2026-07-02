@@ -363,9 +363,6 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
   const displayName = frontierEntry?.name || contract.tokenName || contract.ensName || contract.etherscanContractName || null;
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
   const shortDescriptionText = contract.shortDescription?.trim();
-  const shortDescriptionDisplay = shortDescriptionText
-    ? truncateText(shortDescriptionText, SHORT_DESCRIPTION_MAX_CHARS)
-    : null;
 
 
   function buildShareText() {
@@ -642,12 +639,9 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
             )}
           </div>
 
-          {shortDescriptionDisplay && (
-                <p
-                  className="mt-4 text-lg text-obsidian-400 max-w-2xl"
-                  title={shortDescriptionText}
-                >
-                  {shortDescriptionDisplay}
+          {shortDescriptionText && (
+                <p className="mt-4 text-lg text-obsidian-400 max-w-2xl">
+                  {shortDescriptionText}
                 </p>
               )}
 
@@ -881,7 +875,7 @@ function RelatedContractsSection({ contracts }: { contracts: RelatedContractItem
               </span>
             </div>
             {c.shortDescription && (
-              <p className="text-sm text-obsidian-400 line-clamp-2 mb-2">{c.shortDescription}</p>
+              <p className="text-sm text-obsidian-400 mb-2">{c.shortDescription}</p>
             )}
             <div className="flex items-center gap-3 text-xs text-obsidian-500">
               <code className="font-mono truncate">{formatAddress(c.address, 6)}</code>
@@ -2764,13 +2758,6 @@ function formatTokenSupplyDisplay(supply: string, decimals: number): string {
   } catch {
     return supply;
   }
-}
-
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, maxLength).trimEnd()}...`;
 }
 
 function CodeTab({
