@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
+import { refreshTursoIndexTotals } from "@/lib/progress-stats";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const db = getDb();
     const started = Date.now();
     await db.execute(sql`SELECT refresh_contract_stats_cache()`);
+
+    // Precompute the expensive full-index totals from Turso ONCE here (Node
+    // runtime can reach Turso) and store them in Neon so request handlers never
+    // scan the 12M-row contract_index. Non-fatal: the Neon cache still refreshes
+    // even if Turso is briefly unavailable.
+    let tursoError: string | null = null;
+    try {
+      await refreshTursoIndexTotals();
+    } catch (err) {
+      tursoError = err instanceof Error ? err.message : String(err);
+      console.error("[cron/refresh-stats] Turso index totals refresh failed:", err);
+    }
+
     const rowsRaw = await db.execute<{ scope: string; total: number; documented: number; updated_at: string }>(
       sql`SELECT scope, total, documented, updated_at FROM contract_stats_cache ORDER BY scope`
     );
@@ -55,6 +69,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       data: {
         elapsedMs: Date.now() - started,
+        tursoError,
         rows,
       },
       error: null,

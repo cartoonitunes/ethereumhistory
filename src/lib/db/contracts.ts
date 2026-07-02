@@ -466,15 +466,24 @@ export interface RelatedContract {
 }
 
 /**
- * Related contracts for a contract page: contracts from the same deployer first,
- * then documented contracts from the same era. Excludes the contract itself and
- * de-duplicates. Kept lightweight (few columns, small limits) so it can run
- * inline on the server-rendered contract page without adding latency.
+ * Related contracts for a contract page. Only returns genuinely related, useful
+ * matches — an empty result is expected and preferred over noise (the section
+ * hides itself when empty). Two relationship tiers, both restricted to
+ * *documented* contracts (non-empty short description) so we never surface
+ * random undocumented siblings:
+ *   1. Same deployer — the strongest signal.
+ *   2. Same era AND same contract type — deliberately narrow. "Same era" alone
+ *      spans months of unrelated contracts, so we additionally require the same
+ *      heuristic contract type (token, exchange, etc.). If this contract has no
+ *      usable type we skip era matching entirely rather than show loose matches.
+ * Kept lightweight (few columns, small limits) so it can run inline on the
+ * server-rendered contract page without adding latency.
  */
 export async function getRelatedContractsFromDb(
   address: string,
   deployerAddress: string | null,
   eraId: string | null,
+  contractType: string | null,
   limit = 6
 ): Promise<RelatedContract[]> {
   const database = getDb();
@@ -518,7 +527,9 @@ export async function getRelatedContractsFromDb(
     }
   };
 
-  // Same deployer — most meaningful relationship. Documented ones surface first.
+  // Same deployer — strongest signal. Only documented siblings; an anonymous
+  // deployer that fired off hundreds of undocumented contracts (e.g. The DAO's
+  // creator) should contribute nothing rather than random noise.
   if (deployerAddress) {
     const deployerRows = await database
       .select(cols)
@@ -526,25 +537,28 @@ export async function getRelatedContractsFromDb(
       .where(
         and(
           eq(schema.contracts.deployerAddress, deployerAddress.toLowerCase()),
-          ne(schema.contracts.address, self)
+          ne(schema.contracts.address, self),
+          isNotNull(schema.contracts.shortDescription),
+          ne(schema.contracts.shortDescription, "")
         )
       )
-      .orderBy(
-        sql`CASE WHEN ${schema.contracts.shortDescription} IS NOT NULL AND ${schema.contracts.shortDescription} <> '' THEN 0 ELSE 1 END`,
-        asc(schema.contracts.deploymentTimestamp)
-      )
+      .orderBy(asc(schema.contracts.deploymentTimestamp))
       .limit(limit);
     push(deployerRows, "deployer");
   }
 
-  // Top up with documented contracts from the same era.
-  if (out.length < limit && eraId) {
+  // Top up with documented contracts from the same era AND the same contract
+  // type. Same-era-only is far too loose (it spans unrelated contracts months
+  // apart), so we require a real, matching type or skip this tier entirely.
+  const typeIsUsable = !!contractType && contractType !== "unknown";
+  if (out.length < limit && eraId && typeIsUsable) {
     const eraRows = await database
       .select(cols)
       .from(schema.contracts)
       .where(
         and(
           eq(schema.contracts.eraId, eraId),
+          eq(schema.contracts.contractType, contractType!),
           ne(schema.contracts.address, self),
           isNotNull(schema.contracts.shortDescription),
           ne(schema.contracts.shortDescription, "")

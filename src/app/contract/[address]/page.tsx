@@ -243,6 +243,7 @@ export default async function ContractPage({ params }: Props) {
       address.toLowerCase(),
       data.contract.deployerAddress ?? null,
       data.contract.eraId ?? null,
+      data.contract.heuristics?.contractType ?? null,
       6
     );
   } catch {}

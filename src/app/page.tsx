@@ -7,11 +7,11 @@
  */
 
 import { isDatabaseConfigured, getDb, getTopEditorsFromDb, getRecentEditsFromDb, getDocumentedContractsFromDb, getCollectionsListFromDb } from "@/lib/db-client";
-import { isTursoConfigured, turso } from "@/lib/turso";
 import { getFeaturedContracts } from "@/lib/db";
 import * as schema from "@/lib/schema";
-import { sql, isNotNull, ne, and, asc, eq } from "drizzle-orm";
+import { sql, isNotNull, ne, and, asc } from "drizzle-orm";
 import { cached, CACHE_TTL } from "@/lib/cache";
+import { getProgressStats as getProgressStatsCached } from "@/lib/progress-stats";
 import HomePageClient from "./HomePageClient";
 import type { FeaturedContract } from "@/types";
 import type { MarqueeContract, TopEditor, RecentEdit, ProgressStats } from "./HomePageClient";
@@ -72,86 +72,12 @@ async function getContractOfTheDay(): Promise<FeaturedContract | null> {
   }
 }
 
-// Turso era names → app canonical IDs
-const TURSO_ERA_MAP: Record<string, string> = {
-  "frontier-thawing": "frontier",
-  "dao-fork": "dao",
-  "tangerine-whistle": "tangerine",
-  "spurious-dragon": "spurious",
-};
-
 async function getProgressStats(): Promise<ProgressStats | null> {
   if (!isDatabaseConfigured()) return null;
   try {
-    return await cached<ProgressStats>(
-      "homepage:progress-stats:v3",
-      CACHE_TTL.LONG,
-      async () => {
-        const db = getDb();
-        const APP_ERA_IDS = new Set(["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"]);
-        const YEARS = new Set([2015, 2016, 2017, 2018]);
-
-        // contract_stats_cache (~20 rows) stores `documented` using is_documented=TRUE,
-        // which covers: historian narratives + cracked/etherscan-verified + bytecode siblings.
-        // We use it for documented counts only. Totals come from Turso (12M+).
-        type CacheRow = { scope: string; total: number | string; documented: number | string };
-        const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
-          db.execute<CacheRow>(sql`SELECT scope, documented FROM contract_stats_cache`),
-          db.select({ count: sql<number>`COUNT(*)::int` })
-            .from(schema.historians)
-            .where(eq(schema.historians.active, true)),
-          db.select({ count: sql<number>`COUNT(*)::int` })
-            .from(schema.contractEdits),
-        ]);
-
-        const cacheRows: CacheRow[] = Array.isArray(cacheRowsRaw)
-          ? (cacheRowsRaw as CacheRow[])
-          : ((cacheRowsRaw as { rows?: CacheRow[] }).rows ?? []);
-
-        const docMap = new Map<string, number>();
-        for (const row of cacheRows) docMap.set(row.scope, Number(row.documented));
-
-        const byEra: Record<string, { total: number; documented: number }> = {};
-        const byYear: Record<string, { total: number; documented: number }> = {};
-        for (const eraId of APP_ERA_IDS) byEra[eraId] = { total: 0, documented: docMap.get(`era:${eraId}`) ?? 0 };
-        for (const year of YEARS) byYear[String(year)] = { total: 0, documented: docMap.get(`year:${year}`) ?? 0 };
-
-        let grandTotal = 0;
-
-        if (isTursoConfigured()) {
-          const [tursoOverall, tursoByEra, tursoByYear] = await Promise.all([
-            turso.execute(`SELECT COUNT(*) AS total FROM contract_index`),
-            turso.execute(`SELECT era, COUNT(*) AS total FROM contract_index WHERE era IS NOT NULL GROUP BY era`),
-            turso.execute(`SELECT year, COUNT(*) AS total FROM contract_index WHERE year IS NOT NULL GROUP BY year`),
-          ]);
-
-          grandTotal = Number((tursoOverall.rows[0] as unknown as { total: number | bigint })?.total ?? 0);
-
-          for (const r of tursoByEra.rows as unknown as { era: string; total: number | bigint }[]) {
-            const appEra = TURSO_ERA_MAP[r.era] ?? r.era;
-            if (!APP_ERA_IDS.has(appEra)) continue;
-            const prev = byEra[appEra] ?? { total: 0, documented: docMap.get(`era:${appEra}`) ?? 0 };
-            byEra[appEra] = { total: prev.total + Number(r.total), documented: prev.documented };
-          }
-
-          for (const r of tursoByYear.rows as unknown as { year: number; total: number | bigint }[]) {
-            const y = String(Number(r.year));
-            if (!YEARS.has(Number(y))) continue;
-            byYear[y] = { total: Number(r.total), documented: docMap.get(`year:${y}`) ?? 0 };
-          }
-        }
-
-        return {
-          overall: { total: grandTotal, documented: docMap.get("overall") ?? 0 },
-          byEra,
-          byYear,
-          community: {
-            historians: historianCountResult[0]?.count ?? 0,
-            totalEdits: totalEditsResult[0]?.count ?? 0,
-          },
-        };
-      }
-    );
+    // Reads Neon-only precomputed totals (see lib/progress-stats). The expensive
+    // Turso full-index scan runs once per hour in the refresh-stats cron, not here.
+    return await getProgressStatsCached();
   } catch {
     return null;
   }

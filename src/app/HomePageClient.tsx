@@ -80,9 +80,9 @@ function compactCount(n: number): string {
 const QUICK_LINKS: { label: string; href: string }[] = [
   { label: "The DAO", href: "/contract/0xbb9bc244d798123fde783fcc1c72d3bb8c189413" },
   { label: "CryptoKitties", href: "/contract/0x06012c8cf97bead5deae237070f9587f8e7a266d" },
-  { label: "Vitalik's contracts", href: "/browse?q=vitalik" },
-  { label: "First contracts ever", href: "/browse?mode=index&sort=block_asc" },
-  { label: "Famous deployers", href: "/network" },
+  { label: "Vitalik's contracts", href: "/collection/vitalik" },
+  { label: "First contracts ever", href: "/browse" },
+  { label: "Famous deployers", href: "/collections" },
 ];
 
 const YEAR_COLORS: Record<string, string> = {
@@ -166,7 +166,7 @@ export default function HomePageClient({
               className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-obsidian-900/60 border border-obsidian-700 text-obsidian-400 text-xs font-medium tracking-wide mb-6"
             >
               <Archive className="w-3.5 h-3.5 text-ether-400" />
-              A preservation project · indexing since the genesis block
+              The complete archive of Ethereum's earliest smart contracts
             </motion.div>
 
             {/* Headline — the positioning, front and center */}
