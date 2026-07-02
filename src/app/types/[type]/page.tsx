@@ -203,7 +203,7 @@ export default async function TypePage({ params, searchParams }: Props) {
                       )}
                     </div>
                     {contract.shortDescription && (
-                      <p className="text-sm text-obsidian-400 line-clamp-2 mb-3">
+                      <p className="text-sm text-obsidian-400 mb-3">
                         {contract.shortDescription}
                       </p>
                     )}

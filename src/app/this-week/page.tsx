@@ -180,10 +180,8 @@ export default function ThisWeekPage() {
 
                       {/* Description */}
                       {contract.shortDescription && (
-                        <p className="text-sm text-obsidian-400 mb-3 line-clamp-3">
-                          {contract.shortDescription.length > 120
-                            ? contract.shortDescription.slice(0, 117) + "..."
-                            : contract.shortDescription}
+                        <p className="text-sm text-obsidian-400 mb-3">
+                          {contract.shortDescription}
                         </p>
                       )}
 
