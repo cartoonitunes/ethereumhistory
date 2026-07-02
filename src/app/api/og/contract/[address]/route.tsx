@@ -17,6 +17,14 @@ export const revalidate = 600;
 
 const SIZE = { width: 1200, height: 630 };
 
+// Aggressive caching so social crawlers (X, Discord, Facebook) get a fast,
+// pre-warmed response and never trip their ~5s fetch timeout on a cold start.
+// The card content is effectively immutable for historical contracts.
+const OG_HEADERS = {
+  "Content-Type": "image/png",
+  "Cache-Control": "public, immutable, no-transform, max-age=600, s-maxage=86400, stale-while-revalidate=604800",
+} as const;
+
 const ERA_COLORS: Record<string, string> = {
   frontier: "#6366f1",
   homestead: "#8b5cf6",
@@ -84,7 +92,7 @@ export async function GET(
   const { address } = await params;
 
   if (!isValidAddress(address)) {
-    return new ImageResponse(<Fallback />, { ...SIZE });
+    return new ImageResponse(<Fallback />, { ...SIZE, headers: OG_HEADERS });
   }
 
   const addr = address.toLowerCase();
@@ -95,7 +103,7 @@ export async function GET(
   ]);
 
   if (!contract) {
-    return new ImageResponse(<Fallback />, { ...SIZE });
+    return new ImageResponse(<Fallback />, { ...SIZE, headers: OG_HEADERS });
   }
 
   // --- Data extraction ---
@@ -378,6 +386,6 @@ export async function GET(
         </div>
       </div>
     </div>,
-    { ...SIZE }
+    { ...SIZE, headers: OG_HEADERS }
   );
 }

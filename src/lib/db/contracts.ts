@@ -456,6 +456,108 @@ export async function getContractsByDeployerFromDb(
   return results.map(dbRowToContract);
 }
 
+export interface RelatedContract {
+  address: string;
+  name: string | null;
+  eraId: string | null;
+  deploymentTimestamp: string | null;
+  shortDescription: string | null;
+  relation: "deployer" | "era";
+}
+
+/**
+ * Related contracts for a contract page: contracts from the same deployer first,
+ * then documented contracts from the same era. Excludes the contract itself and
+ * de-duplicates. Kept lightweight (few columns, small limits) so it can run
+ * inline on the server-rendered contract page without adding latency.
+ */
+export async function getRelatedContractsFromDb(
+  address: string,
+  deployerAddress: string | null,
+  eraId: string | null,
+  limit = 6
+): Promise<RelatedContract[]> {
+  const database = getDb();
+  const self = address.toLowerCase();
+  const cols = {
+    address: schema.contracts.address,
+    etherscanContractName: schema.contracts.etherscanContractName,
+    tokenName: schema.contracts.tokenName,
+    ensName: schema.contracts.ensName,
+    eraId: schema.contracts.eraId,
+    deploymentTimestamp: schema.contracts.deploymentTimestamp,
+    shortDescription: schema.contracts.shortDescription,
+  };
+
+  const seen = new Set<string>([self]);
+  const out: RelatedContract[] = [];
+
+  const push = (
+    rows: {
+      address: string;
+      etherscanContractName: string | null;
+      tokenName: string | null;
+      ensName: string | null;
+      eraId: string | null;
+      deploymentTimestamp: Date | null;
+      shortDescription: string | null;
+    }[],
+    relation: "deployer" | "era"
+  ) => {
+    for (const r of rows) {
+      if (seen.has(r.address) || out.length >= limit) continue;
+      seen.add(r.address);
+      out.push({
+        address: r.address,
+        name: r.tokenName || r.etherscanContractName || r.ensName || null,
+        eraId: r.eraId,
+        deploymentTimestamp: r.deploymentTimestamp?.toISOString() ?? null,
+        shortDescription: r.shortDescription,
+        relation,
+      });
+    }
+  };
+
+  // Same deployer — most meaningful relationship. Documented ones surface first.
+  if (deployerAddress) {
+    const deployerRows = await database
+      .select(cols)
+      .from(schema.contracts)
+      .where(
+        and(
+          eq(schema.contracts.deployerAddress, deployerAddress.toLowerCase()),
+          ne(schema.contracts.address, self)
+        )
+      )
+      .orderBy(
+        sql`CASE WHEN ${schema.contracts.shortDescription} IS NOT NULL AND ${schema.contracts.shortDescription} <> '' THEN 0 ELSE 1 END`,
+        asc(schema.contracts.deploymentTimestamp)
+      )
+      .limit(limit);
+    push(deployerRows, "deployer");
+  }
+
+  // Top up with documented contracts from the same era.
+  if (out.length < limit && eraId) {
+    const eraRows = await database
+      .select(cols)
+      .from(schema.contracts)
+      .where(
+        and(
+          eq(schema.contracts.eraId, eraId),
+          ne(schema.contracts.address, self),
+          isNotNull(schema.contracts.shortDescription),
+          ne(schema.contracts.shortDescription, "")
+        )
+      )
+      .orderBy(asc(schema.contracts.deploymentTimestamp))
+      .limit(limit * 2);
+    push(eraRows, "era");
+  }
+
+  return out.slice(0, limit);
+}
+
 /**
  * Get total contract count
  */

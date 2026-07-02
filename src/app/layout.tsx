@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "Ethereum History",
     description: "Historical archive of Ethereum smart contracts and their stories.",
     images: [

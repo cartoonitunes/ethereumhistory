@@ -53,7 +53,37 @@ interface HomePageClientProps {
   contractOfTheDay: FeaturedContract | null;
   progressStats: ProgressStats | null;
   collections: CollectionSummary[];
+  verifiedProofsCount: number;
 }
+
+// Compact human count: 12,345,678 -> "12M+", 2,431 -> "2,400+", 1,712 -> "1,700+"
+function compactCount(n: number): string {
+  if (n <= 0) return "0";
+  if (n >= 1_000_000) {
+    const m = Math.floor(n / 1_000_000);
+    return `${m}M+`;
+  }
+  if (n >= 10_000) {
+    const k = Math.floor(n / 1000);
+    return `${k.toLocaleString()}K+`;
+  }
+  if (n >= 1000) {
+    const rounded = Math.floor(n / 100) * 100;
+    return `${rounded.toLocaleString()}+`;
+  }
+  const rounded = Math.floor(n / 10) * 10;
+  return rounded > 0 ? `${rounded}+` : `${n}`;
+}
+
+// Discovery chips shown under the search bar. Addresses are the canonical,
+// well-known mainnet deployments; search-based chips always resolve.
+const QUICK_LINKS: { label: string; href: string }[] = [
+  { label: "The DAO", href: "/contract/0xbb9bc244d798123fde783fcc1c72d3bb8c189413" },
+  { label: "CryptoKitties", href: "/contract/0x06012c8cf97bead5deae237070f9587f8e7a266d" },
+  { label: "Vitalik's contracts", href: "/browse?q=vitalik" },
+  { label: "First contracts ever", href: "/browse?mode=index&sort=block_asc" },
+  { label: "Famous deployers", href: "/network" },
+];
 
 const YEAR_COLORS: Record<string, string> = {
   "2015": "#8b5cf6",
@@ -76,8 +106,28 @@ export default function HomePageClient({
   contractOfTheDay,
   progressStats,
   collections,
+  verifiedProofsCount,
 }: HomePageClientProps) {
   usePageView("/");
+
+  // Live stat counters. Fall back to known-good floors so the hero never shows
+  // a hollow "0" if a data source stalls under serverless pressure.
+  const totalIndexed = progressStats?.overall.total ?? 0;
+  const documentedCount = progressStats?.overall.documented ?? 0;
+  const heroStats = [
+    {
+      value: totalIndexed > 0 ? compactCount(totalIndexed) : "12M+",
+      label: "contracts indexed",
+    },
+    {
+      value: documentedCount > 0 ? compactCount(documentedCount) : "2,000+",
+      label: "documented",
+    },
+    {
+      value: verifiedProofsCount > 0 ? compactCount(verifiedProofsCount) : "1,700+",
+      label: "verified proofs",
+    },
+  ];
 
   // Use marquee contracts or fallback to featured
   const displayContracts =
@@ -96,7 +146,7 @@ export default function HomePageClient({
       <Header />
 
       {/* Hero Section */}
-      <section className="relative py-24 md:py-32 overflow-hidden">
+      <section className="relative py-20 md:py-28 overflow-hidden">
         {/* Background effects */}
         <div className="absolute inset-0 gradient-radial opacity-50" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(98,110,241,0.1),transparent_50%)]" />
@@ -108,32 +158,46 @@ export default function HomePageClient({
             transition={{ duration: 0.6 }}
             className="text-center"
           >
-            {/* Badge */}
+            {/* Eyebrow — archival provenance */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-ether-500/10 border border-ether-500/20 text-ether-400 text-sm mb-6"
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-obsidian-900/60 border border-obsidian-700 text-obsidian-400 text-xs font-medium tracking-wide mb-6"
             >
-              <Archive className="w-4 h-4" />
-              Wikipedia for Ethereum Smart Contracts
+              <Archive className="w-3.5 h-3.5 text-ether-400" />
+              A preservation project · indexing since the genesis block
             </motion.div>
 
-            {/* Headline */}
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
-              <span className="gradient-text">Ethereum</span> has a history
-              <br />
-              worth preserving.
+            {/* Headline — the positioning, front and center */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-5 tracking-tight leading-[1.05]">
+              The <span className="gradient-text">Wikipedia</span> for
+              <br className="hidden sm:block" />{" "}
+              Ethereum smart contracts
             </h1>
 
             {/* Subheadline */}
-            <p className="text-lg md:text-xl text-obsidian-400 max-w-2xl mx-auto mb-10">
-              Explore the smart contracts that shaped the early blockchain era.
-              From the genesis block to now, focusing on the early days.
+            <p className="text-lg md:text-xl text-obsidian-400 max-w-2xl mx-auto mb-8">
+              A museum-grade archive of the code that shaped early Ethereum.
+              Search the chain, then read the stories behind the contracts that mattered.
             </p>
 
+            {/* Live stat counters */}
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 sm:gap-x-12 mb-10">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="flex flex-col items-center">
+                  <span className="text-2xl sm:text-3xl md:text-4xl font-bold gradient-text tabular-nums">
+                    {stat.value}
+                  </span>
+                  <span className="text-xs sm:text-sm text-obsidian-500 mt-1">
+                    {stat.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {/* Search */}
-            <div className="flex justify-center mb-6">
+            <div className="flex justify-center mb-5">
               <Suspense
                 fallback={
                   <div className="w-full max-w-3xl">
@@ -143,6 +207,20 @@ export default function HomePageClient({
               >
                 <OmniSearch />
               </Suspense>
+            </div>
+
+            {/* Quick-link discovery chips */}
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto">
+              <span className="text-xs text-obsidian-600 mr-1 hidden sm:inline">Jump to</span>
+              {QUICK_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="inline-flex items-center px-3 py-1.5 rounded-full border border-obsidian-700 bg-obsidian-900/40 text-sm text-obsidian-300 hover:text-obsidian-100 hover:border-ether-500/40 hover:bg-obsidian-800/60 transition-colors"
+                >
+                  {link.label}
+                </Link>
+              ))}
             </div>
           </motion.div>
         </div>

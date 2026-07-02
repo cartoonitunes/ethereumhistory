@@ -31,6 +31,7 @@ import {
   Link2,
   ImageDown,
   Archive,
+  Sparkles,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -66,16 +67,26 @@ import type { ContractHistoryData, ContractPageData, ContractMedia, HistorianMe,
 import { ContractMediaGallery } from "@/components/ContractMedia";
 import { VerificationProofCard } from "@/components/VerificationProofCard";
 
+export interface RelatedContractItem {
+  address: string;
+  name: string | null;
+  eraId: string | null;
+  deploymentTimestamp: string | null;
+  shortDescription: string | null;
+  relation: "deployer" | "era";
+}
+
 interface ContractPageClientProps {
   address: string;
   data: ContractPageData | null;
   error: string | null;
+  relatedContracts?: RelatedContractItem[];
 }
 
 // Max characters for the header short description display.
 const SHORT_DESCRIPTION_MAX_CHARS = 160;
 
-export function ContractPageClient({ address, data, error }: ContractPageClientProps) {
+export function ContractPageClient({ address, data, error, relatedContracts = [] }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -456,7 +467,7 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-1">
             <div>
               {/* Contract name */}
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center flex-wrap gap-3 mb-2 min-w-0">
                 {contract.tokenLogo && (
                   <div className="w-9 h-9 rounded-full bg-obsidian-800 border border-obsidian-700 overflow-hidden flex items-center justify-center">
                     <img
@@ -838,8 +849,48 @@ export function ContractPageClient({ address, data, error }: ContractPageClientP
             <ReadContractPanel address={address} abiData={abiData} currentBalanceWei={contract.currentBalanceWei} isSelfDestructed={contract.codeSizeBytes === 0 && contract.deployStatus === 'success'} />
           )}
         </motion.div>
+
+        {/* Related contracts — same deployer or era */}
+        <RelatedContractsSection contracts={relatedContracts} />
       </div>
     </div>
+  );
+}
+
+function RelatedContractsSection({ contracts }: { contracts: RelatedContractItem[] }) {
+  if (!contracts || contracts.length === 0) return null;
+  return (
+    <section className="mt-12 pt-8 border-t border-obsidian-800">
+      <div className="flex items-center gap-2 mb-5">
+        <Archive className="w-5 h-5 text-ether-400" />
+        <h2 className="text-xl font-semibold text-obsidian-100">Related contracts</h2>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {contracts.map((c) => (
+          <Link
+            key={c.address}
+            href={`/contract/${c.address}`}
+            className="group block rounded-xl border border-obsidian-800 bg-obsidian-900/30 p-4 hover:border-ether-500/30 hover:bg-obsidian-900/60 transition-colors min-w-0"
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <h3 className="font-semibold text-obsidian-100 group-hover:text-ether-400 transition-colors truncate">
+                {c.name || `Contract ${formatAddress(c.address, 6)}`}
+              </h3>
+              <span className="shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-obsidian-800 text-obsidian-400">
+                {c.relation === "deployer" ? "Same deployer" : "Same era"}
+              </span>
+            </div>
+            {c.shortDescription && (
+              <p className="text-sm text-obsidian-400 line-clamp-2 mb-2">{c.shortDescription}</p>
+            )}
+            <div className="flex items-center gap-3 text-xs text-obsidian-500">
+              <code className="font-mono truncate">{formatAddress(c.address, 6)}</code>
+              {c.deploymentTimestamp && <span className="shrink-0">{formatDate(c.deploymentTimestamp)}</span>}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2132,21 +2183,28 @@ function OverviewTab({
 
       {/* Story content — historical significance + context */}
       {(contract.historicalSignificance?.trim() || contract.historicalContext?.trim()) && (
-        <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
-          <div className="prose prose-invert max-w-none overflow-hidden break-words">
-            {contract.historicalSignificance?.trim() && (
-              <>
-                <h2 className="text-xl font-semibold text-obsidian-100 mt-0 mb-3">Historical Significance</h2>
+        <section className="space-y-4">
+          {contract.historicalSignificance?.trim() && (
+            <div className="relative overflow-hidden rounded-xl border border-ether-500/25 bg-gradient-to-br from-ether-500/[0.07] to-obsidian-900/30 p-6 pl-7">
+              {/* Accent stripe */}
+              <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-ether-400 to-ether-600" />
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-5 h-5 text-ether-400 flex-shrink-0" />
+                <h2 className="text-xl font-semibold text-obsidian-100 m-0 leading-none">Historical Significance</h2>
+              </div>
+              <div className="prose prose-invert max-w-none overflow-hidden break-words prose-p:text-obsidian-200">
                 <MarkdownRenderer content={contract.historicalSignificance.trim()} />
-              </>
-            )}
-            {contract.historicalContext?.trim() && (
-              <div className={contract.historicalSignificance?.trim() ? "mt-6" : ""}>
-                <h2 className="text-xl font-semibold text-obsidian-100 mb-3">Context</h2>
+              </div>
+            </div>
+          )}
+          {contract.historicalContext?.trim() && (
+            <div className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
+              <h2 className="text-xl font-semibold text-obsidian-100 mt-0 mb-3">Context</h2>
+              <div className="prose prose-invert max-w-none overflow-hidden break-words">
                 <MarkdownRenderer content={contract.historicalContext.trim()} />
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </section>
       )}
 

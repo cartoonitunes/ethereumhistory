@@ -157,6 +157,38 @@ async function getProgressStats(): Promise<ProgressStats | null> {
   }
 }
 
+// Count of distinct verified proofs (deduped by bytecode hash), mirroring the
+// /api/proofs total. Cached long since it moves slowly.
+async function getVerifiedProofsCount(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0;
+  try {
+    return await cached<number>(
+      "homepage:verified-proofs-count:v1",
+      CACHE_TTL.LONG,
+      async () => {
+        const db = getDb();
+        const res = await db.execute<{ total: number }>(sql`
+          SELECT COUNT(*)::int AS total FROM (
+            SELECT DISTINCT ON (COALESCE(runtime_bytecode_hash, address)) address
+            FROM contracts
+            WHERE verification_method IN (
+              'exact_bytecode_match', 'author_published_source',
+              'near_exact_match', 'source_reconstructed', 'author_published'
+            )
+              AND source_code IS NOT NULL
+          ) d
+        `);
+        const rows = Array.isArray(res)
+          ? (res as { total: number }[])
+          : ((res as { rows?: { total: number }[] }).rows ?? []);
+        return Number(rows[0]?.total ?? 0);
+      }
+    );
+  } catch {
+    return 0;
+  }
+}
+
 async function getMarqueeContracts(): Promise<MarqueeContract[]> {
   if (!isDatabaseConfigured()) return [];
   try {
@@ -255,6 +287,7 @@ export default async function HomePage() {
     contractOfTheDay,
     progressStats,
     collections,
+    verifiedProofsCount,
   ] = await Promise.all([
     withTimeout(getFeaturedList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as FeaturedContract[]),
     withTimeout(getMarqueeContracts(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as MarqueeContract[]),
@@ -263,6 +296,7 @@ export default async function HomePage() {
     withTimeout(getContractOfTheDay(), HOMEPAGE_FETCH_TIMEOUT_MS, null as FeaturedContract | null),
     withTimeout(getProgressStats(), HOMEPAGE_FETCH_TIMEOUT_MS, null as ProgressStats | null),
     withTimeout(getCollectionsList(), HOMEPAGE_FETCH_TIMEOUT_MS, [] as CollectionSummary[]),
+    withTimeout(getVerifiedProofsCount(), HOMEPAGE_FETCH_TIMEOUT_MS, 0 as number),
   ]);
 
   return (
@@ -274,6 +308,7 @@ export default async function HomePage() {
       contractOfTheDay={contractOfTheDay}
       progressStats={progressStats}
       collections={collections}
+      verifiedProofsCount={verifiedProofsCount}
     />
   );
 }

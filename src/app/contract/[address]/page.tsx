@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ContractPageClient } from "./ContractPageClient";
 import { IndexedContractPage } from "./IndexedContractPage";
 import { getContractPageData, getContractWithTokenMetadata, getContract } from "@/lib/db";
+import { getRelatedContractsFromDb } from "@/lib/db/contracts";
 import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
@@ -235,13 +236,24 @@ export default async function ContractPage({ params }: Props) {
 
   const jsonLd = buildJsonLd(address, data);
 
+  // Related contracts (same deployer, then same era) — non-fatal on failure.
+  let relatedContracts: Awaited<ReturnType<typeof getRelatedContractsFromDb>> = [];
+  try {
+    relatedContracts = await getRelatedContractsFromDb(
+      address.toLowerCase(),
+      data.contract.deployerAddress ?? null,
+      data.contract.eraId ?? null,
+      6
+    );
+  } catch {}
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <ContractPageClient address={address} data={data} error={null} />
+      <ContractPageClient address={address} data={data} error={null} relatedContracts={relatedContracts} />
     </>
   );
 }
