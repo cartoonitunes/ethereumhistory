@@ -119,10 +119,7 @@ export async function GET(
       line-height: 1.5;
       color: ${isDark ? "#a1a1aa" : "#71717a"};
       margin-bottom: 10px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+      overflow-wrap: break-word;
     }
     .footer {
       display: flex;
