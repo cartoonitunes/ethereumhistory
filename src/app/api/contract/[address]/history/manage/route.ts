@@ -146,28 +146,82 @@ export async function POST(
   // UNTRUSTED HISTORIAN → route edits to review queue
   // =========================================================================
   if (!me.trusted) {
-    // Untrusted historians cannot edit links or deployer address
-    if (links.length > 0 || deleteIds.length > 0) {
-      return NextResponse.json(
-        { data: null, error: "New historians cannot modify links. These edits require trusted status." },
-        { status: 403 }
-      );
-    }
-    if (contractPatch.deployerAddress !== undefined) {
-      return NextResponse.json(
-        { data: null, error: "New historians cannot modify deployer address. This requires trusted status." },
-        { status: 403 }
-      );
-    }
-
     try {
-      // Get current contract to compare against
-      const currentContract = await getContractByAddress(normalized);
+      // Get current contract to compare against. If it exists only in the Turso
+      // index (not yet promoted to Neon), promote it first — otherwise an untrusted
+      // historian's draft edit for an un-promoted contract would 404 and never reach
+      // the review queue. This mirrors the trusted-branch promotion further below.
+      let currentContract = await getContractByAddress(normalized);
       if (!currentContract) {
+        const resolved = await resolveContract(normalized);
+        if (resolved && (resolved.layer === "indexed" || resolved.layer === "uncovered")) {
+          const ts = resolved.timestamp ? new Date(resolved.timestamp * 1000) : null;
+          await insertContractIfMissing({
+            address: normalized,
+            deployerAddress: resolved.deployer ?? null,
+            deploymentBlock: resolved.blockNumber ?? null,
+            deploymentTimestamp: ts,
+            eraId: resolved.era ?? null,
+            codeSizeBytes: resolved.codeSize ?? null,
+            runtimeBytecodeHash: resolved.bytecodeHash ?? null,
+            deployedBytecodeHash: resolved.bytecodeHash ?? null,
+            isDocumented: false,
+          } as any);
+          currentContract = await getContractByAddress(normalized);
+        }
+        if (!currentContract) {
+          return NextResponse.json(
+            { data: null, error: "Contract not found." },
+            { status: 404 }
+          );
+        }
+      }
+
+      // Untrusted historians cannot MODIFY links or the deployer address.
+      // The edit form always echoes the contract's existing links and current
+      // deployer value back in the request body, so we must reject only on an
+      // ACTUAL change — not merely because these fields are present. (The old
+      // presence-based check rejected every UI submission, since the form always
+      // sends deployerAddress: null and the existing links array.)
+      if (deleteIds.length > 0) {
         return NextResponse.json(
-          { data: null, error: "Contract not found." },
-          { status: 404 }
+          { data: null, error: "New historians cannot modify links. These edits require trusted status." },
+          { status: 403 }
         );
+      }
+      if (links.length > 0) {
+        const currentLinks = await getHistoricalLinksForContractFromDb(normalized);
+        const linkSig = (l: {
+          url?: string | null;
+          title?: string | null;
+          source?: string | null;
+          note?: string | null;
+        }): string =>
+          [l.url, l.title, l.source, l.note]
+            .map((v) => String(v ?? "").trim().toLowerCase())
+            .join("|");
+        const currentSigs = new Set(currentLinks.map(linkSig));
+        // A change is a newly added link (no id) or an edited link whose
+        // signature no longer matches any existing link.
+        const linksChanged = links.some((l) => !l.id || !currentSigs.has(linkSig(l)));
+        if (linksChanged) {
+          return NextResponse.json(
+            { data: null, error: "New historians cannot modify links. These edits require trusted status." },
+            { status: 403 }
+          );
+        }
+      }
+      if (contractPatch.deployerAddress !== undefined) {
+        const submittedDeployer = contractPatch.deployerAddress
+          ? String(contractPatch.deployerAddress).trim().toLowerCase() || null
+          : null;
+        const currentDeployer = currentContract.deployerAddress?.toLowerCase() || null;
+        if (submittedDeployer !== currentDeployer) {
+          return NextResponse.json(
+            { data: null, error: "New historians cannot modify deployer address. This requires trusted status." },
+            { status: 403 }
+          );
+        }
       }
 
       // Compare submitted fields against current values — only queue actual changes
