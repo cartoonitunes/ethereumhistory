@@ -484,7 +484,14 @@ export async function applyApprovedSuggestionFromDb(params: {
 
   const contractField = fieldMapping[suggestion.fieldName];
   if (!contractField) {
-    throw new Error(`Cannot auto-apply field: ${suggestion.fieldName}`);
+    // Field can't be mapped to a contract column (e.g. legacy/unknown field) — mark
+    // it approved without modifying the contract rather than failing the review.
+    await updateEditSuggestionStatusFromDb({
+      id: params.suggestionId,
+      status: "approved",
+      reviewedBy: params.reviewerId,
+    });
+    return;
   }
 
   // Apply the change to the contract

@@ -64,14 +64,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (status === "approved" && suggestion.submitterHistorianId) {
-      // Auto-apply: update the contract field, log the edit, trigger auto-trust check
+    if (status === "approved") {
+      // Auto-apply: update the contract field, log the edit, trigger auto-trust check.
+      // This also covers anonymous suggestions (submitter_historian_id = NULL) — the
+      // change is still applied to the contract, and the edit is logged under the
+      // reviewing admin. Previously anonymous approvals were only marked approved and
+      // never applied.
       await applyApprovedSuggestionFromDb({
         suggestionId: id,
         reviewerId: me.id,
       });
     } else {
-      // Simple status update (reject, or approve anonymous suggestions without auto-apply)
+      // Rejected — simple status update.
       await updateEditSuggestionStatusFromDb({
         id,
         status,
