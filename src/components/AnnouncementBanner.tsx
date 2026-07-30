@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Cake } from "lucide-react";
 
-const STORAGE_KEY = "eh-game-banner-dismissed";
+const STORAGE_KEY = "eh-eth11-banner-dismissed";
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -27,13 +27,21 @@ export function AnnouncementBanner() {
       role="banner"
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        <p className="text-obsidian-200 leading-snug pr-6">
-          <span className="font-semibold text-ether-400">NEW</span>
-          {" — Play EH Explorer — catch real, documented Ethereum contracts as creatures in a Game Boy-style RPG."}
-          {" "}
-          <a href="/game" className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap">
-            Play now →
-          </a>
+        <p className="text-obsidian-200 leading-snug pr-6 flex items-start gap-2">
+          <Cake className="w-4 h-4 mt-0.5 text-ether-400 shrink-0" aria-hidden="true" />
+          <span>
+            <span className="font-semibold text-ether-400">Happy 11th Birthday, Ethereum</span>
+            {" — the Frontier genesis block was mined July 30, 2015."}
+            {" "}
+            <a
+              href="https://ethereum.org/en/whitepaper/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap"
+            >
+              Read the white paper →
+            </a>
+          </span>
         </p>
         <button
           onClick={dismiss}
