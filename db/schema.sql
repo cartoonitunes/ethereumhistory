@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS historians (
   active BOOLEAN NOT NULL DEFAULT TRUE,
   trusted BOOLEAN NOT NULL DEFAULT FALSE,
   trusted_override BOOLEAN DEFAULT NULL,
+  role TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -131,6 +132,7 @@ CREATE TABLE IF NOT EXISTS historians (
 CREATE UNIQUE INDEX IF NOT EXISTS historians_email_unique ON historians (email);
 CREATE INDEX IF NOT EXISTS historians_active_idx ON historians (active);
 CREATE INDEX IF NOT EXISTS historians_trusted_idx ON historians (trusted);
+CREATE INDEX IF NOT EXISTS historians_role_idx ON historians (role);
 
 -- =============================================================================
 -- historical_links

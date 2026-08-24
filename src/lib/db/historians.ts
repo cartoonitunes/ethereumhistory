@@ -365,11 +365,19 @@ export async function getFirstDocumentationCountFromDb(historianId: number): Pro
   return (result as unknown as Array<{ count: number }>)[0]?.count || 0;
 }
 
+/** Total logged edits required for auto-promotion to trusted status. */
+const AUTO_TRUST_EDIT_THRESHOLD = 30;
+
+/** Contracts first documented by this historian required for auto-promotion. */
+const AUTO_TRUST_FIRST_DOC_THRESHOLD = 2;
+
 /**
  * Check and promote historian to trusted status based on contribution quality.
  * Auto-promotion criteria (either condition):
  *   - 2+ contracts where they were the first ever documenter, OR
- *   - 10+ total edits
+ *   - 30+ total edits
+ * Note: contract_edits holds one row per changed field, so a single multi-field
+ * edit session counts as several edits toward the threshold.
  * Manual override (trustedOverride=false) blocks auto-promotion permanently.
  * Returns true if promoted, false otherwise.
  */
@@ -392,7 +400,8 @@ export async function checkAndPromoteTrustedStatusFromDb(historianId: number): P
   // Check first-documentation count (first ever edit on a contract)
   const firstDocCount = await getFirstDocumentationCountFromDb(historianId);
 
-  const shouldPromote = firstDocCount >= 2 || editCount >= 10;
+  const shouldPromote =
+    firstDocCount >= AUTO_TRUST_FIRST_DOC_THRESHOLD || editCount >= AUTO_TRUST_EDIT_THRESHOLD;
 
   if (shouldPromote) {
     await database

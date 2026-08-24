@@ -8,6 +8,10 @@ import crypto from "crypto";
 import type { Contract as AppContract } from "@/types";
 import { getDb } from "./connection";
 import { checkAndPromoteTrustedStatusFromDb } from "./historians";
+import {
+  updateContractEtherscanEnrichmentFromDb,
+  updateContractTokenLogoFromDb,
+} from "./contracts";
 
 // =============================================================================
 // History editing helpers
@@ -98,7 +102,7 @@ export async function logContractEditFromDb(params: {
     fieldsChanged: params.fieldsChanged,
   } as any);
   
-  // Check and promote to trusted status if they've reached 30 edits
+  // Check and promote to trusted status if they've met the auto-trust criteria.
   // This runs asynchronously and won't block the edit logging
   checkAndPromoteTrustedStatusFromDb(params.historianId).catch((error) => {
     console.error("Error checking auto-trust promotion:", error);
@@ -454,6 +458,39 @@ export async function getEditSuggestionsForReviewFromDb(params: {
 }
 
 /**
+ * Editorial suggestion field names -> contract column names.
+ * Both snake_case (anonymous /api/suggestions) and camelCase (historian edit
+ * queue) spellings are accepted.
+ */
+const EDITORIAL_FIELD_MAPPING: Record<string, string> = {
+  description: "description",
+  short_description: "shortDescription",
+  shortDescription: "shortDescription",
+  historical_significance: "historicalSignificance",
+  historicalSignificance: "historicalSignificance",
+  historical_context: "historicalContext",
+  historicalContext: "historicalContext",
+  etherscanContractName: "etherscanContractName",
+  tokenName: "tokenName",
+  contractType: "contractType",
+  manualCategories: "manualCategories",
+};
+
+/**
+ * Verification suggestion field names -> contract column names. These are queued by
+ * /api/contract/[address]/proof when an untrusted historian submits a bytecode proof,
+ * and are written via updateContractEtherscanEnrichmentFromDb, matching what that
+ * route does for a trusted historian.
+ */
+const VERIFICATION_FIELD_MAPPING: Record<string, string> = {
+  verificationMethod: "verificationMethod",
+  verificationProofUrl: "verificationProofUrl",
+  verificationNotes: "verificationNotes",
+  compilerCommit: "compilerCommit",
+  compilerLanguage: "compilerLanguage",
+};
+
+/**
  * Apply an approved suggestion: update the contract field and log the edit.
  * Used when a trusted historian approves an untrusted historian's suggestion.
  */
@@ -467,25 +504,16 @@ export async function applyApprovedSuggestionFromDb(params: {
     throw new Error("Suggestion not found or already processed");
   }
 
-  // Map field names to contract fields
-  const fieldMapping: Record<string, string> = {
-    description: "description",
-    short_description: "shortDescription",
-    shortDescription: "shortDescription",
-    historical_significance: "historicalSignificance",
-    historicalSignificance: "historicalSignificance",
-    historical_context: "historicalContext",
-    historicalContext: "historicalContext",
-    etherscanContractName: "etherscanContractName",
-    tokenName: "tokenName",
-    contractType: "contractType",
-    manualCategories: "manualCategories",
-  };
+  const contractField = EDITORIAL_FIELD_MAPPING[suggestion.fieldName];
+  const verificationField = VERIFICATION_FIELD_MAPPING[suggestion.fieldName];
+  const isTokenLogo = suggestion.fieldName === "tokenLogo";
 
-  const contractField = fieldMapping[suggestion.fieldName];
-  if (!contractField) {
+  if (!contractField && !verificationField && !isTokenLogo) {
     // Field can't be mapped to a contract column (e.g. legacy/unknown field) — mark
     // it approved without modifying the contract rather than failing the review.
+    console.warn(
+      `[suggestions] Approved suggestion ${params.suggestionId} with unmappable field "${suggestion.fieldName}" — contract not modified`
+    );
     await updateEditSuggestionStatusFromDb({
       id: params.suggestionId,
       status: "approved",
@@ -494,18 +522,31 @@ export async function applyApprovedSuggestionFromDb(params: {
     return;
   }
 
-  // Apply the change to the contract
-  const patch: Record<string, unknown> = {};
-  if (contractField === "manualCategories") {
-    try {
-      patch[contractField] = JSON.parse(suggestion.suggestedValue || "[]");
-    } catch {
-      patch[contractField] = [];
+  // Apply the change to the contract. Each family of fields has its own writer:
+  // editorial fields, the token logo, and the verification fields (written through
+  // the same path /api/contract/[address]/proof uses).
+  if (contractField) {
+    const patch: Record<string, unknown> = {};
+    if (contractField === "manualCategories") {
+      try {
+        patch[contractField] = JSON.parse(suggestion.suggestedValue || "[]");
+      } catch {
+        patch[contractField] = [];
+      }
+    } else {
+      patch[contractField] = suggestion.suggestedValue;
     }
-  } else {
-    patch[contractField] = suggestion.suggestedValue;
+    await updateContractHistoryFieldsFromDb(suggestion.contractAddress, patch as any);
+  } else if (isTokenLogo) {
+    await updateContractTokenLogoFromDb(
+      suggestion.contractAddress,
+      suggestion.suggestedValue || null
+    );
+  } else if (verificationField) {
+    await updateContractEtherscanEnrichmentFromDb(suggestion.contractAddress, {
+      [verificationField]: suggestion.suggestedValue || null,
+    });
   }
-  await updateContractHistoryFieldsFromDb(suggestion.contractAddress, patch as any);
 
   // Mark suggestion as approved
   await updateEditSuggestionStatusFromDb({
