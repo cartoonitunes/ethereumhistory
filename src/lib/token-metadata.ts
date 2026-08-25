@@ -90,7 +90,7 @@ function decodeBytes32String(hex: string): string | null {
     }
     // trim trailing nulls
     while (bytes.length && bytes[bytes.length - 1] === 0) bytes.pop();
-    const str = String.fromCharCode(...bytes).replace(/\u0000/g, "").trim();
+    const str = String.fromCharCode(...bytes).replace(/[\u0000-\u001F\u007F]/g, "").trim();
     return str.length ? str : null;
   } catch {
     return null;
@@ -121,7 +121,7 @@ function decodeAbiString(hex: string): string | null {
     for (let i = 0; i < stringHex.length; i += 2) {
       bytes.push(parseInt(stringHex.slice(i, i + 2), 16));
     }
-    const str = String.fromCharCode(...bytes).replace(/\u0000/g, "").trim();
+    const str = String.fromCharCode(...bytes).replace(/[\u0000-\u001F\u007F]/g, "").trim();
     return str.length ? str : null;
   } catch {
     return null;
@@ -153,7 +153,7 @@ async function fetchErc20MetadataViaEthCall(
   const symbol = symbolHex ? decodeAbiString(symbolHex) : null;
   const decimals = decimalsHex ? decodeDecimals(decimalsHex) : null;
 
-  if (!name && !symbol && decimals === null) return null;
+  if (!name && !symbol) return null;
   return { name, symbol, decimals };
 }
 
