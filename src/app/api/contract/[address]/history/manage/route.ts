@@ -20,7 +20,10 @@ import {
 } from "@/lib/db-client";
 import { insertContractIfMissing } from "@/lib/db/contracts";
 import { resolveContract } from "@/lib/contract-resolver";
-import { normalizeContractCategories } from "@/lib/contract-categories";
+import {
+  canonicalizeContractCategory,
+  normalizeContractCategories,
+} from "@/lib/contract-categories";
 
 export const dynamic = "force-dynamic";
 
@@ -362,11 +365,16 @@ export async function POST(
         contractPatch.tokenName !== undefined
           ? (String(contractPatch.tokenName || "").trim() || null)
           : undefined,
+      // Funnelled through the canonical vocabulary so a historian typing
+      // "Multi-Sig" can't reintroduce a second spelling of an existing
+      // category. Unmappable values are stored as-is rather than dropped, so
+      // a genuinely new type is visible instead of silently lost.
       contractType:
         contractPatch.contractType !== undefined
           ? (() => {
               const raw = String(contractPatch.contractType || "").trim();
-              return raw ? raw.toLowerCase() : null;
+              if (!raw) return null;
+              return canonicalizeContractCategory(raw) ?? raw.toLowerCase();
             })()
           : undefined,
       manualCategories: normalizedCategories,

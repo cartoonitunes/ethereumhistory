@@ -3,6 +3,7 @@ import { isDatabaseConfigured, getDb } from "@/lib/db-client";
 import * as schema from "@/lib/schema";
 import { isNotNull, ne, desc, eq } from "drizzle-orm";
 import { ERAS } from "@/types";
+import { CONTRACT_CATEGORY_KEYS } from "@/lib/contract-categories";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600; // Regenerate every hour
@@ -59,7 +60,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     })),
     // Contract type landing pages
-    ...["token", "multisig", "crowdsale", "exchange", "wallet", "registry", "dao", "game", "unknown"].map((type) => ({
+    ...CONTRACT_CATEGORY_KEYS.map((type) => ({
       url: `${baseUrl}/types/${type}`,
       lastModified: new Date(),
       changeFrequency: "weekly" as const,

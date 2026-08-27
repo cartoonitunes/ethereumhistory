@@ -83,6 +83,10 @@ const TYPE_MAP: Record<string, string> = {
   conditional_payment: "DEFI", swap: "DEFI", market: "DEFI", lending: "DEFI",
   wallet: "TOOL", registry: "TOOL", registrar: "TOOL", factory: "TOOL", utility: "TOOL",
   infrastructure: "TOOL", initializer: "TOOL", program: "TOOL", log_aggregator: "TOOL",
+  // Canonical categories from src/lib/contract-categories.ts that the older
+  // free-text values folded into: `program`/`initializer` -> `experimental`,
+  // and `library`/`exploit`, which previously fell through to the keyword pass.
+  experimental: "TOOL", library: "TOOL", exploit: "TOOL",
   dead_mans_switch: "TOOL", forwarder: "TOOL", proxy: "TOOL", namereg: "TOOL",
 };
 

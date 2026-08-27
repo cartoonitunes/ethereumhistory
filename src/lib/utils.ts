@@ -3,6 +3,7 @@
  */
 
 import { clsx, type ClassValue } from "clsx";
+import { getContractCategoryLabel } from "./contract-categories";
 
 /**
  * Merge Tailwind classes with clsx
@@ -220,21 +221,7 @@ export function getSimilarityTypeColor(type: string): string {
  * Get contract type label
  */
 export function getContractTypeLabel(type: string | null): string {
-  if (!type) return "Unknown";
-
-  const labels: Record<string, string> = {
-    token: "Token",
-    multisig: "Multisig Wallet",
-    crowdsale: "Crowdsale",
-    exchange: "Exchange",
-    wallet: "Wallet",
-    registry: "Registry",
-    dao: "DAO",
-    game: "Game",
-    unknown: "Unknown",
-  };
-
-  return labels[type] || type;
+  return getContractCategoryLabel(type);
 }
 
 /**

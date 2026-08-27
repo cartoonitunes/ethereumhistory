@@ -7,24 +7,14 @@ import { ArrowLeft, Archive, Calendar } from "lucide-react";
 import { Header } from "@/components/Header";
 import { EraCompact } from "@/components/EraTimeline";
 import type { HeuristicContractType } from "@/types";
+import {
+  CONTRACT_CATEGORY_KEYS,
+  getContractCategoryDescription,
+} from "@/lib/contract-categories";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TYPES: HeuristicContractType[] = [
-  "token", "multisig", "crowdsale", "exchange", "wallet", "registry", "dao", "game", "unknown",
-];
-
-const TYPE_DESCRIPTIONS: Record<string, string> = {
-  token: "ERC-20 compatible tokens and other fungible token contracts deployed on early Ethereum. These contracts implement transfer, balance, and approval mechanisms.",
-  multisig: "Multi-signature wallet contracts requiring multiple approvals for transactions. Used by teams and DAOs for secure fund management.",
-  crowdsale: "Token sale and crowdfunding contracts from Ethereum's early ICO era. These facilitated the distribution of tokens in exchange for ETH.",
-  exchange: "Decentralized exchange contracts and early automated market makers. The predecessors of modern DEX protocols like Uniswap.",
-  wallet: "Smart contract wallets providing enhanced functionality beyond simple EOA accounts, including recovery mechanisms and access control.",
-  registry: "On-chain registry and name service contracts. These maintain mappings and lookups for various Ethereum infrastructure.",
-  dao: "Decentralized Autonomous Organization contracts enabling on-chain governance, voting, and treasury management.",
-  game: "On-chain game contracts and early blockchain gaming experiments, including lotteries and prediction markets.",
-  unknown: "Contracts whose type could not be automatically classified. These may include custom implementations, libraries, or experimental contracts.",
-};
+const VALID_TYPES: readonly HeuristicContractType[] = CONTRACT_CATEGORY_KEYS;
 
 interface Props {
   params: Promise<{ type: string }>;
@@ -56,7 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const label = getContractTypeLabel(type);
   const metadataBase = getMetadataBaseUrl();
-  const description = TYPE_DESCRIPTIONS[type] || `Explore ${label} contracts on early Ethereum.`;
+  const description = getContractCategoryDescription(type) || `Explore ${label} contracts on early Ethereum.`;
 
   return {
     metadataBase,
@@ -83,7 +73,7 @@ export default async function TypePage({ params, searchParams }: Props) {
   }
 
   const label = getContractTypeLabel(type);
-  const description = TYPE_DESCRIPTIONS[type] || `Explore ${label} contracts on early Ethereum.`;
+  const description = getContractCategoryDescription(type) || `Explore ${label} contracts on early Ethereum.`;
   const page = Math.max(1, parseInt(pageParam || "1", 10));
   const limit = 24;
   const offset = (page - 1) * limit;

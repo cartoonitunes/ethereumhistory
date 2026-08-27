@@ -1,3 +1,5 @@
+import type { ContractCategoryKey } from "@/lib/contract-categories";
+
 /**
  * Type definitions for ethereumhistory.com
  *
@@ -109,16 +111,11 @@ export function getEraFromBlock(blockNumber: number): EthereumEra | null {
 
 export type VerificationStatus = "verified" | "decompiled" | "partial" | "bytecode_only";
 
-export type HeuristicContractType =
-  | "token"
-  | "multisig"
-  | "crowdsale"
-  | "exchange"
-  | "wallet"
-  | "registry"
-  | "dao"
-  | "game"
-  | "unknown";
+/**
+ * Contract types are the canonical categories — see
+ * `src/lib/contract-categories.ts` for the one list they all come from.
+ */
+export type HeuristicContractType = ContractCategoryKey;
 
 export interface Contract {
   // Primary identifier

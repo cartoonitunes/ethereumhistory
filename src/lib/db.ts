@@ -404,7 +404,9 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   const rpcUrl = process.env.ETHEREUM_RPC_URL;
   if (!rpcUrl) return contract;
 
-  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address);
+  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address, {
+    runtimeBytecode: contract.runtimeBytecode,
+  });
   if (!fetched) return contract;
 
   const merged: Contract = {
@@ -452,7 +454,9 @@ async function enrichTokenMetadataInPlace(
 
   if (!needsTokenMeta) return contract;
 
-  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address);
+  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address, {
+    runtimeBytecode: contract.runtimeBytecode,
+  });
   if (!fetched) return contract;
 
   const merged: Contract = {
@@ -564,7 +568,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
   let tokenDecimals: number | null = null;
   let tokenLogo: string | null = null;
   try {
-    const token = await fetchTokenMetadataFromRpc(rpcUrl, address);
+    const token = await fetchTokenMetadataFromRpc(rpcUrl, address, { runtimeBytecode });
     if (token) {
       tokenName = token.name ?? null;
       tokenSymbol = token.symbol ?? null;
