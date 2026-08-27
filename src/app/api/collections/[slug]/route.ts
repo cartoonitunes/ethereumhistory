@@ -20,10 +20,7 @@ export async function GET(
     if (!collection) {
       return NextResponse.json({ error: "Collection not found." }, { status: 404 });
     }
-    const contracts = await getCollectionContractsFromDb(
-      collection.contractAddresses ?? [],
-      collection.deployerAddress ?? null
-    );
+    const contracts = await getCollectionContractsFromDb(collection);
     return NextResponse.json({ data: { collection, contracts } });
   } catch (err) {
     console.error("[api/collections/slug] error:", err);

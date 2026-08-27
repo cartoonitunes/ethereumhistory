@@ -5,6 +5,7 @@ import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import {
   addWalletToPersonFromDb,
   deleteHistoricalLinksFromDb,
+  refreshCollectionsForPersonFromDb,
   getContractByAddress,
   getContractMetadataFromDb,
   getHistoricalLinksForContractFromDb,
@@ -408,6 +409,19 @@ export async function POST(
       });
       if (selectedPersonAddress !== (currentDeployerAddress || null)) {
         fieldsChanged.push("deployerAddress");
+        // Collections are drawn from a person's wallets, so re-attributing a
+        // contract moves it between the old and new person's collections.
+        for (const person of new Set(
+          [selectedPersonAddress, currentDeployerAddress].filter(
+            (a): a is string => !!a
+          )
+        )) {
+          try {
+            await refreshCollectionsForPersonFromDb(person);
+          } catch (error) {
+            console.warn("[manage] collection refresh failed:", error);
+          }
+        }
       }
     }
 

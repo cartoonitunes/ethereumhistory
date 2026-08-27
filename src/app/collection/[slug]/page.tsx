@@ -34,11 +34,9 @@ export default async function CollectionPage({ params }: Props) {
   const collection = await getCollectionBySlugFromDb(slug).catch(() => null);
   if (!collection) notFound();
 
-  const contracts = await getCollectionContractsFromDb(
-    collection.contractAddresses ?? [],
-    collection.deployerAddress ?? null,
-    200
-  ).catch(() => [] as CollectionContract[]);
+  const contracts = await getCollectionContractsFromDb(collection, 200).catch(
+    () => [] as CollectionContract[]
+  );
 
   return (
     <CollectionPageClient collection={collection} contracts={contracts} />

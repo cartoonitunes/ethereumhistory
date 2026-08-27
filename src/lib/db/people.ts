@@ -4,6 +4,7 @@
 
 import { eq, and, or, asc, ilike } from "drizzle-orm";
 import * as schema from "../schema";
+import { refreshCollectionsForPersonFromDb } from "./collections";
 import type {
   Person as AppPerson,
   UnifiedSearchResult,
@@ -79,6 +80,15 @@ export async function addWalletToPersonFromDb(
     label: label?.trim() || null,
     createdAt: new Date(),
   } as any);
+
+  // A person's collection is drawn from every wallet they own, so the stored
+  // address list is rebuilt as soon as a wallet is added.
+  try {
+    await refreshCollectionsForPersonFromDb(normalizedPerson);
+  } catch (error) {
+    // non-fatal: the collection page resolves contracts live anyway
+    console.warn("[people] collection refresh after wallet add failed:", error);
+  }
 }
 
 export async function getPersonByAddressFromDb(address: string): Promise<AppPerson | null> {

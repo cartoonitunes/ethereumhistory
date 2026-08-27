@@ -607,6 +607,9 @@ export const collections = pgTable(
     subtitle: text("subtitle"),
     description: text("description"),
     deployerAddress: text("deployer_address"),
+    // The person this collection belongs to. Contracts are resolved from every
+    // wallet linked to this person, so adding a wallet widens the collection.
+    personAddress: text("person_address"),
     coverImageUrl: text("cover_image_url"),
     contractAddresses: text("contract_addresses").array(),
     createdAt: timestamp("created_at").defaultNow(),
@@ -615,6 +618,7 @@ export const collections = pgTable(
   (table) => ({
     slugIdx: uniqueIndex("collections_slug_unique").on(table.slug),
     deployerIdx: index("collections_deployer_idx").on(table.deployerAddress),
+    personIdx: index("collections_person_idx").on(table.personAddress),
   })
 );
 
