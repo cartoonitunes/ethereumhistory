@@ -58,7 +58,11 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     manualCategories: Array.isArray(row.manualCategories) ? (row.manualCategories as string[]) : null,
     ensName: row.ensName ?? null,
     deployerEnsName: row.deployerEnsName ?? null,
-    etherscanVerified: row.verificationMethod === "etherscan_verified",
+    // Etherscan's status is its own column. NULL means it has never been checked, in
+    // which case fall back to the legacy derivation: source imported from Etherscan was
+    // recorded as verification_method = "etherscan_verified".
+    etherscanVerified: row.etherscanVerified ?? row.verificationMethod === "etherscan_verified",
+    etherscanMatchType: row.etherscanMatchType ?? null,
     etherscanContractName: row.etherscanContractName,
     sourceCode: row.sourceCode,
     abi: row.abi,
@@ -219,6 +223,9 @@ export async function updateContractEtherscanEnrichmentFromDb(
     verificationMethod?: string | null;
     verificationProofUrl?: string | null;
     verificationNotes?: string | null;
+    etherscanVerified?: boolean | null;
+    etherscanMatchType?: string | null;
+    etherscanCheckedAt?: Date | null;
   }
 ): Promise<void> {
   const database = getDb();
@@ -234,6 +241,9 @@ export async function updateContractEtherscanEnrichmentFromDb(
   if (patch.etherscanContractName !== undefined) updates.etherscanContractName = patch.etherscanContractName;
   if (patch.abi !== undefined) updates.abi = patch.abi;
   if (patch.sourceCode !== undefined) updates.sourceCode = patch.sourceCode;
+  if (patch.etherscanVerified !== undefined) updates.etherscanVerified = patch.etherscanVerified;
+  if (patch.etherscanMatchType !== undefined) updates.etherscanMatchType = patch.etherscanMatchType;
+  if (patch.etherscanCheckedAt !== undefined) updates.etherscanCheckedAt = patch.etherscanCheckedAt;
   if (patch.compilerLanguage !== undefined) updates.compilerLanguage = patch.compilerLanguage;
   if (patch.compilerCommit !== undefined) updates.compilerCommit = patch.compilerCommit;
   if (patch.verificationMethod !== undefined) updates.verificationMethod = patch.verificationMethod;

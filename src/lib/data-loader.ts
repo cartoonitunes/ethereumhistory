@@ -103,7 +103,7 @@ function transformContract(raw: RawContract): Contract {
     },
     ensName: null,
     deployerEnsName: null,
-    etherscanVerified: false,
+    etherscanVerified: null,
     etherscanContractName: raw.contract_name || null,
     sourceCode: raw.source_code || null,
     abi: raw.abi || null,

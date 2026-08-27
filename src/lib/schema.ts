@@ -107,6 +107,13 @@ export const contracts = pgTable(
     verificationNotes: text("verification_notes"),
     sourcifyMatch: text("sourcify_match"),
 
+    // Etherscan's own verification status, separate from verificationMethod above.
+    // NULL means never checked. matchType is "direct" or "similar"; a similar match is
+    // Etherscan serving another address's verified source for identical bytecode.
+    etherscanVerified: boolean("etherscan_verified"),
+    etherscanMatchType: text("etherscan_match_type"),
+    etherscanCheckedAt: timestamp("etherscan_checked_at"),
+
     // Precomputed "has documentation" flag, maintained by trigger
     // (migration 067). TRUE when the contract or any bytecode/canonical
     // sibling has a short_description or verification_method.

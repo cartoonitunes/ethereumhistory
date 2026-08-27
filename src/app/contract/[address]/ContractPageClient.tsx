@@ -795,7 +795,9 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
                     >
                       <Check className="w-3 h-3" />
-                      Verified on Etherscan
+                      {contract.etherscanMatchType === "similar"
+                        ? "Verified on Etherscan (similar match)"
+                        : "Verified on Etherscan"}
                     </a>
                   )}
                   {contract.sourcifyMatch && (
@@ -2650,7 +2652,9 @@ function OverviewTab({
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
                   >
                     <Check className="w-3 h-3" />
-                    Verified on Etherscan
+                    {contract.etherscanMatchType === "similar"
+                      ? "Verified on Etherscan (similar match)"
+                      : "Verified on Etherscan"}
                   </a>
                 )}
                 {contract.sourcifyMatch && (

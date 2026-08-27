@@ -292,7 +292,8 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
     !contract.deploymentTxHash ||
     !contract.deploymentBlock ||
     !contract.deploymentTimestamp ||
-    (!contract.sourceCode && !contract.etherscanContractName);
+    (!contract.sourceCode && !contract.etherscanContractName) ||
+    contract.etherscanVerified == null;
 
   if (etherscanKey && mayNeedEtherscan) {
     const patch: Parameters<typeof dbUpdateContractEtherscanEnrichment>[1] = {};
@@ -343,10 +344,25 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
       }
     }
 
-    // Verified source + contract name (only if verified)
-    if (!contract.sourceCode || !contract.etherscanContractName) {
+    // Verified source + contract name. Also runs when Etherscan's status has never been
+    // recorded, so an already-sourced contract still gets its status filled in once.
+    if (!contract.sourceCode || !contract.etherscanContractName || contract.etherscanVerified == null) {
       try {
         const source = await fetchEtherscanSourceCode(contract.address);
+        if (source) {
+          // Etherscan's verification status is recorded whichever way it came back, so a
+          // contract that is not verified is not re-checked on every page view. A similar
+          // match reads as verified: Etherscan serves the source and the ABI for it.
+          merged.etherscanVerified = source.isVerified;
+          merged.etherscanMatchType = source.isVerified
+            ? source.isSimilarMatch
+              ? "similar"
+              : "direct"
+            : null;
+          patch.etherscanVerified = source.isVerified;
+          patch.etherscanMatchType = merged.etherscanMatchType;
+          patch.etherscanCheckedAt = new Date();
+        }
         if (source?.isVerified) {
           // For SimilarMatch contracts, Etherscan's ContractName belongs to the original
           // verifier — not this deployment. Only write the name when it's a direct
@@ -608,7 +624,7 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     },
     ensName: null,
     deployerEnsName: null,
-    etherscanVerified: false,
+    etherscanVerified: null,
     etherscanContractName: null,
     sourceCode: null,
     abi: null,
@@ -695,6 +711,17 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
     const patch: Parameters<typeof dbUpdateContractEtherscanEnrichment>[1] = {};
     try {
       const source = await fetchEtherscanSourceCode(contract.address);
+      if (source) {
+        contract.etherscanVerified = source.isVerified;
+        contract.etherscanMatchType = source.isVerified
+          ? source.isSimilarMatch
+            ? "similar"
+            : "direct"
+          : null;
+        patch.etherscanVerified = source.isVerified;
+        patch.etherscanMatchType = contract.etherscanMatchType;
+        patch.etherscanCheckedAt = new Date();
+      }
       if (source?.isVerified) {
         // SimilarMatch: Etherscan matched by bytecode — ContractName belongs to the original
         // verifier, not this deployment. Skip the name; source/ABI are still accurate.
@@ -1133,7 +1160,7 @@ export async function getContractPageData(address: string): Promise<ContractPage
         ...contract,
         // Inherit name only if this contract has no name of its own
         etherscanContractName: contract.etherscanContractName || canonicalName,
-        etherscanVerified: canonical.verificationMethod === "etherscan_verified",
+        etherscanVerified: canonical.etherscanVerified ?? contract.etherscanVerified,
         verificationMethod: canonical.verificationMethod,
         sourceCode: canonical.sourceCode,
         compilerCommit: canonical.compilerCommit,

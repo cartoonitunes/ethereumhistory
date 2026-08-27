@@ -91,6 +91,9 @@ export async function GET(
     deployer_ens_name: contract.deployerEnsName,
     etherscan_contract_name: contract.etherscanContractName,
     etherscan_verified: contract.etherscanVerified,
+    // "direct" when Etherscan verified this address itself, "similar" when it serves
+    // another address's verified source because the bytecode is identical.
+    etherscan_match_type: contract.etherscanMatchType ?? null,
     source_code: contract.sourceCode,
     abi: contract.abi,
     token_name: contract.tokenName,

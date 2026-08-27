@@ -168,7 +168,13 @@ export interface Contract {
   // External data (from Etherscan, on-chain calls, ENS)
   ensName: string | null;
   deployerEnsName: string | null;
-  etherscanVerified: boolean;
+  // Etherscan's own verification status. null means it has not been checked yet.
+  // This is independent of verificationMethod, which records how EthereumHistory
+  // established the source it stores.
+  etherscanVerified: boolean | null;
+  // "direct" when Etherscan verified this address, "similar" when Etherscan serves
+  // another address's verified source because the bytecode is identical.
+  etherscanMatchType?: string | null;
   etherscanContractName: string | null;
   sourceCode: string | null;
   abi: string | null;

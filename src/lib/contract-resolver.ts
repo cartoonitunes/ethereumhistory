@@ -166,7 +166,7 @@ export function buildContractFromResolved(r: ResolvedContract): AppContract {
     manualCategories: null,
     ensName: null,
     deployerEnsName: null,
-    etherscanVerified: false,
+    etherscanVerified: null,
     etherscanContractName: null,
     sourceCode: null,
     abi: null,
