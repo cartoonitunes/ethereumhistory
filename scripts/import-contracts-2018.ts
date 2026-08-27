@@ -151,7 +151,7 @@ async function main() {
         gasPrice: null,
         codeSizeBytes: c.code_size_bytes ?? null,
         eraId: c.era_id ?? getEraId(c.deployment_block),
-        contractType: "other",
+        contractType: "unknown",
         confidence: 0.5,
         isProxy: false,
         hasSelfDestruct: false,

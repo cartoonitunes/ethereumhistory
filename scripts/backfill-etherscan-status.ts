@@ -53,11 +53,18 @@ async function main() {
   let failed = 0;
 
   for (const [i, row] of rows.entries()) {
+    // Etherscan rate limits the free tier at 5 calls a second and answers a burst with
+    // an error string rather than a result, which reads as "lookup failed". Retry a few
+    // times with a widening gap before giving up on the address.
     let source: Awaited<ReturnType<typeof fetchEtherscanSourceCode>> = null;
-    try {
-      source = await fetchEtherscanSourceCode(row.address);
-    } catch {
-      source = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        source = await fetchEtherscanSourceCode(row.address);
+      } catch {
+        source = null;
+      }
+      if (source) break;
+      await new Promise((r) => setTimeout(r, 900 * (attempt + 1)));
     }
     if (!source) {
       // A failed lookup is left NULL rather than recorded as unverified, so the next run
@@ -78,7 +85,7 @@ async function main() {
     if ((i + 1) % 100 === 0) {
       console.log(`  ${i + 1}/${rows.length}  direct=${direct} similar=${similar} unverified=${unverified} failed=${failed}`);
     }
-    await new Promise((r) => setTimeout(r, 220));
+    await new Promise((r) => setTimeout(r, 260));
   }
 
   console.log(`done: direct=${direct} similar=${similar} unverified=${unverified} failed=${failed}`);
