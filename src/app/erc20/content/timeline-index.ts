@@ -286,6 +286,11 @@ export const TIMELINE_INDEX: TimelineIndexEra[] = [
         "star": true
       },
       {
+        "id": "ev-first-compliant-issued-token",
+        "src": "chain",
+        "star": true
+      },
+      {
         "id": "ev-the-first-repository-named-erc20",
         "src": "code",
         "star": true
@@ -329,4 +334,4 @@ export const TIMELINE_INDEX: TimelineIndexEra[] = [
   }
 ];
 
-export const TIMELINE_TOTAL = 58;
+export const TIMELINE_TOTAL = 59;

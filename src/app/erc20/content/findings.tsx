@@ -319,6 +319,36 @@ export function Findings() {
                 12
               </td>
               <td data-label="Question">
+                First fully compliant contract that is an
+                {" "}
+                <em>independently issued token</em>
+                , rather than a wrapper over ether, and that was actually used
+              </td>
+              <td data-label="Answer (UTC)" className={cx("mono")}>
+                2016-03-28T18:12:05Z
+                <br />
+                block 1,233,109
+              </td>
+              <td data-label="Artifact">
+                <span className={cx("mono")}>
+                  <Addr a="0xC66eA802717bFb9833400264Dd12c2bCeAa34a6d" />
+                </span>
+                ,
+                {" "}
+                <span className={cx("mono")}>DSTokenFrontend</span>
+                {" "}
+                from
+                {" "}
+                <span className={cx("mono")}>dapphub/dappsys</span>
+                {" "}
+                0.1.2. MakerDAO's original MKR. Eight days after the ether wrapper, and unlike it, in use ever since.
+              </td>
+            </tr>
+            <tr>
+              <td data-label="#" className={cx("num")}>
+                13
+              </td>
+              <td data-label="Question">
                 The source in the Foundation's 2015-12-03 tutorial
               </td>
               <td data-label="Answer (UTC)">

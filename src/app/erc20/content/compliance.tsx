@@ -31,7 +31,7 @@ export function Compliance() {
             . This is the operative definition for the whole period. It is what the Ethereum Wallet's ABI required from 23 October 2015, what Alex Van de Sande told the issue thread as late as 15 March 2016, and what 154 of the 320 token-vocabulary contracts deployed between 3 November 2015 and 6 January 2016 implement.
           </p>
           <p>
-            By this definition MistCoin complies, along with nine earlier contracts and about 150 later ones. It has nothing to do with EIP-20's required set.
+            By this definition MistCoin complies, along with nine earlier contracts and about 150 later ones. It is a different question from EIP-20's required set, and for the whole of this period it is the question that decided whether a token was usable.
           </p>
         </div>
         <div className={cx("card")}>
@@ -119,7 +119,7 @@ export function Compliance() {
         </p>
         <p>
           <strong>
-            The accurate statement about any 2015 token, MistCoin included, is that it meets the first definition and cannot meet the second, because the second did not exist yet.
+            A 2015 token is answering the first definition, because it is the only one that had been written. Judged against the second, every contract of that year is being measured against a document from its own future.
           </strong>
         </p>
         <p>
@@ -385,6 +385,25 @@ export function Compliance() {
       </TableScroll>
       <p className={cx("tnote")}>
         The middle two columns are bytecode and state questions and were answered as such. The third is a behavioural question and was answered by execution. A contract can hold every selector, hold a real supply, and still not behave the way the standard requires, which is what the first three rows are.
+      </p>
+      <p className={cx("prose")} style={{ color: "var(--ink-2)", marginTop: "1.5rem" }}>
+        The pass above stops at the first contract to satisfy definition 4, and that contract is an ether wrapper that was never used. The first fully compliant contract that is an
+        {" "}
+        <em>issued token</em>
+        {" "}
+        and that saw real traffic arrives eight days later:
+        {" "}
+        <span className={cx("mono")}>
+          <Addr a="0xC66eA802717bFb9833400264Dd12c2bCeAa34a6d" />
+        </span>
+        , dappsys 0.1.2's
+        {" "}
+        <span className={cx("mono")}>DSTokenFrontend</span>
+        , 28 March 2016, which is MakerDAO's original MKR and has emitted transfers ever since. It is
+        {" "}
+        <a href="#timeline">in the timeline</a>
+        {" "}
+        with its own evidence.
       </p>
       <div className={cx("callout callout--warn")} style={{ margin: "2rem 0", maxWidth: "56rem" }}>
         <strong>One requirement carries a date of its own.</strong>

@@ -15,7 +15,7 @@ export function MistCoin() {
         MistCoin
       </h2>
       <p className={cx("lede prose")}>
-        Deployed 3 November 2015 at 12:03:29Z, sixteen days before issue #20 was filed. What the deployed bytecode contains, where the source came from, and where the contract sits in the record.
+        Deployed 3 November 2015 at 12:03:29Z, sixteen days before issue #20 was filed. The first token the official Ethereum Wallet could display, compiled from the gist that became the Foundation's tutorial, and the seed of the largest family of contracts on the chain in 2015.
       </p>
       <dl className={cx("deflist")} style={{ maxWidth: "54rem", marginBottom: "2.5rem" }}>
         <div>
@@ -79,166 +79,42 @@ export function MistCoin() {
         </div>
         <div>
           <h3 className={cx("sub")}>
-            Against the finished standard
+            What that set of five was for
           </h3>
-          <TableScroll>
-            <table>
-              <thead>
-                <tr>
-                  <th>EIP-20 member</th>
-                  <th>Required?</th>
-                  <th className={cx("ctr")}>In MistCoin</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    totalSupply()
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-n")}>
-                    –
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    balanceOf(address)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    transfer(address,uint256)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔ *
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    transferFrom(address,address,uint256)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-n")}>
-                    –
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    approve(address,uint256)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-n")}>
-                    –
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    allowance(address,address)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-n")}>
-                    –
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    Transfer(address,address,uint256)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    Approval(address,address,uint256)
-                  </td>
-                  <td data-label="Required?">
-                    required
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-n")}>
-                    –
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    name()
-                  </td>
-                  <td data-label="Required?">
-                    optional
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    symbol()
-                  </td>
-                  <td data-label="Required?">
-                    optional
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔
-                  </td>
-                </tr>
-                <tr>
-                  <td data-label="EIP-20 member" className={cx("mono")}>
-                    decimals()
-                  </td>
-                  <td data-label="Required?">
-                    optional
-                  </td>
-                  <td data-label="In MistCoin" className={cx("ctr m-y")}>
-                    ✔
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </TableScroll>
-          <p className={cx("tnote")}>
-            * Same selector, but the deployed
+          <p style={{ color: "var(--ink-2)" }}>
+            Every member in it is something a wallet needs in order to show a token to a person.
+            {" "}
+            <code>balanceOf</code>
+            {" "}
+            and
             {" "}
             <code>transfer</code>
             {" "}
-            returns nothing. EIP-20 specifies
+            are the account and the verb.
             {" "}
-            <span className={cx("mono")}>returns (bool success)</span>
-            . The dispatcher pushes return address
+            <code>name</code>
+            ,
             {" "}
-            <span className={cx("mono")}>0x0045</span>
-            , which is a
+            <code>symbol</code>
             {" "}
-            <span className={cx("mono")}>JUMPDEST</span>
+            and
             {" "}
-            immediately followed by
+            <code>decimals</code>
             {" "}
-            <span className={cx("mono")}>STOP</span>
-            .
+            are the label, the ticker and the decimal point, and the
+            {" "}
+            <code>Transfer</code>
+            {" "}
+            event is what a client watches to know the balance moved.
+          </p>
+          <p style={{ color: "var(--ink-2)" }}>
+            That is the exact set the Ethereum Wallet's
+            {" "}
+            <span className={cx("mono")}>tokenABI.js</span>
+            {" "}
+            reads, and it is why this contract renders. Three of the five are members the standard still marks optional today, and they are the three that made a token legible to a non-programmer. The approval half of ERC-20, which the issue thread would spend most of its argument on, solves a different problem: letting a contract spend on your behalf. It was not yet a problem anyone was having in November 2015.
           </p>
         </div>
-      </div>
-      <div className={cx("callout")} style={{ margin: "2.5rem 0", maxWidth: "54rem" }}>
-        <strong>Score: 2 of 6 required methods, 1 of 2 required events, 3 of 3 optional members.</strong>
       </div>
       <h3 className={cx("sub sub--gap")}>
         Bytecode-verified provenance
@@ -461,13 +337,13 @@ export function MistCoin() {
           <div className={cx("callout")}>
             <strong>MistCoin is the first token contract that the official Ethereum Wallet could display.</strong>
             {" "}
-            Not the first contract with
-            {" "}
-            <code>transfer</code>
-            , and not an implementation of a standard that did not yet exist. The first that the wallet could render with a name, a symbol and a decimal point, on the day the wallet gained the ability to render one.
+            The first that a client could render with a name, a symbol and a decimal point, on the day the wallet gained the ability to render one at all. Before it, a token was a balance you queried from a console. After it, a token was a row in an application with a ticker beside it.
           </div>
           <p style={{ color: "var(--ink-2)", marginTop: "1.25rem" }}>
-            It is also, per an index of 12,023,046 contracts, the earliest of 173 contracts across all of Ethereum history sharing its exact runtime bytecode. It is the genesis member of the MyToken family, which is the largest single artifact of the 2015 tutorial.
+            It is also, per an index of 12,023,046 contracts, the earliest of 173 contracts across all of Ethereum history sharing its exact runtime bytecode, and the genesis member of the MyToken family. Of the 320 contracts carrying any token vocabulary in the two months from its deployment to the day the specification froze,
+            {" "}
+            <strong>140 have MistCoin's exact shape and nothing else</strong>
+            : the same five members, the same event, compiled from the same gist. It is the single most copied artifact of the 2015 tutorial, and by a wide margin the most common token contract on mainnet in the period the standard was being written.
           </p>
         </div>
       </div>
@@ -489,7 +365,10 @@ export function MistCoin() {
             {" "}
             <span className={cx("mono")}>MyToken</span>
             {" "}
-            gist it was compiled from that morning, and he authored and published Ethereum Wallet 0.3.5, the release that gave the wallet its token feature, later the same day. He has described the deployment publicly since.
+            gist it was compiled from that morning, and he authored and published Ethereum Wallet 0.3.5, the release that gave the wallet its token feature, an hour and forty minutes later the same day. He has described the deployment publicly since. MistCoin is the working example of the feature he was shipping, put on mainnet by its author on the morning it went out.
+          </p>
+          <p style={{ color: "var(--ink-2)" }}>
+            What 0.3.5 shipped was a graphical path from nothing to a token. Its notes announce “a new custom Token system, as well as a simple way to deploy contracts right from the wallet”: paste Solidity into the Send page, and the wallet compiles it, reads the constructor and renders a form for the four arguments, supply, name, symbol and decimals. Press send, then add the resulting address under the Token button and the balance appears in the sidebar. It is the first interface on Ethereum where creating a token and then seeing it is something a person does with a form and a button rather than a console.
           </p>
           <p style={{ color: "var(--ink-2)" }}>
             Its first transfer sent half the supply to
@@ -500,7 +379,7 @@ export function MistCoin() {
             <a href="https://blog.ethereum.org/2015/12/03/how-to-build-your-own-cryptocurrency" className={cx("ext")} target="_blank" rel="noopener noreferrer">
               “Ethereum in practice part 1”
             </a>
-            , which shipped this contract's source to a general audience.
+            , which shipped this contract's source, byte for byte, to a general audience. Between the gist, the wallet form and the tutorial, the same 716 bytes reached anyone who wanted a token, and hundreds of people took it.
           </p>
           <h4 className={cx("eyebrow")} style={{ marginTop: "1.75rem" }}>Sources</h4>
           <ul className={cx("sources")}>
@@ -579,16 +458,10 @@ export function MistCoin() {
           {" "}
           <code>transfer</code>
           {" "}
-          for thirty and twenty-eight days respectively, and their final parameter order for six days, so MistCoin's two methods do match the page as it stood.
+          for thirty and twenty-eight days respectively, and their final parameter order for six days. MistCoin carries both, under the names and in the parameter order the page had settled on the week before. It is written against the specification as it stood that morning.
         </p>
         <p>
-          What the page also specified, and MistCoin does not implement, is the entire rest of it:
-          {" "}
-          <code>transferFrom</code>
-          , and five approval members,
-          {" "}
-          <code>approve</code>
-          ,
+          The rest of what the page described then, five approval members and two approval events, is vocabulary the standard itself later discarded:
           {" "}
           <code>unapprove</code>
           ,
@@ -597,32 +470,32 @@ export function MistCoin() {
           ,
           {" "}
           <code>approveOnce</code>
-          {" "}
-          and
+          ,
           {" "}
           <code>isApprovedOnceFor</code>
-          , plus the events
+          {" "}
+          and
           {" "}
           <code>AddressApproval</code>
           {" "}
-          and
-          {" "}
-          <code>AddressApprovalOnce</code>
-          . There was no
+          are in none of ERC-20.
           {" "}
           <code>totalSupply</code>
-          {" "}
-          on the page yet, no
+          ,
           {" "}
           <code>allowance</code>
           {" "}
-          and no
+          and
           {" "}
           <code>Approval</code>
-          . Those three arrive on 18, 20 and 20 November. MistCoin implements the two members of the October wiki that a wallet needed, and none of the eight it did not.
+          , the members that survived, had not been written yet: they arrive on 18, 20 and 20 November, two weeks later.
         </p>
         <p>
-          This is a fact about the calendar rather than about the contract. A token deployed sixteen days before the proposal was written cannot implement the proposal. What it did do was establish the shape the wallet rendered, which a few hundred contracts copied over the following two months.
+          <strong>
+            What MistCoin did was fix the half of the interface that never changed again.
+          </strong>
+          {" "}
+          The two methods and the one event it carries are, member for member, the part of ERC-20 that was already right on the day it was deployed and that no revision touched afterwards. The approval half took the next fourteen months and most of the argument on issue #20 to settle. The wallet half was settled here, in a working contract, in a 716-byte runtime, before the proposal existed.
         </p>
       </div>
     </>

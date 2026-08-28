@@ -547,7 +547,7 @@ export function Era3() {
           </p>
           <CodeBlock lang="sol" caption={"ethereum-org views/content/token.md at b0abb37, contract opening"} code={"contract MyToken { \n    /* Public variables of the token */\n    string public name;\n    string public symbol;\n    uint8 public decimals;\n\n    /* This creates an array with all balances */\n    mapping (address => uint256) public balanceOf;\n\n    /* This generates a public event on the blockchain that will notify clients */\n    event Transfer(address indexed from, address indexed to, uint256 value);\n\n    /* Initializes contract with initial supply tokens to the creator of the contract */\n    function myToken(uint256 initialSupply, string tokenName, uint8 decimalUnits, string tokenSymbol) {"} />
           <p>
-            Two of the six required methods, one of the two required events, three of three optional members: the same score as MistCoin, and the same shape the wallet rendered. The
+            The same shape as MistCoin, and the same shape the wallet rendered: a balance, a transfer, an event, and the three labels a client needs to draw the thing. The
             {" "}
             <code>Transfer</code>
             {" "}

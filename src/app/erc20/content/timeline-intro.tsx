@@ -15,7 +15,7 @@ export function TimelineIntro() {
         The timeline
       </h2>
       <p className={cx("lede prose")}>
-        Fifty-eight entries, from the first official token tutorial to the standard's formal adoption. Open any entry for the underlying evidence: the source as it stood, the commit diff, the issue body, the decoded bytecode. Bold markers are the milestones from the findings above.
+        Fifty-nine entries, from the first official token tutorial to the standard's formal adoption. Open any entry for the underlying evidence: the source as it stood, the commit diff, the issue body, the decoded bytecode. Bold markers are the milestones from the findings above.
       </p>
     </>
   );

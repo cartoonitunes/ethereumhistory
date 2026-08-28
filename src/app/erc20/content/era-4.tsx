@@ -636,6 +636,166 @@ export function Era4() {
           </ul>
         </TimelineEvent>
         <TimelineEvent
+          id="ev-first-compliant-issued-token"
+          src="chain"
+          star
+          date={"2016-03-28"}
+          times={["18:12:05Z"]}
+          mobileWhen={"2016-03-28 · 18:12:05Z · block 1,233,109"}
+          title={"The first fully compliant token anyone actually used"}
+          tags={[{ label: "mainnet", actor: false }, { label: "dapphub/dappsys", actor: false }, { label: "finding 12", actor: false }]}
+          summary={
+            <>
+            <span className={cx("mono")}>
+              <Addr a="0xC66eA802717bFb9833400264Dd12c2bCeAa34a6d" />
+            </span>
+            ,
+            {" "}
+            <span className={cx("mono")}>DSTokenFrontend</span>
+            {" "}
+            from dappsys 0.1.2. An independently issued token rather than a wrapper over ether, and the original MKR. Eight days after the ether wrapper, and still moving a decade later.
+            </>
+          }
+        >
+          <dl className={cx("deflist")}>
+            <div>
+              <dt>Address</dt>
+              <dd className={cx("mono")}>
+                <Addr a="0xC66eA802717bFb9833400264Dd12c2bCeAa34a6d" />
+              </dd>
+            </div>
+            <div>
+              <dt>Deployed</dt>
+              <dd className={cx("mono")}>2016-03-28T18:12:05Z, block 1,233,109</dd>
+            </div>
+            <div>
+              <dt>Deployer</dt>
+              <dd className={cx("mono")}>
+                <Addr a="0x5c83154239485698b694b8cD5953e8669d07b49E" />
+              </dd>
+            </div>
+            <div>
+              <dt>Runtime size</dt>
+              <dd className={cx("mono")}>3,040 bytes</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>
+                Verified on Etherscan as
+                {" "}
+                <span className={cx("mono")}>DSTokenFrontend</span>
+                , flattened from
+                {" "}
+                <span className={cx("mono")}>dapphub/dappsys</span>
+                {" "}
+                at tag
+                {" "}
+                <span className={cx("mono")}>0.1.2</span>
+                , commit
+                {" "}
+                <span className={cx("mono")}>8ddd3f3</span>
+              </dd>
+            </div>
+          </dl>
+          <p>
+            The 20 March contract is fully compliant and was never used: one transaction in its life, its own creation. This one is the other thing. It carries all six selectors and both event topics, it is a token whose supply was issued rather than backed by deposited ether, and it went on to be used for ten years.
+          </p>
+          <h4>What it is</h4>
+          <p>
+            <span className={cx("mono")}>DSTokenFrontend</span>
+            {" "}
+            is the front half of a three-part design that would become familiar: a thin, permanent address that holds no state and proxies every call to a swappable
+            {" "}
+            <span className={cx("mono")}>DSTokenController</span>
+            , which in turn keeps balances and approvals in two separate database contracts. The frontend emits
+            {" "}
+            <span className={cx("mono")}>Transfer</span>
+            {" "}
+            and
+            {" "}
+            <span className={cx("mono")}>Approval</span>
+            {" "}
+            itself, through
+            {" "}
+            <span className={cx("mono")}>emitTransfer</span>
+            {" "}
+            and
+            {" "}
+            <span className={cx("mono")}>emitApproval</span>
+            {" "}
+            callbacks the controller invokes, so the logs stay at one address across an upgrade. That address is MakerDAO's original MKR, deployed through
+            {" "}
+            <span className={cx("mono")}>DSTokenFactory.buildDSTokenFrontend()</span>
+            {" "}
+            eight months before the first Sai release, and dappsys is the library MakerDAO's later
+            {" "}
+            <span className={cx("mono")}>DSToken</span>
+            {" "}
+            grew out of.
+          </p>
+          <p>
+            Its
+            {" "}
+            <span className={cx("mono")}>token/erc20.sol</span>
+            {" "}
+            splits the interface into
+            {" "}
+            <span className={cx("mono")}>ERC20Stateless</span>
+            ,
+            {" "}
+            <span className={cx("mono")}>ERC20Stateful</span>
+            {" "}
+            and
+            {" "}
+            <span className={cx("mono")}>ERC20Events</span>
+            , the three constant methods, the three that write, and the two events. That is the standard as issue #20 had left it fourteen months earlier, reproduced from the issue by someone building on it rather than debating it.
+          </p>
+          <h4>Use</h4>
+          <p>
+            Counted from the contract's own logs: 23,553
+            {" "}
+            <span className={cx("mono")}>Transfer</span>
+            {" "}
+            events across 4,569 distinct addresses, the first on 9 April 2016 and the most recent in June 2026. 444 of those transfers carry a value of zero and were logged anyway, which is the requirement that separated the 20 March contract from the seven-weeks-earlier candidates, satisfied here in production thousands of times over.
+          </p>
+          <div className={cx("callout callout--warn")}>
+            <strong>Two bounds on the word “first”.</strong>
+            {" "}
+            The behavioural pass behind the 20 March finding covered every contract carrying the six selectors up to that block. Between it and this one, this archive's index holds five more: the wrapper's byte-identical twin
+            {" "}
+            <span className={cx("mono")}>
+              <Addr a="0xd654bDD32FC99471455e86C2E7f7D7b6437e9179" />
+            </span>
+            {" "}
+            and three others, none of them an issued token. And the transfer counts move: they were read at block 25,286,742 and the contract is still live.
+          </div>
+          <h4>Sources</h4>
+          <ul className={cx("sources")}>
+            <li>
+              <span className={cx("lbl")}>Contract</span>
+              <a href="https://etherscan.io/address/0xc66ea802717bfb9833400264dd12c2bceaa34a6d" className={cx("ext")} target="_blank" rel="noopener noreferrer">
+                etherscan.io · DSTokenFrontend
+              </a>
+            </li>
+            <li>
+              <span className={cx("lbl")}>Library</span>
+              <a href="https://github.com/dapphub/dappsys" className={cx("ext")} target="_blank" rel="noopener noreferrer">
+                github.com/dapphub/dappsys
+              </a>
+            </li>
+            <li>
+              <span className={cx("lbl")}>Method</span>
+              <span className={cx("val")}>
+                Selectors by substring match over the deployed runtime; usage by walking every
+                {" "}
+                <span className={cx("mono")}>Transfer</span>
+                {" "}
+                log the address has emitted, deduplicated by transaction hash and log index.
+              </span>
+            </li>
+          </ul>
+        </TimelineEvent>
+        <TimelineEvent
           id="ev-the-first-repository-named-erc20"
           src="code"
           star
