@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart, Search } from "lucide-react";
+import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart, Search, ChevronDown } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
@@ -22,7 +22,9 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [protocolsOpen, setProtocolsOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const protocolsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (propHistorianMe !== undefined) {
@@ -48,7 +50,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
   }, [propHistorianMe]);
 
   // Close menu on route change
-  useEffect(() => { setMenuOpen(false); setSearchOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setSearchOpen(false); setProtocolsOpen(false); }, [pathname]);
 
   // Focus input when search opens
   useEffect(() => {
@@ -59,12 +61,26 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
     }
   }, [searchOpen]);
 
-  // Escape closes search
+  // Escape closes search and the protocols dropdown
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSearchOpen(false); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setSearchOpen(false);
+      setProtocolsOpen(false);
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Click outside closes the protocols dropdown
+  useEffect(() => {
+    if (!protocolsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!protocolsRef.current?.contains(e.target as Node)) setProtocolsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [protocolsOpen]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,8 +102,20 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
     { href: "/collections", label: "Collections" },
     { href: "/proofs", label: "Proofs" },
     { href: "/network", label: "Network" },
-    { href: "/donate", label: "Donate", highlight: true },
   ];
+
+  // Long-form histories of individual standards and protocols. Add new
+  // entries here (ENS, The DAO, ...) and they show up in both the desktop
+  // dropdown and the mobile drawer.
+  const protocolLinks = [
+    {
+      href: "/erc20",
+      label: "ERC-20",
+      description: "The token interface, reconstructed from primary sources",
+    },
+  ];
+
+  const protocolsActive = protocolLinks.some(({ href }) => pathname?.startsWith(href));
 
   return (
     <>
@@ -114,25 +142,71 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
 
             {/* Desktop nav */}
             <nav className="hidden md:flex items-center gap-4">
-              {navLinks.map(({ href, label, highlight }) => (
+              {navLinks.map(({ href, label }) => (
                 <Link
                   key={href}
                   href={href}
-                  className={`text-sm transition-colors ${
-                    highlight
-                      ? "text-ether-400 hover:text-ether-300 font-medium"
-                      : "text-obsidian-400 hover:text-obsidian-100"
-                  }`}
+                  className="text-sm transition-colors text-obsidian-400 hover:text-obsidian-100"
                 >
                   {label}
                 </Link>
               ))}
+
+              {/* Protocols: long-form histories of individual standards */}
+              <div className="relative" ref={protocolsRef}>
+                <button
+                  onClick={() => setProtocolsOpen((v) => !v)}
+                  aria-expanded={protocolsOpen}
+                  aria-haspopup="true"
+                  className={`flex items-center gap-1 text-sm transition-colors ${
+                    protocolsActive || protocolsOpen
+                      ? "text-obsidian-100"
+                      : "text-obsidian-400 hover:text-obsidian-100"
+                  }`}
+                >
+                  Protocols
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform ${protocolsOpen ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  />
+                </button>
+                <AnimatePresence>
+                  {protocolsOpen && (
+                    <motion.div
+                      key="protocols-menu"
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute left-0 top-full mt-2 w-72 rounded-xl border border-obsidian-800 bg-obsidian-950/95 backdrop-blur-lg shadow-xl p-1.5"
+                    >
+                      {protocolLinks.map(({ href, label, description }) => (
+                        <Link
+                          key={href}
+                          href={href}
+                          className="block px-3 py-2.5 rounded-lg hover:bg-obsidian-800/60 transition-colors"
+                        >
+                          <span className="block text-sm font-medium text-obsidian-100">{label}</span>
+                          <span className="block text-xs text-obsidian-500 mt-0.5 leading-snug">{description}</span>
+                        </Link>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
               <a
                 href="/game"
                 className="text-sm transition-colors text-obsidian-400 hover:text-obsidian-100"
               >
                 Game
               </a>
+              <Link
+                href="/donate"
+                className="text-sm font-medium text-ether-400 hover:text-ether-300 transition-colors"
+              >
+                Donate
+              </Link>
               <a
                 href="https://discord.gg/3KV6dt2euF"
                 target="_blank"
@@ -236,31 +310,45 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 className="md:hidden absolute top-full inset-x-0 z-40 bg-obsidian-950/95 backdrop-blur-lg border-b border-obsidian-800 shadow-xl"
               >
                 <nav className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-1">
-                  {navLinks.map(({ href, label, highlight }) => (
+                  {navLinks.map(({ href, label }) => (
                     <Link
                       key={href}
                       href={href}
-                      className={`px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                        highlight
-                          ? "text-ether-400 hover:text-ether-300 hover:bg-ether-500/10"
-                          : "text-obsidian-300 hover:text-obsidian-100 hover:bg-obsidian-800/60"
-                      }`}
+                      className="px-3 py-3 rounded-lg text-sm font-medium transition-colors text-obsidian-300 hover:text-obsidian-100 hover:bg-obsidian-800/60"
                     >
-                      {label === "Donate" ? (
-                        <span className="flex items-center gap-2">
-                          <Heart className="w-4 h-4" />
-                          {label}
-                        </span>
-                      ) : label}
+                      {label}
+                    </Link>
+                  ))}
+
+                  <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-obsidian-500">
+                    Protocols
+                  </p>
+                  {protocolLinks.map(({ href, label, description }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="px-3 py-2.5 rounded-lg transition-colors hover:bg-obsidian-800/60"
+                    >
+                      <span className="block text-sm font-medium text-obsidian-300">{label}</span>
+                      <span className="block text-xs text-obsidian-500 mt-0.5 leading-snug">{description}</span>
                     </Link>
                   ))}
 
                   <a
                     href="/game"
-                    className="px-3 py-3 rounded-lg text-sm font-medium transition-colors text-obsidian-300 hover:text-obsidian-100 hover:bg-obsidian-800/60"
+                    className="mt-1 px-3 py-3 rounded-lg text-sm font-medium transition-colors text-obsidian-300 hover:text-obsidian-100 hover:bg-obsidian-800/60"
                   >
                     Game
                   </a>
+                  <Link
+                    href="/donate"
+                    className="px-3 py-3 rounded-lg text-sm font-medium transition-colors text-ether-400 hover:text-ether-300 hover:bg-ether-500/10"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Heart className="w-4 h-4" />
+                      Donate
+                    </span>
+                  </Link>
 
                   <div className="border-t border-obsidian-800 my-2" />
 

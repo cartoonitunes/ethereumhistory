@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Cake } from "lucide-react";
+import Link from "next/link";
+import { X, ScrollText } from "lucide-react";
 
-const STORAGE_KEY = "eh-eth11-banner-dismissed";
+const STORAGE_KEY = "eh-erc20-banner-dismissed";
 
 export function AnnouncementBanner() {
   const [visible, setVisible] = useState(false);
@@ -28,19 +29,17 @@ export function AnnouncementBanner() {
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         <p className="text-obsidian-200 leading-snug pr-6 flex items-start gap-2">
-          <Cake className="w-4 h-4 mt-0.5 text-ether-400 shrink-0" aria-hidden="true" />
+          <ScrollText className="w-4 h-4 mt-0.5 text-ether-400 shrink-0" aria-hidden="true" />
           <span>
-            <span className="font-semibold text-ether-400">Happy 11th Birthday, Ethereum</span>
-            {" — the Frontier genesis block was mined July 30, 2015."}
+            <span className="font-semibold text-ether-400">New: The History of ERC-20</span>
+            {", a primary-source reconstruction of the token standard."}
             {" "}
-            <a
-              href="https://ethereum.org/en/whitepaper/"
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/erc20"
               className="font-medium text-ether-400 hover:text-ether-300 transition-colors whitespace-nowrap"
             >
-              Read the white paper →
-            </a>
+              Read the code trail →
+            </Link>
           </span>
         </p>
         <button
