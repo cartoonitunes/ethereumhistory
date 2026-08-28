@@ -17,12 +17,13 @@ import { Artifacts } from "./content/artifacts";
 import { MistCoin } from "./content/mistcoin";
 import { Onchain } from "./content/onchain";
 import { Compliance } from "./content/compliance";
+import { AdoptionScale } from "./components/AdoptionScale";
 import { Method } from "./content/method";
 import { Colophon } from "./content/colophon";
 
-const TITLE = "ERC-20: A Code History - Ethereum History";
+const TITLE = "The History of ERC-20 - Ethereum History";
 const DESCRIPTION =
-  "A primary-source reconstruction of when each member of the ERC-20 interface first appeared in publicly available code, 2015 to 2016. Every claim resolves to a commit, gist revision, archived event or block.";
+  "A primary-source reconstruction of when each member of the ERC-20 interface first appeared in publicly available code, from the 2015 wiki page to the standard being merged as Final in September 2017. Every claim resolves to a commit, gist revision, archived event or block.";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
@@ -51,18 +52,18 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ERC-20: A Code History",
+    title: "The History of ERC-20",
     description:
-      "When each member of the ERC-20 interface first appeared in public code, 2015 to 2016.",
+      "When each member of the ERC-20 interface first appeared in public code, 2015 to 2017.",
   },
 };
 
 const articleJsonLd = {
   "@context": "https://schema.org",
   "@type": "Article",
-  headline: "ERC-20: A Code History",
+  headline: "The History of ERC-20",
   description: DESCRIPTION,
-  about: "The drafting of the ERC-20 token standard, 2015 to 2016",
+  about: "The drafting of the ERC-20 token standard, 2015 to 2017",
   isPartOf: {
     "@type": "WebSite",
     name: "Ethereum History",
@@ -148,19 +149,25 @@ export default function Erc20Page() {
           </Wrap>
         </section>
 
-        <section id="compliance" className={cx("band")}>
+        <section id="adoption" className={cx("band")}>
+          <Wrap>
+            <AdoptionScale />
+          </Wrap>
+        </section>
+
+        <section id="compliance" className={cx("band band--tint")}>
           <Wrap>
             <Compliance />
           </Wrap>
         </section>
 
-        <section id="method" className={cx("band band--tint")}>
+        <section id="method" className={cx("band")}>
           <Wrap>
             <Method />
           </Wrap>
         </section>
 
-        <footer className={cx("band")}>
+        <footer className={cx("band band--tint")}>
           <Wrap>
             <Colophon />
           </Wrap>

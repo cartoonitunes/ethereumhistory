@@ -11,6 +11,7 @@ const SECTIONS = [
   { id: "artifacts", label: "Artifacts" },
   { id: "mistcoin", label: "MistCoin" },
   { id: "onchain", label: "Onchain" },
+  { id: "adoption", label: "Adoption" },
   { id: "compliance", label: "Compliance" },
   { id: "method", label: "Method" },
 ];

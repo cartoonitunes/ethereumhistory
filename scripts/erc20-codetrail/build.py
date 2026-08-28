@@ -74,10 +74,33 @@ def drop(el, depth, em):
     return None
 
 
+# The standalone document is titled for itself; on Ethereum History the page
+# carries the site's plainer register, and the eyebrow states the span the
+# timeline actually covers (era 5 runs to September 2017, with its
+# out-of-corpus entries marked as such where they appear).
+TEXT_OVERRIDES = {
+    "How the token standard was written": "The History of ERC-20",
+    "A primary-source reconstruction, 2015 to 2016":
+        "A primary-source reconstruction, 2015 to 2017",
+}
+
+
+def override(el, depth, em):
+    if el.tag not in ("h1", "p"):
+        return None
+    text = el.text().strip()
+    if text not in TEXT_OVERRIDES:
+        return None
+    pad = em.indent * depth
+    attrs = em._attrs(el)
+    head = f"{pad}<{el.tag}" + ((" " + " ".join(attrs)) if attrs else "")
+    return [f"{head}>{TEXT_OVERRIDES[text]}</{el.tag}>"]
+
+
 def default_intercept(el, depth, em):
     # An interceptor may legitimately return [] (emit nothing), so each result
     # is tested against None rather than for truthiness.
-    for fn in (drop, code_block, table_scroll):
+    for fn in (override, drop, code_block, table_scroll):
         hit = fn(el, depth, em)
         if hit is not None:
             return hit

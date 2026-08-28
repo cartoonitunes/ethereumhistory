@@ -8,12 +8,8 @@ import { TableScroll } from "../components/TableScroll";
 export function Hero() {
   return (
     <>
-      <p className={cx("eyebrow")}>
-        A primary-source reconstruction, 2015 to 2016
-      </p>
-      <h1>
-        How the token standard was written
-      </h1>
+      <p className={cx("eyebrow")}>A primary-source reconstruction, 2015 to 2017</p>
+      <h1>The History of ERC-20</h1>
       <div className={cx("hero-cols")}>
         <div className={cx("hero-lede")}>
           <p className={cx("lede")}>
