@@ -1176,7 +1176,7 @@ export function Era1() {
             {" "}
             <code>CoinTransfer</code>
             {" "}
-            during the drafting window, months after the standard had renamed it. They were following the documentation, and the documentation had not moved.
+            on mainnet between November 2015 and January 2016, months after the standard had renamed it. They were following the documentation, and the documentation had not moved.
           </p>
           <h4>Sources</h4>
           <ul className={cx("sources")}>
@@ -1229,7 +1229,7 @@ export function Era1() {
           }
         >
           <p>
-            This is the high-water mark of the approval design. Both events added here reached mainnet: one contract in the drafting window carries the
+            This is the high-water mark of the approval design. Both events added here reached mainnet: of the contracts deployed between 3 November 2015 and 6 January 2016, one carries the
             {" "}
             <code>AddressApproval</code>
             {" "}
@@ -1286,7 +1286,7 @@ export function Era1() {
           <h4>The interface at that commit</h4>
           <CodeBlock lang="sol" code={"function currency()\nfunction sendCoin(uint _value, address _to)\nfunction sendCoinFrom(address _from, uint _value, address _to)\nfunction coinBalance()\nfunction coinBalanceOf(address _addr)\nfunction approve(address _addr)\nfunction isApproved(address _proxy)\nfunction approveOnce(address _addr, uint256 _maxValue)\nfunction isApprovedOnceFor(address _target, address _proxy)\nfunction disapprove(address _addr)\nevent CoinSent(address indexed from, uint256 value, address indexed to)"} />
           <p>
-            Not one member here carries a name that ERC-20 requires. This file is worth keeping in view when reading the onchain section: fifty-six contracts deployed during the drafting window implement
+            Not one member here carries a name that ERC-20 requires. This file is worth keeping in view when reading the onchain section: fifty-six contracts deployed between 3 November 2015 and 6 January 2016 implement
             {" "}
             <code>coinBalanceOf</code>
             , months after the wiki had renamed it away.

@@ -349,7 +349,7 @@ export function Era3() {
             <span className={cx("mono")}>
               <Addr a="0xCc0eE510BC4b5CD4D31Da49f672AB5aa6806F70a" />
             </span>
-            . Across 2,941 contracts with runtime bytecode in the drafting window, exactly one implements
+            . Across the 2,941 contracts with runtime bytecode deployed between 3 November 2015 and 6 January 2016, exactly one implements
             {" "}
             <span className={cx("mono")}>totalSupply()</span>
             .

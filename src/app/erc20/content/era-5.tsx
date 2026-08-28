@@ -101,7 +101,7 @@ export function Era5() {
             The date above is supplied context, not a finding.
           </div>
           <p>
-            Placed against the dated findings on this page, the interval is the point. The specification's text froze on 6 January 2016. The first mainnet contract carrying the six selectors appeared on 10 January 2016, and the first that was actually a token on 14 January 2016. A thousand and fourteen contracts carried all six methods before the end of 2016. The formal status arrived after all of that.
+            The interval is the point: everything this page dates, from the text freezing to the first thousand contracts implementing it, happened before the standard had a formal status. Ratification recorded the outcome; it did not cause it.
           </p>
         </TimelineEvent>
         <TimelineEvent

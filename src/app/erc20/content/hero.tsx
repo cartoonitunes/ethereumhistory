@@ -13,7 +13,7 @@ export function Hero() {
       <div className={cx("hero-cols")}>
         <div className={cx("hero-lede")}>
           <p className={cx("lede")}>
-            Between June 2015 and January 2016 the interface now carried by every Ethereum token was put together member by member, across a wiki page, a GitHub issue, a handful of gists, two sets of official documentation and one implementation repository. No single document contains its history. This page reconstructs it from the artifacts that survive.
+            The interface now carried by every Ethereum token was assembled member by member between 17 June 2015, when the wiki page that became the proposal was created, and 6 January 2016, after which its text never changed again. EIP-20 was merged as Final twenty months after that, on 11 September 2017, by which time the interface it describes had been on mainnet for a year and eight months. The work is spread across a wiki page, a GitHub issue, a handful of gists, two sets of official documentation and one implementation repository. No single document contains its history. This page reconstructs it from the artifacts that survive.
           </p>
         </div>
         <div className={cx("hero-rest")}>
@@ -25,10 +25,10 @@ export function Hero() {
             and
             {" "}
             <code>Approval</code>
-            , arrived about thirty hours after the issue was filed and five months after the wiki page was started. The specification stopped moving on 6 January 2016. The first contract on mainnet carrying all six methods appeared four days later.
+            , arrived about thirty hours after the issue was filed and five months after the wiki page was started.
           </p>
           <p className={cx("body-copy")}>
-            Carrying the six methods and behaving the way the standard requires are separate claims with separate dates. The first contract to deploy the interface appeared on 10 January 2016, the first to pair it with a real supply on 14 January, and the first to satisfy every requirement of EIP-20 as finalised on
+            Carrying the six methods and behaving the way the standard requires are separate claims with separate dates. The first contract to deploy the interface appeared on 10 January 2016, four days after the text froze; the first to pair it with a real supply on 14 January; and the first to satisfy every requirement of EIP-20 as finalised on
             {" "}
             <strong>20 March 2016</strong>
             . That last one was established by running the contracts, not by reading them.

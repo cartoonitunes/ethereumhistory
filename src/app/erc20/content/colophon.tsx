@@ -9,7 +9,7 @@ export function Colophon() {
   return (
     <>
       <p>
-        Compiled from primary sources. All timestamps UTC. Every claim on this page resolves to a commit SHA, a gist revision, a GitHub comment ID, a named GH Archive file or a block number, except where a section is explicitly marked as falling outside the corpus.
+        Compiled from primary sources. All timestamps UTC. Sections marked as falling outside the corpus are the exception to the standard of proof set out at the top of this page; everything else meets it.
       </p>
       <p style={{ marginTop: "1.25rem" }}>
         Principal sources:

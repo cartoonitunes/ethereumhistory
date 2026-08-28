@@ -28,7 +28,7 @@ export function Compliance() {
             ,
             {" "}
             <code>Transfer</code>
-            . This is the operative definition for the whole period. It is what the Ethereum Wallet's ABI required from 23 October 2015, what Alex Van de Sande told the issue thread as late as 15 March 2016, and what 154 of the 320 token-vocabulary contracts in the window implement.
+            . This is the operative definition for the whole period. It is what the Ethereum Wallet's ABI required from 23 October 2015, what Alex Van de Sande told the issue thread as late as 15 March 2016, and what 154 of the 320 token-vocabulary contracts deployed between 3 November 2015 and 6 January 2016 implement.
           </p>
           <p>
             By this definition MistCoin complies, along with nine earlier contracts and about 150 later ones. It has nothing to do with EIP-20's required set.
@@ -40,7 +40,7 @@ export function Compliance() {
             All six methods, both events. First stated in prose on 2015-11-20T15:53:42Z. First expressed exactly, with nothing extra, on 2015-12-21T15:55:57Z in ConsenSys/Tokens. First stated exactly by the specification itself on 2016-01-06.
           </p>
           <p>
-            <strong>Zero contracts in the window meet it. Zero implement even four of the six.</strong>
+            <strong>Zero contracts in that same window meet it. Zero implement even four of the six.</strong>
             {" "}
             <code>approve</code>
             {" "}
@@ -48,7 +48,7 @@ export function Compliance() {
             {" "}
             <code>allowance</code>
             {" "}
-            have no deployed instances at all in the window, and
+            have no deployed instances at all in it, and
             {" "}
             <code>Approval</code>
             {" "}
@@ -121,8 +121,6 @@ export function Compliance() {
           <strong>
             The accurate statement about any 2015 token, MistCoin included, is that it meets the first definition and cannot meet the second, because the second did not exist yet.
           </strong>
-          {" "}
-          Nothing deployed in the window complies with it. The first contracts that do are a 2016 phenomenon.
         </p>
         <p>
           One note on how compliance is scored on this page. Text-identity and ABI-identity are different tests, and only the second determines whether two contracts interoperate.
@@ -137,10 +135,7 @@ export function Compliance() {
           {" "}
           <span className={cx("mono")}>uint256</span>
           {" "}
-          are different strings, and six of six by canonical selector. The selector count is the one that matters.
-        </p>
-        <p>
-          The selector count settles definition 2 and stops there. It cannot settle definition 4, so for that question every candidate was executed.
+          are different strings, and six of six by canonical selector. The selector count is the one that matters, and it settles definition 2 and stops there. It cannot settle definition 4, so for that question every candidate was executed.
         </p>
       </div>
       <h3 className={cx("sub sub--gap")}>

@@ -480,31 +480,16 @@ export function Method() {
             and were not analysed. They are almost certainly failed constructors, but that is an assumption.
           </li>
           <li>
-            <strong>The scan's vocabulary list is incomplete, and the Frontier Guide shows where.</strong>
+            <strong>The scan's vocabulary list is incomplete.</strong>
             {" "}
-            Its superseded members were drawn from the wiki, dapp-bin and the DAO, so it tested
-            {" "}
-            <span className={cx("mono")}>sendCoin(uint256,address)</span>
-            {" "}
-            and not the guide's
-            {" "}
-            <span className={cx("mono")}>sendCoin(address,uint256)</span>
-            , selector
-            {" "}
-            <span className={cx("mono")}>0x90b98a11</span>
-            . Every count of
+            Every count of
             {" "}
             <span className={cx("mono")}>sendCoin</span>
             {" "}
-            on this page is therefore a count of the specification's signature only, and understates how many contracts had a working transfer function. The affected contracts are identified by their
+            on this page is a count of the specification's signature only, not the Frontier Guide's, and so understates how many contracts had a working transfer function. Set out in full
             {" "}
-            <span className={cx("mono")}>coinBalanceOf</span>
-            {" "}
-            and
-            {" "}
-            <span className={cx("mono")}>CoinTransfer</span>
-            {" "}
-            pairing instead.
+            <a href="#onchain">under the superseded vocabulary</a>
+            .
           </li>
         </ol>
       </div>

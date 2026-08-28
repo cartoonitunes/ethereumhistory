@@ -20,26 +20,24 @@ export function Findings() {
       <div className={cx("stats")} style={{ marginBottom: "2.5rem" }}>
         <div className={cx("stat")}>
           <b>19</b>
-          <span>recovered body revisions of issue #20</span>
+          <span>recovered body revisions of issue #20, eleven of them for the first time</span>
         </div>
         <div className={cx("stat")}>
           <b>54</b>
           <span>revisions of the wiki page that preceded it</span>
         </div>
         <div className={cx("stat")}>
-          <b>3,062</b>
-          <span>contracts created on mainnet in the drafting window</span>
-        </div>
-        <div className={cx("stat")}>
           <b>0</b>
           <span>
-            of them implement
+            contracts implementing
             {" "}
             <span className={cx("mono")}>approve</span>
             {" "}
             or
             {" "}
             <span className={cx("mono")}>allowance</span>
+            {" "}
+            while the standard was being written
           </span>
         </div>
       </div>
@@ -169,38 +167,30 @@ export function Findings() {
               <td data-label="Answer (UTC)">
                 <strong>None.</strong>
                 {" "}
-                The maximum reached is three of six.
+                The maximum reached is three of six, and
+                {" "}
+                <span className={cx("mono")}>approve</span>
+                {" "}
+                and
+                {" "}
+                <span className={cx("mono")}>allowance</span>
+                {" "}
+                have
+                {" "}
+                <strong>zero</strong>
+                {" "}
+                instances by two independent detectors.
               </td>
               <td data-label="Artifact">
-                3,062 contracts, 2,941 with runtime bytecode.
+                3,062 contracts, 2,941 with runtime bytecode. Counted member by member under
+                {" "}
+                <a href="#onchain">What was deployed</a>
+                .
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
                 7
-              </td>
-              <td data-label="Question">
-                Deployed instances of
-                {" "}
-                <span className={cx("mono")}>approve(address,uint256)</span>
-                {" "}
-                or
-                {" "}
-                <span className={cx("mono")}>allowance(address,address)</span>
-                {" "}
-                in that window
-              </td>
-              <td data-label="Answer (UTC)">
-                <strong>Zero</strong>
-                , by two independent detectors.
-              </td>
-              <td data-label="Artifact">
-                Opcode walk and substring match, in exact agreement.
-              </td>
-            </tr>
-            <tr>
-              <td data-label="#" className={cx("num")}>
-                8
               </td>
               <td data-label="Question">
                 First contract on mainnet that
@@ -220,12 +210,12 @@ export function Findings() {
                 , four days after the spec froze. It carries the interface and is not a token: supply reads zero at every block checked, and it has never emitted a
                 {" "}
                 <span className={cx("mono")}>Transfer</span>
-                . Selector presence is a bytecode fact and says nothing about behaviour.
+                .
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
-                9
+                8
               </td>
               <td data-label="Question">
                 First contract with the
@@ -242,31 +232,15 @@ export function Findings() {
                 <span className={cx("mono")}>
                   <Addr a="0x55b9a11c2e8351b4Ffc7b11561148bfaC9977855" />
                 </span>
-                , Digix Gold 1.0. Supply 1,400,331,016,000 at block 847,528, the block after deployment, and unchanged at every block sampled since.
+                , Digix Gold 1.0. Supply 1,400,331,016,000 at the block after deployment, unchanged at every block sampled since. Not fully compliant with EIP-20; what breaks is in
                 {" "}
-                <strong>It is not fully compliant with EIP-20.</strong>
-                {" "}
-                Its
-                {" "}
-                <span className={cx("mono")}>Transfer</span>
-                {" "}
-                event indexes
-                {" "}
-                <span className={cx("mono")}>_value</span>
-                , so it emits four topics and an empty data field where the standard requires three topics and the value in data, and
-                {" "}
-                <span className={cx("mono")}>transferFrom</span>
-                {" "}
-                reports the spender as
-                {" "}
-                <span className={cx("mono")}>_from</span>
-                {" "}
-                rather than the owner.
+                <a href="#compliance">the compliance table</a>
+                .
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
-                10
+                9
               </td>
               <td data-label="Question">
                 First ERC-20
@@ -284,27 +258,12 @@ export function Findings() {
                 <span className={cx("mono")}>
                   <Addr a="0xa04bf47F0E9D1745D254b9B89f304c7d7ad121Aa" />
                 </span>
-                , elcoin. Deployer to another account, 1,000,000 units. Not a mint from the zero address.
-                {" "}
-                <strong>The contract is not compliant.</strong>
-                {" "}
-                Its own
-                {" "}
-                <span className={cx("mono")}>transfer</span>
-                ,
-                {" "}
-                <span className={cx("mono")}>approve</span>
-                {" "}
-                and
-                {" "}
-                <span className={cx("mono")}>transferFrom</span>
-                {" "}
-                return false, move nothing and emit nothing. Every transfer it recorded was driven through a controller, not through the ERC-20 entry points.
+                , elcoin. Deployer to another account, 1,000,000 units. Not a mint from the zero address, and not driven through the ERC-20 entry points, which do nothing.
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
-                11
+                10
               </td>
               <td data-label="Question">
                 First contract whose dispatcher is exactly the six and nothing else
@@ -318,16 +277,12 @@ export function Findings() {
                 <span className={cx("mono")}>
                   <Addr a="0x37Dca38b1CBB2Cd043910eC46fe82Ddb9e38F00d" />
                 </span>
-                , 754 bytes. Under execution it satisfies every requirement of EIP-20 except one: a guard of
-                {" "}
-                <span className={cx("mono")}>{"&& _value > 0"}</span>
-                {" "}
-                makes a zero-value transfer return false and emit nothing. That requirement is in EIP-20 as finalised and is absent from the 2015 text, so by the standard as it stood when this was deployed, it passes.
+                , 754 bytes. Nine of the ten requirements of EIP-20 as finalised, and all of the standard as it stood the day it was deployed.
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
-                12
+                11
               </td>
               <td data-label="Question">
                 First contract
@@ -356,17 +311,12 @@ export function Findings() {
                 {" "}
                 <span className={cx("mono")}>totalSupply()</span>
                 {" "}
-                returns the contract's own ether balance. It was never used, holding one transaction in its life, its creation. Its byte-identical twin
-                {" "}
-                <span className={cx("mono")}>
-                  <Addr a="0xd654bDD32FC99471455e86C2E7f7D7b6437e9179" />
-                </span>
-                , 81 blocks later, is the one that saw traffic.
+                returns the contract's own ether balance.
               </td>
             </tr>
             <tr>
               <td data-label="#" className={cx("num")}>
-                13
+                12
               </td>
               <td data-label="Question">
                 The source in the Foundation's 2015-12-03 tutorial
@@ -383,20 +333,6 @@ export function Findings() {
                 {" "}
                 <span className={cx("mono")}>7bcfaef3</span>
                 . Both compile to MistCoin's exact bytecode.
-              </td>
-            </tr>
-            <tr>
-              <td data-label="#" className={cx("num")}>
-                14
-              </td>
-              <td data-label="Question">
-                What MistCoin implements
-              </td>
-              <td data-label="Answer (UTC)">
-                2 of 6 required methods, 1 of 2 required events, 3 of 3 optional
-              </td>
-              <td data-label="Artifact">
-                Decoded from deployed runtime bytecode.
               </td>
             </tr>
           </tbody>

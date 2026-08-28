@@ -1347,22 +1347,12 @@
   background: rgba(234, 179, 8, 0.07);
 }
 
-/* Rendering budget: skip layout for off-screen entries. `auto` remembers the
-   last measured size, so the scrollbar stays honest. */
-@supports (content-visibility: auto) {
-  .ev {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 160px;
-  }
-  .ev:has(.ev-body[open]) {
-    content-visibility: visible;
-  }
-  @media (max-width: 880px) {
-    .ev {
-      contain-intrinsic-size: auto 240px;
-    }
-  }
-}
+/* No content-visibility on .ev. A closed <details> already costs nothing to
+   lay out, and open entries were opted out of the skip anyway, so the only
+   thing the placeholder bought was a wrong height: every collapsed entry was
+   padded out to the guessed intrinsic size, which on a phone is far taller
+   than a summary of two lines and a row of tags. Collapsed entries now
+   measure themselves. */
 
 /* ---------------------------------------------------------------
    Section nav
