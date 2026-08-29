@@ -19,7 +19,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getContractPageData } from "@/lib/db";
 import { resolveContract, buildContractFromResolved } from "@/lib/contract-resolver";
 import { isTursoConfigured } from "@/lib/turso";
-import { isRpcUnavailable, type RpcUnavailableError } from "@/lib/rpc-errors";
+import {
+  DEFAULT_RETRY_AFTER_SECONDS,
+  isRpcUnavailable,
+  type RpcUnavailableError,
+} from "@/lib/rpc-errors";
 import { isValidAddress } from "@/lib/utils";
 import type { ApiResponse, ContractPageData } from "@/types";
 
@@ -45,8 +49,10 @@ export async function GET(
     );
   }
 
-  // Set when the RPC provider is the reason we have less than the full picture.
+  // Set when an upstream — the RPC provider or the archive index — is the
+  // reason we have less than the full picture.
   let rpcError: RpcUnavailableError | null = null;
+  let indexUnavailable = false;
 
   try {
     const data = await getContractPageData(address);
@@ -77,13 +83,11 @@ export async function GET(
   try {
     if (isTursoConfigured()) resolved = await resolveContract(address);
   } catch (error) {
+    // The index is the only thing that can tell a self-destructed archived
+    // contract from an address that never held code, so when it is down we
+    // genuinely cannot answer — that is unavailability, not a crash.
     console.error("Error resolving contract from index:", error);
-    if (!rpcError) {
-      return NextResponse.json(
-        { data: null, error: "An error occurred while fetching contract data." },
-        { status: 500 }
-      );
-    }
+    indexUnavailable = true;
   }
 
   if (resolved) {
@@ -104,14 +108,15 @@ export async function GET(
     });
   }
 
-  // Nothing archived, and the chain lookup that would have answered this is
-  // throttled — "not found" would be a lie, so ask the caller to retry.
-  if (rpcError) {
+  // Nothing archived, and the lookup that would have answered this is
+  // unavailable — "not found" would be a lie, so ask the caller to retry.
+  if (rpcError || indexUnavailable) {
     return NextResponse.json(
       {
         data: null,
-        error:
-          "Chain data is temporarily unavailable (upstream RPC rate limit). Please retry shortly.",
+        error: rpcError
+          ? "Chain data is temporarily unavailable (upstream RPC rate limit). Please retry shortly."
+          : "The contract archive is temporarily unavailable. Please retry shortly.",
         meta: {
           timestamp: new Date().toISOString(),
           cached: false,
@@ -120,7 +125,9 @@ export async function GET(
       },
       {
         status: 503,
-        headers: { "Retry-After": String(rpcError.retryAfterSeconds) },
+        headers: {
+          "Retry-After": String(rpcError?.retryAfterSeconds ?? DEFAULT_RETRY_AFTER_SECONDS),
+        },
       }
     );
   }
