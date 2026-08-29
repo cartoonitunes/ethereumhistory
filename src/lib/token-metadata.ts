@@ -20,6 +20,9 @@ const ERC20_SELECTORS = {
   decimals: "0x313ce567",
 };
 
+/** A single metadata probe should never hold a page render open longer than this. */
+const RPC_TIMEOUT_MS = 8_000;
+
 async function jsonRpc<T>(
   rpcUrl: string,
   body: unknown
@@ -28,7 +31,14 @@ async function jsonRpc<T>(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
   });
+  // A rate-limited provider answers 429 with an HTML body; parsing that throws,
+  // and every caller here treats a throw as "no metadata", which is the right
+  // outcome — token metadata is enrichment, never a reason to fail the request.
+  if (!response.ok) {
+    throw new Error(`RPC error: HTTP ${response.status}`);
+  }
   return response.json();
 }
 

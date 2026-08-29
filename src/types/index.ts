@@ -330,6 +330,10 @@ export interface ApiResponse<T> {
   meta?: {
     timestamp: string;
     cached: boolean;
+    /** Set when an upstream dependency (usually the RPC provider) was unavailable. */
+    degraded?: boolean;
+    /** Human-readable explanation of what is missing from a degraded response. */
+    warning?: string;
   };
 }
 

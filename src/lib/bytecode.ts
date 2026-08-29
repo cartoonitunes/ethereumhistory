@@ -1,3 +1,9 @@
+import {
+  RpcUnavailableError,
+  isRateLimitRpcError,
+  parseRetryAfterHeader,
+} from "./rpc-errors";
+
 type JsonRpcResponse<T> = {
   jsonrpc?: string;
   id?: number | string;
@@ -5,23 +11,51 @@ type JsonRpcResponse<T> = {
   error?: { code?: number; message?: string };
 };
 
+/** A single RPC call should never hold a request open longer than this. */
+const RPC_TIMEOUT_MS = 8_000;
+
 async function jsonRpc<T>(
   rpcUrl: string,
   method: string,
   params: unknown[]
 ): Promise<T> {
-  const res = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    });
+  } catch (error) {
+    // Timeout, DNS failure, connection reset — the provider, not the caller.
+    throw new RpcUnavailableError(`RPC ${method} request failed`, { cause: error });
+  }
 
   if (!res.ok) {
+    // 429 is the rate limit; 5xx is the provider having a bad day. Both are
+    // worth retrying, so they are reported as unavailability rather than a bug.
+    if (res.status === 429 || res.status >= 500) {
+      throw new RpcUnavailableError(`RPC ${method} failed: HTTP ${res.status}`, {
+        status: res.status,
+        retryAfterSeconds: parseRetryAfterHeader(res.headers.get("retry-after")) ?? undefined,
+      });
+    }
     throw new Error(`RPC error: HTTP ${res.status}`);
   }
 
-  const json = (await res.json()) as JsonRpcResponse<T>;
+  let json: JsonRpcResponse<T>;
+  try {
+    json = (await res.json()) as JsonRpcResponse<T>;
+  } catch (error) {
+    // Throttling proxies often answer 200 with an HTML error page.
+    throw new RpcUnavailableError(`RPC ${method} returned a non-JSON response`, { cause: error });
+  }
+
   if (json.error) {
+    if (isRateLimitRpcError(json.error)) {
+      throw new RpcUnavailableError(`RPC ${method} rate limited: ${json.error.message ?? "limit exceeded"}`);
+    }
     throw new Error(`RPC error: ${json.error.message || "Unknown error"}`);
   }
 

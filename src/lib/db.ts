@@ -76,6 +76,7 @@ import {
   fetchRuntimeBytecodeFromRpc,
   findDeploymentBlockFromRpc,
 } from "./bytecode";
+import { isRpcUnavailable } from "./rpc-errors";
 import {
   fetchEtherscanAbi,
   fetchEtherscanContractCreation,
@@ -420,9 +421,9 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   const rpcUrl = process.env.ETHEREUM_RPC_URL;
   if (!rpcUrl) return contract;
 
-  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address, {
-    runtimeBytecode: contract.runtimeBytecode,
-  });
+  // Token metadata is enrichment on top of a row we already have. If the RPC
+  // is rate limited the contract still renders, just without the token fields.
+  const fetched = await fetchTokenMetadataOrNull(rpcUrl, contract);
   if (!fetched) return contract;
 
   const merged: Contract = {
@@ -454,6 +455,21 @@ export async function getContractWithTokenMetadata(address: string): Promise<Con
   return merged;
 }
 
+/**
+ * Best-effort token metadata. Any RPC failure — rate limit, timeout, malformed
+ * response — resolves to null so the caller keeps whatever it already has.
+ */
+async function fetchTokenMetadataOrNull(rpcUrl: string, contract: Contract) {
+  try {
+    return await fetchTokenMetadataFromRpc(rpcUrl, contract.address, {
+      runtimeBytecode: contract.runtimeBytecode,
+    });
+  } catch (error) {
+    console.warn("[rpc] token metadata lookup failed:", error);
+    return null;
+  }
+}
+
 async function enrichTokenMetadataInPlace(
   contract: Contract,
   opts?: { persistToDb?: boolean }
@@ -470,9 +486,7 @@ async function enrichTokenMetadataInPlace(
 
   if (!needsTokenMeta) return contract;
 
-  const fetched = await fetchTokenMetadataFromRpc(rpcUrl, contract.address, {
-    runtimeBytecode: contract.runtimeBytecode,
-  });
+  const fetched = await fetchTokenMetadataOrNull(rpcUrl, contract);
   if (!fetched) return contract;
 
   const merged: Contract = {
@@ -556,14 +570,32 @@ async function ingestContractForPageIfMissing(address: string): Promise<Ingested
   if (!rpcUrl) return null;
 
   // Must have code at latest or it's an EOA / selfdestructed contract.
-  const runtimeBytecode = await fetchRuntimeBytecodeFromRpc(rpcUrl, address);
+  // A provider outage is not the same answer as "no code": rethrow so the
+  // caller can say "try again" instead of claiming the contract doesn't exist.
+  let runtimeBytecode: string | null;
+  try {
+    runtimeBytecode = await fetchRuntimeBytecodeFromRpc(rpcUrl, address);
+  } catch (error) {
+    if (isRpcUnavailable(error)) throw error;
+    console.warn("[rpc] eth_getCode failed during ingest:", error);
+    return null;
+  }
   if (!runtimeBytecode || runtimeBytecode === "0x") return null;
 
   const codeSizeBytes = runtimeBytecode.startsWith("0x")
     ? Math.floor((runtimeBytecode.length - 2) / 2)
     : Math.floor(runtimeBytecode.length / 2);
 
-  const deployment = await findDeploymentBlockFromRpc(rpcUrl, address);
+  // Binary search over eth_getCode: ~32 sequential calls, the most likely
+  // place to be throttled. Rethrow rather than persisting a row with a null
+  // deployment block that later visits would treat as already ingested.
+  let deployment: Awaited<ReturnType<typeof findDeploymentBlockFromRpc>> = null;
+  try {
+    deployment = await findDeploymentBlockFromRpc(rpcUrl, address);
+  } catch (error) {
+    if (isRpcUnavailable(error)) throw error;
+    console.warn("[rpc] deployment block lookup failed:", error);
+  }
   const deploymentBlock = deployment?.deploymentBlock ?? null;
   const deploymentTimestamp = deployment?.deploymentTimestamp ?? null;
 
@@ -1153,7 +1185,10 @@ export async function getContractPageData(address: string): Promise<ContractPage
   contract = await getContractWithRuntimeBytecode(contract);
 
   if (contract.canonicalAddress) {
-    const canonical = await dbGetContract(contract.canonicalAddress);
+    const canonical = await dbGetContract(contract.canonicalAddress).catch((error) => {
+      console.warn("[db] Failed to load canonical contract:", error);
+      return null;
+    });
     if (canonical) {
       const canonicalName = canonical.etherscanContractName || canonical.tokenName || null;
       contract = {
