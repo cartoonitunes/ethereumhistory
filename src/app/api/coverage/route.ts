@@ -3,7 +3,7 @@
  *
  * GET /api/coverage
  * Returns per-era and per-year breakdowns of three DISJOINT buckets that
- * partition the Turso index total:
+ * partition the full-index total:
  *   - documented: known contracts that have a historian writeup somewhere in
  *                 their bytecode cluster (is_documented), minus `uncovered`
  *   - uncovered:  source recovered by compiler archaeology, but no writeup yet
@@ -21,17 +21,24 @@
  * every source-only row is also is_documented (enforced by the migration 067
  * trigger), the disjoint documented count is a subtraction rather than a
  * second filtered aggregate over ~950k rows.
+ *
+ * Totals come from contract_stats_cache via getIndexTotals(), not from a live
+ * contract_index scan. This route used to GROUP BY over the 12M-row Turso
+ * table on every cold instance — the exact pattern progress-stats.ts was
+ * written to eliminate. That scan both burned the Turso read quota and, once
+ * the quota ran out and reads started returning "SQL read operations are
+ * forbidden", took the entire dashboard down with a 500. Reading the cache
+ * means /coverage now degrades to slightly stale totals instead of failing,
+ * and Neon alone can serve the page.
  */
 
 import { NextResponse } from "next/server";
-import { turso } from "@/lib/turso";
 import { isDatabaseConfigured, getDb } from "@/lib/db-client";
+import { getIndexTotals } from "@/lib/progress-stats";
 import { sql } from "drizzle-orm";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
-
-interface EraRow { era: string; total: number; }
 
 const TURSO_ERA_TO_APP: Record<string, string> = {
   "frontier-thawing": "frontier",
@@ -39,30 +46,15 @@ const TURSO_ERA_TO_APP: Record<string, string> = {
   "tangerine-whistle": "tangerine",
   "spurious-dragon": "spurious",
 };
-interface YearRow { year: number; total: number; }
 interface NeonEraRow { era_id: string | null; count: number; }
 interface NeonYearRow { year: number | null; count: number; }
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const result = await cached("coverage:v2", CACHE_TTL.SHORT, async () => {
-      const [eraResult, yearResult] = await Promise.all([
-        turso.execute(`
-          SELECT era, COUNT(*) as total
-          FROM contract_index
-          GROUP BY era
-          ORDER BY MIN(block_number) ASC
-        `),
-        turso.execute(`
-          SELECT year, COUNT(*) as total
-          FROM contract_index
-          GROUP BY year
-          ORDER BY year ASC
-        `),
-      ]);
-
-      const eraRows = eraResult.rows as unknown as EraRow[];
-      const yearRows = yearResult.rows as unknown as YearRow[];
+    const result = await cached("coverage:v3", CACHE_TTL.SHORT, async () => {
+      // Full-index totals come from contract_stats_cache, NOT from a live
+      // contract_index scan — see getIndexTotals for why.
+      const indexTotals = await getIndexTotals();
 
       const neonEraMap = new Map<string, number>();
       const neonYearMap = new Map<number, number>();
@@ -132,13 +124,6 @@ export async function GET(): Promise<NextResponse> {
         }
       }
 
-      // Merge Turso verbose era names into app-canonical IDs before building output
-      const eraMerged = new Map<string, number>();
-      for (const r of eraRows) {
-        const appEra = TURSO_ERA_TO_APP[r.era] ?? r.era;
-        eraMerged.set(appEra, (eraMerged.get(appEra) ?? 0) + Number(r.total));
-      }
-
       /**
        * Split a cluster-level is_documented count into the two disjoint
        * buckets the UI renders. Every source-only row is also is_documented,
@@ -163,18 +148,17 @@ export async function GET(): Promise<NextResponse> {
       };
 
       const ERA_ORDER = ["frontier", "homestead", "dao", "tangerine", "spurious", "byzantium"];
-      const eras = ERA_ORDER.filter((id) => eraMerged.has(id)).map((id) => ({
+      const eras = ERA_ORDER.filter((id) => indexTotals.byEra.has(id)).map((id) => ({
         eraId: id,
-        ...split(eraMerged.get(id)!, neonEraMap.get(id) ?? 0, uncoveredEraMap.get(id) ?? 0),
+        ...split(indexTotals.byEra.get(id)!, neonEraMap.get(id) ?? 0, uncoveredEraMap.get(id) ?? 0),
       }));
 
-      const years = yearRows.map((r) => {
-        const year = Number(r.year);
-        return {
+      const years = [...indexTotals.byYear.keys()]
+        .sort((a, b) => a - b)
+        .map((year) => ({
           year,
-          ...split(Number(r.total), neonYearMap.get(year) ?? 0, uncoveredYearMap.get(year) ?? 0),
-        };
-      });
+          ...split(indexTotals.byYear.get(year)!, neonYearMap.get(year) ?? 0, uncoveredYearMap.get(year) ?? 0),
+        }));
 
       const grandTotal = eras.reduce((s, e) => s + e.total, 0);
       const grandDocumented = eras.reduce((s, e) => s + e.documented, 0);

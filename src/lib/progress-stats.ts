@@ -105,6 +105,67 @@ export async function refreshTursoIndexTotals(): Promise<void> {
 }
 
 /**
+ * Full-index totals per era and per year, read from `contract_stats_cache`.
+ *
+ * Prefers the `turso:*` scopes (true contract_index totals, written by the
+ * cron) and falls back to the Neon base-scope total for any scope Turso has
+ * not been sampled for. That fallback is what keeps these surfaces rendering
+ * while Turso reads are blocked — /api/coverage used to scan the 12M-row
+ * contract_index on every request instead, which both burned the read quota
+ * and 500'd the whole dashboard the moment the quota ran out.
+ *
+ * Unlike getProgressStats, this is NOT restricted to the ERA_IDS / YEARS
+ * whitelists: the coverage dashboard renders every era and year present.
+ */
+export async function getIndexTotals(): Promise<{
+  overall: number;
+  byEra: Map<string, number>;
+  byYear: Map<number, number>;
+}> {
+  return cached("stats:index-totals:v1", CACHE_TTL.LONG, async () => {
+    const db = getDb();
+    const raw = await db.execute<CacheRow>(
+      sql`SELECT scope, total, documented FROM contract_stats_cache`
+    );
+
+    const neonEra = new Map<string, number>();
+    const neonYear = new Map<number, number>();
+    const tursoEra = new Map<string, number>();
+    const tursoYear = new Map<number, number>();
+    let neonOverall = 0;
+    let tursoOverall = 0;
+
+    for (const r of toRows<CacheRow>(raw)) {
+      const isTurso = r.scope.startsWith("turso:");
+      const base = isTurso ? r.scope.slice("turso:".length) : r.scope;
+      const total = Number(r.total);
+
+      if (base === "overall") {
+        if (isTurso) tursoOverall = total;
+        else neonOverall = total;
+      } else if (base.startsWith("era:")) {
+        const raw = base.slice("era:".length);
+        // Legacy spellings ("spurious_dragon") share a bucket with the
+        // canonical id, so sum rather than overwrite.
+        const id = TURSO_ERA_TO_APP[raw.replace(/_/g, "-")] ?? raw.replace(/_/g, "-");
+        const map = isTurso ? tursoEra : neonEra;
+        map.set(id, (map.get(id) ?? 0) + total);
+      } else if (base.startsWith("year:")) {
+        const y = Number(base.slice("year:".length));
+        if (Number.isFinite(y)) (isTurso ? tursoYear : neonYear).set(y, total);
+      }
+    }
+
+    const byEra = new Map<string, number>(neonEra);
+    for (const [k, v] of tursoEra) byEra.set(k, v);
+    const byYear = new Map<number, number>(neonYear);
+    for (const [k, v] of tursoYear) byYear.set(k, v);
+
+    return { overall: tursoOverall || neonOverall, byEra, byYear };
+  });
+}
+
+/**
  * Assemble the progress stats for the widget. Reads ONLY Neon:
  *  - documented counts + Neon totals from the `contract_stats_cache` base scopes
  *  - full-index totals from the `turso:*` scopes (populated by the cron)
