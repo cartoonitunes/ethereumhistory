@@ -68,7 +68,9 @@ drizzle/
 Thumbs.db
 
 # Testing
-coverage/
+# Anchored: an unanchored `coverage/` also matches src/app/coverage and
+# src/app/api/coverage, silently ignoring new files in the coverage dashboard.
+/coverage/
 .nyc_output/
 
 # Misc
