@@ -62,14 +62,6 @@ const KNOWN_CONTRACT_FIELD_NAMES = [
   "sourcifyMatch",
 ];
 
-/** Verification fields that are immutable once `verificationMethod` has been set. */
-const VERIFICATION_LOCK_FIELDS = [
-  "verificationMethod",
-  "compilerCommit",
-  "sourceCode",
-  "verificationProofUrl",
-];
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ address: string }> }
@@ -118,24 +110,19 @@ export async function POST(
 
   const contractPatch = body?.contract || {};
 
-  // Once a contract has been verified, the verification fields are immutable
-  // via this endpoint — new proofs go through /api/contract/{address}/proof.
-  const attemptingVerificationFieldChange = VERIFICATION_LOCK_FIELDS.some(
-    (f) => contractPatch[f] !== undefined
-  );
-  if (attemptingVerificationFieldChange) {
-    const existing = await getContractByAddress(normalized);
-    if (existing?.verificationMethod) {
-      return NextResponse.json(
-        {
-          data: null,
-          error:
-            "Verification fields are locked for this contract. Only editorial fields (shortDescription, historicalSignificance, historicalContext) can be updated.",
-        },
-        { status: 409 }
-      );
-    }
-  }
+  // NOTE: the proof lock is deliberately NOT enforced here. It used to live at
+  // this point as a blanket 409 on any request that merely MENTIONED a
+  // verification field, which rejected the whole request — including its
+  // editorial fields (description, shortDescription, historicalSignificance,
+  // historicalContext) — before the admin bypass further down ever ran. Callers
+  // that echo the contract's existing verification fields back alongside an
+  // editorial edit could therefore never touch `description` on a verified
+  // contract, not even as an admin.
+  //
+  // The lock is enforced per-field in the trusted branch below, where admins are
+  // exempted; untrusted historians never reach it because their edits are
+  // filtered through UNTRUSTED_ALLOWED_FIELDS, which contains no verification
+  // fields.
 
   const normalizedCategories =
     contractPatch.manualCategories !== undefined
