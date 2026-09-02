@@ -20,6 +20,14 @@ import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+// The Turso leg of this job scans the full 12M-row contract_index. Under the
+// platform default the function was killed mid-scan on almost every run, so the
+// `turso:*` totals only landed once every day or so — and because the failure is
+// swallowed below, nothing surfaced except a stale denominator. The scan is now
+// a single pass (see refreshTursoIndexTotals) which brings it to ~1-2 min; this
+// gives it the full ceiling so it has room to finish even on a slow replica.
+export const maxDuration = 300;
+
 async function isAuthorized(req: NextRequest): Promise<boolean> {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
