@@ -464,8 +464,7 @@ export function computeCollectorScore(
 export interface CardData {
   version: 1;
   owner: { name: string; avatarUrl: string | null };
-  /** Verified wallets only, so a public card never shows an unproven claim. */
-  wallets: { address: string; label: string | null; firstTxDate: string | null }[];
+  wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: {
     contractAddress: string;
     tokenName: string | null;
@@ -486,6 +485,14 @@ export interface CardData {
     /** Earliest first-transaction date across the verified wallets. */
     onChainSince: string | null;
     eraCounts: Record<string, number>;
+    /** How many of the card's wallets proved ownership by signature. */
+    verifiedWalletCount: number;
+    /**
+     * True only when EVERY wallet on the card is verified. The badge asserts
+     * "these holdings are proven to belong to this person", so a single
+     * unverified wallet makes that assertion partly false and withholds it.
+     */
+    allWalletsVerified: boolean;
     /** 0 to 100, earlier deployment order scores higher. */
     score: number;
     /** Mean deployment block behind the score, shown for transparency. */
@@ -497,10 +504,15 @@ export interface CardData {
 /**
  * Assemble a card from stored holdings for one account.
  *
- * VERIFIED WALLETS ONLY. An unverified wallet is an unproven claim, and a
- * public, shareable card is exactly the wrong place to display one: anyone
- * could otherwise add Vitalik's address and publish a card claiming his
- * holdings. Verification is what the blue badge means.
+ * Every wallet on the account counts, verified or not. Verification is a badge,
+ * not a gate: it decorates the card rather than deciding what appears on it.
+ *
+ * That is a deliberate product choice with a real consequence worth stating
+ * plainly, because this is a PUBLIC artefact: nothing stops someone adding an
+ * address they do not control and publishing a card that displays its holdings.
+ * The card is therefore a claim, and the badge is what turns a claim into
+ * proof. `allWalletsVerified` is exposed so the UI can show the difference
+ * rather than leaving a viewer unable to tell the two apart.
  *
  * Reads only from wallet_holdings, so this never calls the provider.
  */
@@ -516,9 +528,10 @@ export async function buildCardData(
       address: userWallets.address,
       label: userWallets.label,
       firstTxDate: userWallets.firstTxDate,
+      verifiedAt: userWallets.verifiedAt,
     })
     .from(userWallets)
-    .where(and(eq(userWallets.historianId, historianId), isNotNull(userWallets.verifiedAt)));
+    .where(eq(userWallets.historianId, historianId));
 
   if (wallets.length === 0) {
     return {
@@ -532,6 +545,8 @@ export async function buildCardData(
         earliestYear: null,
         onChainSince: null,
         eraCounts: {},
+        verifiedWalletCount: 0,
+        allWalletsVerified: false,
         score: 0,
         averageBlock: null,
       },
@@ -600,6 +615,7 @@ export async function buildCardData(
     eraCounts[key] = (eraCounts[key] ?? 0) + 1;
   }
 
+  const verifiedCount = wallets.filter((w) => w.verifiedAt !== null).length;
   const scoring = computeCollectorScore(holdings);
 
   const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
@@ -614,6 +630,7 @@ export async function buildCardData(
       address: w.address,
       label: w.label,
       firstTxDate: w.firstTxDate ? new Date(w.firstTxDate).toISOString() : null,
+      verified: w.verifiedAt !== null,
     })),
     holdings,
     stats: {
@@ -625,6 +642,8 @@ export async function buildCardData(
           ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))).toISOString()
           : null,
       eraCounts,
+      verifiedWalletCount: verifiedCount,
+      allWalletsVerified: verifiedCount > 0 && verifiedCount === wallets.length,
       score: scoring.score,
       averageBlock: scoring.averageBlock,
     },

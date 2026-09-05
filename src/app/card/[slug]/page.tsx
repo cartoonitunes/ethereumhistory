@@ -77,8 +77,11 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
       <HolographicCard card={card} shareUrl={`${SITE_URL}/card/${slug}`} />
 
       <p className="max-w-sm text-center text-xs leading-relaxed text-obsidian-500">
-        Every wallet behind this card was verified by signature. Balances were read
-        from the chain and matched against the Ethereum History archive.
+        {card.stats.allWalletsVerified
+          ? "Every wallet behind this card was verified by signature."
+          : "The wallets behind this card have not been verified by signature, so these holdings are a claim rather than a proof."}{" "}
+        Balances were read from the chain and matched against the Ethereum History
+        archive.
       </p>
 
       <a

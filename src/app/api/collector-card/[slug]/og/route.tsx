@@ -146,7 +146,9 @@ export async function GET(
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 22, color: MUTED }}>
           <div style={{ display: "flex" }}>ethereumhistory.com</div>
           <div style={{ display: "flex" }}>
-            {card.stats.walletCount} verified {card.stats.walletCount === 1 ? "wallet" : "wallets"}
+            {card.stats.allWalletsVerified
+              ? `${card.stats.walletCount} verified ${card.stats.walletCount === 1 ? "wallet" : "wallets"}`
+              : `${card.stats.walletCount} ${card.stats.walletCount === 1 ? "wallet" : "wallets"}`}
           </div>
         </div>
       </div>

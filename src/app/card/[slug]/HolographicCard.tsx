@@ -45,7 +45,7 @@ export interface CardHolding {
 
 export interface CardPayload {
   owner: { name: string; avatarUrl: string | null };
-  wallets: { address: string; label: string | null; firstTxDate: string | null }[];
+  wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: CardHolding[];
   stats: {
     contractCount: number;
@@ -53,6 +53,8 @@ export interface CardPayload {
     earliestYear: number | null;
     onChainSince: string | null;
     eraCounts: Record<string, number>;
+    verifiedWalletCount: number;
+    allWalletsVerified: boolean;
     score: number;
     averageBlock: number | null;
   };
@@ -207,16 +209,28 @@ export default function HolographicCard({
                     {card.owner.name}
                   </h1>
                 </div>
-                {/* Verified: every wallet feeding this card proved ownership. */}
-                <span
-                  title="Every wallet on this card is signature verified"
-                  className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-ether-500/15 px-2 py-0.5 text-[0.625rem] font-medium text-ether-300"
-                >
-                  <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
-                    <path d="M12 2l2.4 1.8 3 .1.9 2.8 2.4 1.7-1 2.8 1 2.8-2.4 1.7-.9 2.8-3 .1L12 22l-2.4-1.8-3-.1-.9-2.8L3.3 15.6l1-2.8-1-2.8 2.4-1.7.9-2.8 3-.1L12 2zm-1 12.8l5-5-1.4-1.4L11 12l-1.6-1.6L8 11.8l3 3z" />
-                  </svg>
-                  Verified
-                </span>
+                {/* The badge is the whole point of verification, so it has to
+                    mean something: shown only when every wallet on the card
+                    proved ownership. Otherwise the card states plainly that it
+                    is unverified, so a viewer can tell a claim from a proof. */}
+                {card.stats.allWalletsVerified ? (
+                  <span
+                    title="Every wallet on this card is signature verified"
+                    className="mt-0.5 flex shrink-0 items-center gap-1 rounded-full bg-ether-500/15 px-2 py-0.5 text-[0.625rem] font-medium text-ether-300"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
+                      <path d="M12 2l2.4 1.8 3 .1.9 2.8 2.4 1.7-1 2.8 1 2.8-2.4 1.7-.9 2.8-3 .1L12 22l-2.4-1.8-3-.1-.9-2.8L3.3 15.6l1-2.8-1-2.8 2.4-1.7.9-2.8 3-.1L12 2zm-1 12.8l5-5-1.4-1.4L11 12l-1.6-1.6L8 11.8l3 3z" />
+                    </svg>
+                    Verified
+                  </span>
+                ) : (
+                  <span
+                    title="These wallets have not proved ownership by signature"
+                    className="mt-0.5 shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[0.625rem] font-medium text-obsidian-400"
+                  >
+                    Unverified
+                  </span>
+                )}
               </header>
 
               {/* Headline stats. The earliest year is the number that matters. */}

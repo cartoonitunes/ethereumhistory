@@ -1,8 +1,9 @@
 /**
  * POST /api/collector-card  build or refresh the signed-in user's card
  *
- * Assembles a card from the holdings already stored for the account's VERIFIED
- * wallets. It does not scan: scanning is a separate, rate limited, explicit
+ * Assembles a card from the holdings already stored for the account's wallets,
+ * verified or not. Verification is a badge on the card, not a precondition for
+ * having one. It does not scan: scanning is a separate, rate limited, explicit
  * step, so generating a card is cheap and repeatable.
  *
  * The slug is minted once and then reused, so regenerating a card never breaks
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       {
         data: null,
         error:
-          "No archive holdings found yet. Add a wallet, verify it, then run a scan before creating a card.",
+          "No documented holdings found yet. Add a wallet and run a scan before creating a card.",
       },
       { status: 409 }
     );

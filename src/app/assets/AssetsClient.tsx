@@ -3,10 +3,12 @@
 /**
  * Wallet management for the collector card.
  *
- * The flow is deliberately explicit and in one direction: add an address,
- * prove you control it, scan it, then build the card. Each step unlocks the
- * next and says why, so the reason a wallet is not on the card is always
- * visible rather than something the user has to infer.
+ * The flow is: add an address, scan it, build the card. Verification is
+ * optional and sits alongside, not in front: it earns the card a verified
+ * badge and changes nothing about which holdings appear.
+ *
+ * Every step is available as soon as it is meaningful, so nothing is disabled
+ * for a reason the user has to guess at.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +27,17 @@ interface Wallet {
 type EthereumProvider = {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
 };
+
+/** EIP-1193 rejection code, returned when the user dismisses a wallet prompt. */
+const USER_REJECTED = 4001;
+
+function providerErrorMessage(err: unknown): string {
+  const code = (err as { code?: number })?.code;
+  if (code === USER_REJECTED) return "Signature cancelled.";
+  const raw = err instanceof Error ? err.message : String(err);
+  if (raw.toLowerCase().includes("reject")) return "Signature cancelled.";
+  return raw;
+}
 
 function shortAddress(address: string): string {
   return `${address.slice(0, 10)}…${address.slice(-6)}`;
@@ -85,7 +98,7 @@ export default function AssetsClient() {
         }
         setAddress("");
         setLabel("");
-        setNotice("Wallet added. Verify it to include it on your card.");
+        setNotice("Wallet added. Scan it to find archive holdings.");
         await load();
       } finally {
         setBusy(null);
@@ -103,6 +116,31 @@ export default function AssetsClient() {
         const provider = (window as unknown as { ethereum?: EthereumProvider }).ethereum;
         if (!provider) {
           setError("No browser wallet detected. Install one to sign the ownership challenge.");
+          return;
+        }
+
+        // Connect before signing. personal_sign only works for an account the
+        // user has authorised for this site, so without this the wallet
+        // rejects the request outright and verification appears to do nothing.
+        // Both other wallet flows in this codebase (historian login and the
+        // supporter claim modal) request accounts first for the same reason.
+        const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+        const connected = (accounts?.[0] ?? "").toLowerCase();
+        if (!connected) {
+          setError("No account was authorised in your wallet.");
+          return;
+        }
+
+        // The signature is always made by the wallet's SELECTED account. If
+        // that is not the address being verified, the server would correctly
+        // reject the result with a confusing "does not match" error, so catch
+        // it here and say what to actually do about it.
+        if (connected !== wallet.address.toLowerCase()) {
+          setError(
+            `Your wallet is on ${shortAddress(connected)} but this entry is ${shortAddress(
+              wallet.address
+            )}. Switch accounts in your wallet, then verify again.`
+          );
           return;
         }
 
@@ -134,9 +172,8 @@ export default function AssetsClient() {
         setNotice("Wallet verified.");
         await load();
       } catch (err) {
-        // Rejecting the signature prompt is a normal outcome, not a failure.
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message.toLowerCase().includes("reject") ? "Signature cancelled." : message);
+        // Rejecting a wallet prompt is a normal outcome, not a failure.
+        setError(providerErrorMessage(err));
       } finally {
         setBusy(null);
       }
@@ -211,15 +248,17 @@ export default function AssetsClient() {
   }, []);
 
   const verifiedCount = (wallets ?? []).filter((w) => w.verifiedAt).length;
-  const scannedCount = (wallets ?? []).filter((w) => w.verifiedAt && w.holdingCount > 0).length;
+  const withHoldings = (wallets ?? []).filter((w) => w.holdingCount > 0).length;
+  const allVerified = (wallets ?? []).length > 0 && verifiedCount === (wallets ?? []).length;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-obsidian-100">Your assets</h1>
         <p className="text-sm leading-relaxed text-obsidian-400">
-          Attach the wallets you want represented, prove you control them, then scan
-          for holdings that appear in the Ethereum History archive.
+          Attach the wallets you want represented and scan them for holdings that
+          appear in the Ethereum History archive. Verifying a wallet is optional and
+          earns your card a verified badge.
         </p>
       </header>
 
@@ -301,6 +340,14 @@ export default function AssetsClient() {
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => scan(w)}
+                  disabled={busy !== null}
+                  className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-obsidian-200 transition-colors hover:border-white/30 disabled:opacity-40"
+                >
+                  {busy === `scan:${w.address}` ? "Scanning" : "Scan"}
+                </button>
                 {!w.verifiedAt ? (
                   <button
                     type="button"
@@ -310,16 +357,7 @@ export default function AssetsClient() {
                   >
                     {busy === `verify:${w.address}` ? "Waiting for signature" : "Verify"}
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => scan(w)}
-                    disabled={busy !== null}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-obsidian-200 transition-colors hover:border-white/30 disabled:opacity-40"
-                  >
-                    {busy === `scan:${w.address}` ? "Scanning" : "Scan"}
-                  </button>
-                )}
+                ) : null}
                 <button
                   type="button"
                   onClick={() => remove(w)}
@@ -337,14 +375,19 @@ export default function AssetsClient() {
       <section className="flex flex-col gap-3 rounded-xl border border-white/10 p-4">
         <h2 className="text-sm font-medium text-obsidian-200">Collector card</h2>
         <p className="text-xs leading-relaxed text-obsidian-500">
-          Built from verified wallets only, so an unverified address never appears on a
-          public card. {verifiedCount} verified, {scannedCount} with holdings.
+          Built from every wallet on your account. Verifying is optional: it earns the
+          card a verified badge and does not change which holdings appear.{" "}
+          {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} holdings,{" "}
+          {verifiedCount} verified.
+          {(wallets ?? []).length > 0 && !allVerified
+            ? " Verify every wallet to show the badge."
+            : ""}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={buildCard}
-            disabled={busy !== null || scannedCount === 0}
+            disabled={busy !== null || withHoldings === 0}
             className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === "card" ? "Building" : "Build my card"}
