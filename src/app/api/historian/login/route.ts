@@ -47,11 +47,15 @@ export async function POST(
     );
   }
 
-  const res = NextResponse.json({
-    data: historianRowToMe(row),
-    error: null,
-    meta: { timestamp: new Date().toISOString(), cached: false },
-  });
+  const res = NextResponse.json(
+    {
+      data: historianRowToMe(row),
+      error: null,
+      meta: { timestamp: new Date().toISOString(), cached: false },
+    },
+    // Never cacheable: this response carries a Set-Cookie for a specific user.
+    { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate", Vary: "Cookie" } }
+  );
 
   res.cookies.set(
     getHistorianSessionCookieName(),

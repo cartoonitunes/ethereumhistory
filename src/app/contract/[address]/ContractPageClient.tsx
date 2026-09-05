@@ -32,6 +32,7 @@ import {
   ImageDown,
   Archive,
   Sparkles,
+  Pencil,
 } from "lucide-react";
 import { encodeFunctionData, decodeFunctionResult, createWalletClient, createPublicClient, custom, http, parseEther } from "viem";
 import { mainnet } from "viem/chains";
@@ -138,6 +139,20 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
     siblingAddress?: string;
   } | null;
   const [abiData, setAbiData] = useState<AbiData | undefined>(undefined); // undefined = loading
+
+  // Bumped by the header Edit button. HistoricalDocsSection watches it and
+  // opens its editor, so the form stays in one place while becoming reachable
+  // in one click from anywhere on the page.
+  const [editRequest, setEditRequest] = useState(0);
+  const requestEdit = useCallback(() => {
+    setActiveTabRaw("history");
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.hash = "history";
+      window.history.replaceState({}, "", url.toString());
+    }
+    setEditRequest((n) => n + 1);
+  }, []);
 
   const setActiveTab = useCallback((tab: TabId) => {
     setActiveTabRaw(tab);
@@ -661,6 +676,16 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
 
           {/* Action buttons: Share, Embed, Compare */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {me?.active && (
+              <button
+                onClick={requestEdit}
+                title="Edit this contract's documentation"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-ether-500/40 bg-ether-500/10 hover:bg-ether-500/20 text-ether-300 hover:text-ether-200 text-sm transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
             <button
               onClick={handleShareOnX}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-obsidian-700 bg-obsidian-900/50 hover:bg-obsidian-800 hover:border-obsidian-600 text-obsidian-300 hover:text-obsidian-100 text-sm transition-colors"
@@ -775,7 +800,7 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
           )}
           {activeTab === "history" && (
             <div className="min-w-0 space-y-6">
-              <HistoricalDocsSection contract={contract} />
+              <HistoricalDocsSection contract={contract} editRequest={editRequest} />
               <EditHistorySection contractAddress={address} />
               {me?.active && (
                 <MediaUploadSection contractAddress={address} />
@@ -3152,7 +3177,14 @@ function MediaUploadSection({ contractAddress }: { contractAddress: string }) {
   );
 }
 
-function HistoricalDocsSection({ contract }: { contract: ContractPageData["contract"] }) {
+function HistoricalDocsSection({
+  contract,
+  editRequest = 0,
+}: {
+  contract: ContractPageData["contract"];
+  /** Incremented by the page's Edit button to open this editor and scroll to it. */
+  editRequest?: number;
+}) {
   type DraftLink = {
     clientId: string;
     id: number | null;
@@ -3170,6 +3202,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   const [me, setMe] = useState<HistorianMe | null>(null);
   const [loadingMe, setLoadingMe] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pendingReview, setPendingReview] = useState(false);
@@ -3246,6 +3279,22 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setNewPersonName("");
   }, [contract.address]);
 
+
+  // Signal from the page's Edit button, which lives outside this component.
+  //
+  // Declared AFTER the reset effect above on purpose. Both run on mount, in
+  // declaration order, and that one ends with setEditMode(false); putting this
+  // first meant the reset immediately undid it and the click did nothing.
+  //
+  // Guarded on > 0 so a plain mount does not spring the editor open by itself.
+  useEffect(() => {
+    if (editRequest <= 0) return;
+    setEditMode(true);
+    const t = window.setTimeout(() => {
+      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [editRequest]);
 
   // Resolve the "Wrapper of" address to a contract name while the historian
   // types. Debounced, and only fires on a well formed address, so typing does
@@ -3561,7 +3610,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   }
 
   return (
-    <div className="space-y-6 min-w-0 overflow-hidden" id="history">
+    <div ref={editorRef} className="space-y-6 min-w-0 overflow-hidden" id="history">
       {/* Historical narrative */}
       <section className="p-6 rounded-xl border border-obsidian-800 bg-obsidian-900/30">
         <div className="flex items-start justify-between gap-4 mb-4">
