@@ -455,9 +455,20 @@ export const SCORE_DEPTH_N = 5;
 /** Holdings needed for the full breadth component. */
 const SCORE_BREADTH_SATURATION = 25;
 
-/** Split of the 100 points between how early the collection is and how wide. */
-const DEPTH_WEIGHT = 85;
+/** Wallet age, in years, that earns the full age component. */
+const SCORE_AGE_SATURATION_YEARS = 10;
+
+/**
+ * Split of the 100 points between how early the collection is, how wide, and
+ * how long the wallet has been on chain.
+ *
+ * Age is deliberately the smallest term. It measures the holder rather than the
+ * collection, and this is a collector score, so it should tip a close call
+ * rather than decide one. Ten points is roughly a third of a tier band.
+ */
+const DEPTH_WEIGHT = 75;
 const BREADTH_WEIGHT = 15;
+const AGE_WEIGHT = 10;
 
 /**
  * Collector score, 0 to 100. Earlier and wider collections score higher.
@@ -484,13 +495,60 @@ const BREADTH_WEIGHT = 15;
  *   breadth a saturating function of how many documented contracts are held.
  *           Monotone because the count only rises.
  *
- * Both components are non decreasing in the holdings, so their sum is too.
+ *   age     a saturating function of how long the wallet has been on chain.
+ *           Monotone in both directions that matter: it does not read the
+ *           holdings at all, so adding one cannot move it, and a wallet cannot
+ *           become younger. Adding a WALLET can only pull the account's first
+ *           transaction earlier, since that date is a minimum across wallets.
+ *
+ * All three components are non decreasing in the holdings, so their sum is too.
  *
  * Depth uses the five earliest rather than the single earliest so that breadth
  * of EARLY holdings still counts. Scoring on the minimum alone would make one
  * lucky 2015 token worth exactly as much as fifty of them.
+ *
+ * ONE PROPERTY OF THE AGE TERM WORTH KNOWING: unlike depth and breadth, it is a
+ * function of the current date, so a stored score creeps upward on its own as
+ * the wallet ages. That is the same class of thing SCORE_REFERENCE_BLOCK exists
+ * to prevent, and it is accepted here only because the drift is small, slow and
+ * strictly upward: the log curve is flattest exactly where old wallets sit, so
+ * a nine year old wallet gains its last 0.4 of a point over a whole year, and
+ * nobody's published score ever falls.
  */
-export function computeCollectorScore(holdings: { deploymentBlock: number | null }[]): {
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+/**
+ * Fractional years since a wallet's first transaction, or null if unknown.
+ *
+ * Shared by the score and by every place that displays an age, so the number a
+ * card shows and the number it was scored on can never disagree. Accepts a Date
+ * or an ISO string because stored cards carry the string form.
+ *
+ * A future or unparseable date clamps to zero rather than going negative, which
+ * would otherwise subtract points from a wallet with bad provider data.
+ */
+export function walletAgeYears(onChainSince?: Date | string | null): number | null {
+  if (!onChainSince) return null;
+  const t = onChainSince instanceof Date ? onChainSince.getTime() : Date.parse(onChainSince);
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, (Date.now() - t) / MS_PER_YEAR);
+}
+
+/** Whole years since the first transaction, the form the cards display. */
+export function wholeWalletAgeYears(onChainSince?: Date | string | null): number | null {
+  const years = walletAgeYears(onChainSince);
+  return years === null ? null : Math.floor(years);
+}
+
+export function computeCollectorScore(
+  holdings: { deploymentBlock: number | null }[],
+  /**
+   * Earliest transaction across the account's wallets. Null when unknown, which
+   * scores as zero rather than guessing: an unscanned wallet should not be
+   * handed points, and the term can only go up once the date is known.
+   */
+  onChainSince?: Date | string | null
+): {
   score: number;
   /** Mean block of the earliest N, the input to the depth component. */
   averageBlock: number | null;
@@ -516,9 +574,21 @@ export function computeCollectorScore(holdings: { deploymentBlock: number | null
   // It also means depth genuinely measures early DEPTH. One lucky 2015 token
   // leaves four slots at the ceiling and scores modestly, which is the intent:
   // a Master Curator should hold several early contracts, not one.
+  //
+  // Each real block is CLAMPED to the reference before it goes in a slot, and
+  // that clamp is load bearing rather than cosmetic. Padding is only a worst
+  // case if nothing can be worse than it, and a block past the ceiling is: with
+  // four real holdings the fifth slot holds the 25M padding, so adding a
+  // contract deployed at block 29M would replace the padding with something
+  // later and drop the score. A property test caught exactly that. It is
+  // unreachable today, since the latest documented block is about 24.7M, and it
+  // becomes reachable the moment mainnet passes 25M and anything newer is
+  // documented. Clamping costs nothing and closes it now: past the ceiling a
+  // holding contributes no depth, which is what the ratio clamp below already
+  // assumed.
   const slots: number[] = [];
   for (let i = 0; i < SCORE_DEPTH_N; i += 1) {
-    slots.push(i < blocks.length ? blocks[i] : SCORE_REFERENCE_BLOCK);
+    slots.push(i < blocks.length ? Math.min(blocks[i], SCORE_REFERENCE_BLOCK) : SCORE_REFERENCE_BLOCK);
   }
   const averageBlock = Math.round(slots.reduce((a, b) => a + b, 0) / SCORE_DEPTH_N);
 
@@ -533,7 +603,19 @@ export function computeCollectorScore(holdings: { deploymentBlock: number | null
   );
   const breadth = breadthRatio * BREADTH_WEIGHT;
 
-  const score = Math.max(0, Math.min(100, Math.round(depth + breadth)));
+  // Log scaled in YEARS, not days. Days would compress the whole range into the
+  // top of the curve: log10 of 365 against log10 of 3652 puts a one year old
+  // wallet at 72% of the points, leaving barely three points to separate it
+  // from a nine year old one. In years the same curve spends its points where
+  // the difference is real, 2.9 at one year against 9.6 at nine.
+  const ageYears = walletAgeYears(onChainSince);
+  const ageRatio =
+    ageYears === null
+      ? 0
+      : Math.min(1, Math.log10(1 + ageYears) / Math.log10(1 + SCORE_AGE_SATURATION_YEARS));
+  const age = ageRatio * AGE_WEIGHT;
+
+  const score = Math.max(0, Math.min(100, Math.round(depth + breadth + age)));
 
   return { score, averageBlock, scoredCount: blocks.length };
 }
@@ -821,11 +903,13 @@ export async function buildCardData(
   }
 
   const verifiedCount = wallets.filter((w) => w.verifiedAt !== null).length;
-  const scoring = computeCollectorScore(enriched);
   const years = enriched.map((h) => h.deployedYear).filter((y): y is number => y !== null);
   const firstTxDates = wallets.map((w) => w.firstTxDate).filter((d): d is Date => d instanceof Date);
+  // Earliest across every wallet on the account, so adding a wallet can only
+  // pull this date backwards and the age component can only rise.
   const onChainSince =
     firstTxDates.length > 0 ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))) : null;
+  const scoring = computeCollectorScore(enriched, onChainSince);
 
   return {
     version: 2,
@@ -852,9 +936,7 @@ export async function buildCardData(
       allWalletsVerified: verifiedCount > 0 && verifiedCount === wallets.length,
       earliestYear: years.length > 0 ? Math.min(...years) : null,
       onChainSince: onChainSince ? onChainSince.toISOString() : null,
-      walletAgeYears: onChainSince
-        ? Math.max(0, Math.floor((Date.now() - onChainSince.getTime()) / (365.25 * 24 * 60 * 60 * 1000)))
-        : null,
+      walletAgeYears: wholeWalletAgeYears(onChainSince),
       eraCounts,
       score: scoring.score,
       averageBlock: scoring.averageBlock,
@@ -957,12 +1039,24 @@ export function normalizeCardData(raw: unknown): CardData {
   const holdings = Array.isArray(c.holdings) ? (c.holdings as CardData["holdings"]) : [];
   const wallets = Array.isArray(c.wallets) ? (c.wallets as CardData["wallets"]) : [];
 
+  // Derived from the wallet rows rather than trusted from stats, so a card
+  // stored before the age component existed still scores on its real age. The
+  // stored stat is the fallback, not the source: v1 rows may carry it without
+  // carrying per wallet dates.
+  const walletFirstTx = wallets
+    .map((w) => (w.firstTxDate ? Date.parse(w.firstTxDate) : NaN))
+    .filter((t) => Number.isFinite(t));
+  const onChainSince =
+    walletFirstTx.length > 0
+      ? new Date(Math.min(...walletFirstTx)).toISOString()
+      : (stats.onChainSince ?? null);
+
   // Recomputed from the stored holdings rather than read from stats, for the
   // same reason tier and headline are: a frozen score means a formula fix never
   // reaches a card that already exists, and its owner sees an old number with
   // no way to know they must rebuild. Stored holdings carry deploymentBlock, so
   // this is exact. Falls back to the stored value only when they do not.
-  const recomputed = computeCollectorScore(holdings);
+  const recomputed = computeCollectorScore(holdings, onChainSince);
   const score =
     recomputed.scoredCount > 0
       ? recomputed.score
@@ -1016,18 +1110,10 @@ export function normalizeCardData(raw: unknown): CardData {
       allWalletsVerified:
         stats.allWalletsVerified ?? (walletCount > 0 && verifiedWalletCount === walletCount),
       earliestYear: stats.earliestYear ?? null,
-      onChainSince: stats.onChainSince ?? null,
-      walletAgeYears:
-        stats.walletAgeYears ??
-        (stats.onChainSince
-          ? Math.max(
-              0,
-              Math.floor(
-                (Date.now() - new Date(stats.onChainSince).getTime()) /
-                  (365.25 * 24 * 60 * 60 * 1000)
-              )
-            )
-          : null),
+      onChainSince,
+      // Recomputed, not read from the stored stat, so the age shown on a card
+      // matches the age it was just scored on.
+      walletAgeYears: wholeWalletAgeYears(onChainSince) ?? stats.walletAgeYears ?? null,
       eraCounts: stats.eraCounts ?? {},
       score,
       averageBlock: recomputed.scoredCount > 0 ? recomputed.averageBlock : (stats.averageBlock ?? null),
@@ -1240,7 +1326,8 @@ export async function buildEphemeralCard(
     shortDescription: h.shortDescription,
   }));
 
-  const scoring = computeCollectorScore(holdings);
+  const onChainSince = scan.firstTxDate;
+  const scoring = computeCollectorScore(holdings, onChainSince);
   const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
   const earliestYear = years.length > 0 ? Math.min(...years) : null;
   const eraCounts: Record<string, number> = {};
@@ -1248,7 +1335,6 @@ export async function buildEphemeralCard(
     const key = h.eraId ?? "unknown";
     eraCounts[key] = (eraCounts[key] ?? 0) + 1;
   }
-  const onChainSince = scan.firstTxDate;
 
   return {
     address,
@@ -1284,12 +1370,7 @@ export async function buildEphemeralCard(
         allWalletsVerified: false,
         earliestYear,
         onChainSince: onChainSince ? onChainSince.toISOString() : null,
-        walletAgeYears: onChainSince
-          ? Math.max(
-              0,
-              Math.floor((Date.now() - onChainSince.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-            )
-          : null,
+        walletAgeYears: wholeWalletAgeYears(onChainSince),
         eraCounts,
         score: scoring.score,
         averageBlock: scoring.averageBlock,
