@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { normalizeCardData } from "@/lib/collector-card";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export async function GET(
   }
 
   return NextResponse.json({
-    data: { card: row.cardDataJson, shareSlug: row.shareSlug, updatedAt: row.updatedAt },
+    data: { card: normalizeCardData(row.cardDataJson), shareSlug: row.shareSlug, updatedAt: row.updatedAt },
     error: null,
     meta: { timestamp: new Date().toISOString(), cached: true },
   });

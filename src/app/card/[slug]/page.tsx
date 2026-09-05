@@ -12,6 +12,7 @@ import { Header } from "@/components/Header";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards } from "@/lib/schema";
 import { eq } from "drizzle-orm";
+import { normalizeCardData } from "@/lib/collector-card";
 import HolographicCard, { type CardPayload } from "./HolographicCard";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,8 @@ async function loadCard(slug: string): Promise<CardPayload | null> {
     .select({ cardDataJson: collectorCards.cardDataJson })
     .from(collectorCards)
     .where(eq(collectorCards.shareSlug, slug));
-  return row ? (row.cardDataJson as CardPayload) : null;
+  // Normalised, so a card stored before the redesign still renders.
+  return row ? (normalizeCardData(row.cardDataJson) as unknown as CardPayload) : null;
 }
 
 export async function generateMetadata({

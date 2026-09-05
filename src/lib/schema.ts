@@ -661,6 +661,11 @@ export const userWallets = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     firstTxDate: timestamp("first_tx_date", { withTimezone: true }),
     addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Cached ENS identity (migration 083). */
+    ensName: text("ens_name"),
+    ensAvatarUrl: text("ens_avatar_url"),
+    /** When we last asked, not whether we found anything. */
+    ensCheckedAt: timestamp("ens_checked_at", { withTimezone: true }),
   },
   (table) => ({
     historianAddressIdx: uniqueIndex("user_wallets_historian_address_unique").on(

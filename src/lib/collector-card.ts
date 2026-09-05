@@ -24,6 +24,7 @@
 import { getDb } from "@/lib/db-client";
 import { contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { getEnsAvatar, getEnsName } from "@/lib/ens";
 
 /** A scan should never hold a request open longer than this per call. */
 const RPC_TIMEOUT_MS = 15_000;
@@ -460,10 +461,188 @@ export function computeCollectorScore(
   return { score, averageBlock, scoredCount: blocks.length };
 }
 
+
+/**
+ * Score tiers.
+ *
+ * A bare number says nothing about what it means to hold a 2015 contract, so
+ * the card leads with a title and keeps the number as supporting detail. The
+ * bands are contiguous and cover 0 to 100 with no gaps, so every score resolves
+ * to exactly one tier.
+ *
+ * Ordered high to low; the first band whose `min` is met wins.
+ */
+export interface Tier {
+  label: string;
+  blurb: string;
+  min: number;
+}
+
+const TIERS: Tier[] = [
+  { min: 95, label: "Genesis Architect", blurb: "Holding code from the ground floor of Ethereum" },
+  { min: 85, label: "Frontier Pioneer", blurb: "Present for the first contracts ever deployed" },
+  { min: 70, label: "DAO Survivor", blurb: "Came through the fork with the receipts to prove it" },
+  { min: 50, label: "Chain Historian", blurb: "Curating the early record one contract at a time" },
+  { min: 30, label: "Block Explorer", blurb: "Digging through the archive for what mattered" },
+  { min: 0, label: "Ethereum Apprentice", blurb: "Just beginning to collect the early chain" },
+];
+
+export function tierForScore(score: number): Tier {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  return TIERS.find((t) => clamped >= t.min) ?? TIERS[TIERS.length - 1];
+}
+
+/**
+ * A highlighted holding with the story attached.
+ *
+ * `headline` is derived from structured facts we hold (era, deploy year,
+ * whether it is held through a wrapper, token type). `story` is the contract's
+ * own editorial text, never invented here. That split matters: the headline can
+ * be generated safely because it only restates data, and the story is real
+ * because a historian wrote it.
+ */
+export interface Standout {
+  contractAddress: string;
+  name: string;
+  headline: string;
+  story: string | null;
+  year: number | null;
+  eraId: string | null;
+}
+
+const ERA_LABEL: Record<string, string> = {
+  frontier: "Frontier",
+  homestead: "Homestead",
+  dao: "DAO fork",
+  tangerine: "Tangerine Whistle",
+  spurious: "Spurious Dragon",
+  byzantium: "Byzantium",
+};
+
+/** First sentence of an editorial field, trimmed to fit a card. */
+function firstSentence(text: string | null, max = 150): string | null {
+  if (!text) return null;
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  const match = flat.match(/^(.{20,}?[.!?])(\s|$)/);
+  const sentence = match ? match[1] : flat;
+  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
+}
+
+function buildHeadline(h: {
+  year: number | null;
+  eraId: string | null;
+  viaWrapper: string | null;
+  tokenType: string;
+  balance: string;
+  isEarliest: boolean;
+}): string {
+  const era = h.eraId ? ERA_LABEL[h.eraId] ?? null : null;
+
+  if (h.viaWrapper) {
+    return h.year
+      ? `Holds the ${h.year} original through its wrapper`
+      : "Holds the original through its wrapper";
+  }
+  if (h.isEarliest && h.year) {
+    return `Their earliest holding, deployed in ${h.year}`;
+  }
+  if (era === "Frontier") {
+    return "A Frontier era contract, from Ethereum's first months";
+  }
+  if (h.tokenType === "erc721") {
+    const n = Number(h.balance);
+    return Number.isFinite(n) && n > 1
+      ? `Owns ${n} from this collection`
+      : "Owns a piece of this collection";
+  }
+  if (era && h.year) return `${era} era, ${h.year}`;
+  if (h.year) return `Deployed in ${h.year}`;
+  return "From the documented archive";
+}
+
+/**
+ * Pick the two or three holdings worth putting on the card.
+ *
+ * Ranked by what makes a card interesting rather than by balance: oldest first,
+ * then whatever carries a real story. A card with three well chosen entries
+ * reads better than one listing everything, which is what the flat list did.
+ */
+export function pickStandouts(
+  holdings: {
+    contractAddress: string;
+    tokenName: string | null;
+    tokenSymbol: string | null;
+    balance: string;
+    tokenType: string;
+    viaWrapper: string | null;
+    eraId: string | null;
+    deployedYear: number | null;
+    significance?: string | null;
+    shortDescription?: string | null;
+  }[],
+  limit = 3
+): Standout[] {
+  if (holdings.length === 0) return [];
+
+  const earliestYear = holdings.reduce<number | null>(
+    (acc, h) => (h.deployedYear != null && (acc === null || h.deployedYear < acc) ? h.deployedYear : acc),
+    null
+  );
+
+  const ranked = [...holdings].sort((a, b) => {
+    // A story is what makes an entry worth the space.
+    const aStory = a.significance || a.shortDescription ? 1 : 0;
+    const bStory = b.significance || b.shortDescription ? 1 : 0;
+    if (aStory !== bStory) return bStory - aStory;
+    const ay = a.deployedYear ?? 9999;
+    const by = b.deployedYear ?? 9999;
+    if (ay !== by) return ay - by;
+    return (a.tokenName ?? "").localeCompare(b.tokenName ?? "");
+  });
+
+  // Only the single top-ranked holding may claim "earliest". Several contracts
+  // routinely share the earliest year, and letting each one say so produced two
+  // entries with word-for-word identical headlines.
+  let earliestClaimed = false;
+
+  return ranked.slice(0, limit).map((h) => {
+    const isEarliest =
+      !earliestClaimed && h.deployedYear != null && h.deployedYear === earliestYear;
+    if (isEarliest) earliestClaimed = true;
+    return {
+      contractAddress: h.contractAddress,
+      name: h.tokenName ?? h.contractAddress.slice(0, 10),
+      headline: buildHeadline({
+        year: h.deployedYear,
+        eraId: h.eraId,
+        viaWrapper: h.viaWrapper,
+        tokenType: h.tokenType,
+        balance: h.balance,
+        isEarliest,
+      }),
+      story: firstSentence(h.significance ?? null) ?? firstSentence(h.shortDescription ?? null),
+      year: h.deployedYear,
+      eraId: h.eraId,
+    };
+  });
+}
+
 /** Shape persisted in collector_cards.card_data_json and rendered by /card/[slug]. */
 export interface CardData {
-  version: 1;
-  owner: { name: string; avatarUrl: string | null };
+  /** 2 since the redesign. Readers should tolerate 1 rows still in the table. */
+  version: 2;
+  owner: {
+    /** ENS name when we have one, otherwise the historian's display name. */
+    name: string;
+    /** ENS name specifically, for the @handle line. Null when there is none. */
+    ensName: string | null;
+    avatarUrl: string | null;
+    avatarSource: "profile" | "ens" | "generated";
+    verified: boolean;
+  };
+  tier: Tier;
+  standouts: Standout[];
   wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: {
     contractAddress: string;
@@ -480,22 +659,14 @@ export interface CardData {
   stats: {
     contractCount: number;
     walletCount: number;
-    /** Year of the oldest contract held, the headline number on the card. */
-    earliestYear: number | null;
-    /** Earliest first-transaction date across the verified wallets. */
-    onChainSince: string | null;
-    eraCounts: Record<string, number>;
-    /** How many of the card's wallets proved ownership by signature. */
     verifiedWalletCount: number;
-    /**
-     * True only when EVERY wallet on the card is verified. The badge asserts
-     * "these holdings are proven to belong to this person", so a single
-     * unverified wallet makes that assertion partly false and withholds it.
-     */
     allWalletsVerified: boolean;
-    /** 0 to 100, earlier deployment order scores higher. */
+    earliestYear: number | null;
+    onChainSince: string | null;
+    /** Whole years since the earliest first transaction. Null if unknown. */
+    walletAgeYears: number | null;
+    eraCounts: Record<string, number>;
     score: number;
-    /** Mean deployment block behind the score, shown for transparency. */
     averageBlock: number | null;
   };
   generatedAt: string;
@@ -511,10 +682,11 @@ export interface CardData {
  * plainly, because this is a PUBLIC artefact: nothing stops someone adding an
  * address they do not control and publishing a card that displays its holdings.
  * The card is therefore a claim, and the badge is what turns a claim into
- * proof. `allWalletsVerified` is exposed so the UI can show the difference
- * rather than leaving a viewer unable to tell the two apart.
+ * proof. `allWalletsVerified` is exposed so the UI can show the difference.
  *
- * Reads only from wallet_holdings, so this never calls the provider.
+ * Reads stored holdings, so it never calls the token provider. It may make one
+ * ENS lookup per wallet, but only for wallets never checked before, and the
+ * result is cached on the row.
  */
 export async function buildCardData(
   historianId: number,
@@ -529,27 +701,37 @@ export async function buildCardData(
       label: userWallets.label,
       firstTxDate: userWallets.firstTxDate,
       verifiedAt: userWallets.verifiedAt,
+      ensName: userWallets.ensName,
+      ensAvatarUrl: userWallets.ensAvatarUrl,
+      ensCheckedAt: userWallets.ensCheckedAt,
     })
     .from(userWallets)
     .where(eq(userWallets.historianId, historianId));
 
+  const identity = await resolveIdentity(wallets, owner);
+
+  const emptyStats = {
+    contractCount: 0,
+    walletCount: wallets.length,
+    verifiedWalletCount: wallets.filter((w) => w.verifiedAt !== null).length,
+    allWalletsVerified: false,
+    earliestYear: null,
+    onChainSince: null,
+    walletAgeYears: null,
+    eraCounts: {},
+    score: 0,
+    averageBlock: null,
+  } as CardData["stats"];
+
   if (wallets.length === 0) {
     return {
-      version: 1,
-      owner,
+      version: 2,
+      owner: { ...identity, verified: false },
+      tier: tierForScore(0),
+      standouts: [],
       wallets: [],
       holdings: [],
-      stats: {
-        contractCount: 0,
-        walletCount: 0,
-        earliestYear: null,
-        onChainSince: null,
-        eraCounts: {},
-        verifiedWalletCount: 0,
-        allWalletsVerified: false,
-        score: 0,
-        averageBlock: null,
-      },
+      stats: emptyStats,
       generatedAt: new Date().toISOString(),
     };
   }
@@ -568,13 +750,18 @@ export async function buildCardData(
       deploymentTimestamp: contracts.deploymentTimestamp,
       deploymentBlock: contracts.deploymentBlock,
       isDocumented: contracts.isDocumented,
+      significance: contracts.historicalSignificance,
+      shortDescription: contracts.shortDescription,
     })
     .from(walletHoldings)
     .leftJoin(contracts, eq(contracts.address, walletHoldings.contractAddress))
     .where(inArray(walletHoldings.walletId, walletIds));
 
-  // One entry per contract even when several wallets on the account hold it.
-  const merged = new Map<string, CardData["holdings"][number]>();
+  type Enriched = CardData["holdings"][number] & {
+    significance: string | null;
+    shortDescription: string | null;
+  };
+  const merged = new Map<string, Enriched>();
   for (const r of rows) {
     // Re-checked here, not just at scan time: wallet_holdings can hold rows
     // stored before this rule existed, or whose contract has since lost its
@@ -598,11 +785,12 @@ export async function buildCardData(
       eraId: r.eraId,
       deployedYear: year,
       deploymentBlock: r.deploymentBlock,
+      significance: r.significance,
+      shortDescription: r.shortDescription,
     });
   }
 
-  // Oldest first: the whole point of the card is what you held earliest.
-  const holdings = [...merged.values()].sort((a, b) => {
+  const enriched = [...merged.values()].sort((a, b) => {
     const ay = a.deployedYear ?? 9999;
     const by = b.deployedYear ?? 9999;
     if (ay !== by) return ay - by;
@@ -610,44 +798,108 @@ export async function buildCardData(
   });
 
   const eraCounts: Record<string, number> = {};
-  for (const h of holdings) {
+  for (const h of enriched) {
     const key = h.eraId ?? "unknown";
     eraCounts[key] = (eraCounts[key] ?? 0) + 1;
   }
 
   const verifiedCount = wallets.filter((w) => w.verifiedAt !== null).length;
-  const scoring = computeCollectorScore(holdings);
-
-  const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
-  const firstTxDates = wallets
-    .map((w) => w.firstTxDate)
-    .filter((d): d is Date => d instanceof Date);
+  const scoring = computeCollectorScore(enriched);
+  const years = enriched.map((h) => h.deployedYear).filter((y): y is number => y !== null);
+  const firstTxDates = wallets.map((w) => w.firstTxDate).filter((d): d is Date => d instanceof Date);
+  const onChainSince =
+    firstTxDates.length > 0 ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))) : null;
 
   return {
-    version: 1,
-    owner,
+    version: 2,
+    owner: { ...identity, verified: verifiedCount > 0 && verifiedCount === wallets.length },
+    tier: tierForScore(scoring.score),
+    standouts: pickStandouts(enriched),
     wallets: wallets.map((w) => ({
       address: w.address,
       label: w.label,
       firstTxDate: w.firstTxDate ? new Date(w.firstTxDate).toISOString() : null,
       verified: w.verifiedAt !== null,
     })),
-    holdings,
+    // Kept in the payload for the API and any future view. The card itself no
+    // longer renders a flat list of these.
+    holdings: enriched.map(({ significance, shortDescription, ...h }) => {
+      void significance;
+      void shortDescription;
+      return h;
+    }),
     stats: {
-      contractCount: holdings.length,
+      contractCount: enriched.length,
       walletCount: wallets.length,
-      earliestYear: years.length > 0 ? Math.min(...years) : null,
-      onChainSince:
-        firstTxDates.length > 0
-          ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))).toISOString()
-          : null,
-      eraCounts,
       verifiedWalletCount: verifiedCount,
       allWalletsVerified: verifiedCount > 0 && verifiedCount === wallets.length,
+      earliestYear: years.length > 0 ? Math.min(...years) : null,
+      onChainSince: onChainSince ? onChainSince.toISOString() : null,
+      walletAgeYears: onChainSince
+        ? Math.max(0, Math.floor((Date.now() - onChainSince.getTime()) / (365.25 * 24 * 60 * 60 * 1000)))
+        : null,
+      eraCounts,
       score: scoring.score,
       averageBlock: scoring.averageBlock,
     },
     generatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Work out who the card belongs to: name, handle and avatar.
+ *
+ * Avatar order is EH profile image, then an ENS avatar from any wallet, then
+ * nothing, in which case the UI draws a generated one from the address. The EH
+ * image comes first because it is the one the person deliberately chose here.
+ *
+ * ENS is resolved at most once per wallet and cached on the row, including the
+ * negative result. Failures are swallowed: a card without an avatar is fine, a
+ * card that fails to build because a resolver timed out is not.
+ */
+async function resolveIdentity(
+  wallets: {
+    id: number;
+    address: string;
+    ensName: string | null;
+    ensAvatarUrl: string | null;
+    ensCheckedAt: Date | null;
+  }[],
+  owner: { name: string; avatarUrl: string | null }
+): Promise<Omit<CardData["owner"], "verified">> {
+  const db = getDb();
+
+  for (const w of wallets) {
+    if (w.ensCheckedAt) continue;
+    try {
+      const name = await getEnsName(w.address);
+      const avatar = name ? await getEnsAvatar(name) : null;
+      w.ensName = name;
+      w.ensAvatarUrl = avatar;
+      await db
+        .update(userWallets)
+        .set({ ensName: name, ensAvatarUrl: avatar, ensCheckedAt: new Date() })
+        .where(eq(userWallets.id, w.id));
+    } catch {
+      // Leave ensCheckedAt unset so a transient failure is retried later.
+    }
+  }
+
+  const ensName = wallets.find((w) => w.ensName)?.ensName ?? null;
+  const ensAvatar = wallets.find((w) => w.ensAvatarUrl)?.ensAvatarUrl ?? null;
+
+  const avatarUrl = owner.avatarUrl || ensAvatar || null;
+  const avatarSource: CardData["owner"]["avatarSource"] = owner.avatarUrl
+    ? "profile"
+    : ensAvatar
+      ? "ens"
+      : "generated";
+
+  return {
+    name: ensName || owner.name,
+    ensName,
+    avatarUrl,
+    avatarSource,
   };
 }
 
@@ -665,4 +917,71 @@ export function formatBalance(balance: string, decimals: number | null): string 
   const frac = padded.slice(padded.length - d).replace(/0+$/, "");
   const withSeparators = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `${negative ? "-" : ""}${withSeparators}${frac ? "." + frac : ""}`;
+}
+
+/**
+ * Bring a stored card up to the current shape.
+ *
+ * Cards persisted before the redesign have no `tier` and no `standouts`, and
+ * their `owner` lacks `ensName` and `avatarUrl`. The renderer reads all of
+ * those, so serving a stored row untouched would throw on anyone's existing
+ * card the moment this deploys.
+ *
+ * Pure and read-only: it derives what it can from what the old row already
+ * holds (tier from the score, standouts from the holdings) and fills the rest
+ * with safe defaults. No database write, so viewing an old card cannot fail
+ * and cannot mutate someone else's row. The next time the owner rebuilds, they
+ * get a real v2 card with editorial stories attached.
+ */
+export function normalizeCardData(raw: unknown): CardData {
+  const c = (raw ?? {}) as Partial<CardData> & Record<string, unknown>;
+  const stats = (c.stats ?? {}) as Partial<CardData["stats"]>;
+  const owner = (c.owner ?? {}) as Partial<CardData["owner"]>;
+  const holdings = Array.isArray(c.holdings) ? (c.holdings as CardData["holdings"]) : [];
+  const wallets = Array.isArray(c.wallets) ? (c.wallets as CardData["wallets"]) : [];
+  const score = typeof stats.score === "number" ? stats.score : 0;
+
+  const walletCount = stats.walletCount ?? wallets.length;
+  const verifiedWalletCount =
+    stats.verifiedWalletCount ?? wallets.filter((w) => w.verified).length;
+
+  return {
+    version: 2,
+    owner: {
+      name: owner.name ?? "Collector",
+      ensName: owner.ensName ?? null,
+      avatarUrl: owner.avatarUrl ?? null,
+      avatarSource: owner.avatarSource ?? "generated",
+      verified: owner.verified ?? stats.allWalletsVerified ?? false,
+    },
+    tier: c.tier ?? tierForScore(score),
+    // v1 holdings carry no editorial text, so these come back headline-only.
+    standouts: Array.isArray(c.standouts) ? c.standouts : pickStandouts(holdings),
+    wallets,
+    holdings,
+    stats: {
+      contractCount: stats.contractCount ?? holdings.length,
+      walletCount,
+      verifiedWalletCount,
+      allWalletsVerified:
+        stats.allWalletsVerified ?? (walletCount > 0 && verifiedWalletCount === walletCount),
+      earliestYear: stats.earliestYear ?? null,
+      onChainSince: stats.onChainSince ?? null,
+      walletAgeYears:
+        stats.walletAgeYears ??
+        (stats.onChainSince
+          ? Math.max(
+              0,
+              Math.floor(
+                (Date.now() - new Date(stats.onChainSince).getTime()) /
+                  (365.25 * 24 * 60 * 60 * 1000)
+              )
+            )
+          : null),
+      eraCounts: stats.eraCounts ?? {},
+      score,
+      averageBlock: stats.averageBlock ?? null,
+    },
+    generatedAt: c.generatedAt ?? new Date().toISOString(),
+  };
 }
