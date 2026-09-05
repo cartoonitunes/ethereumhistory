@@ -126,15 +126,20 @@ const SPARKS = [
 export default function HolographicCard({
   card,
   shareUrl,
+  slug,
 }: {
   card: CardPayload;
   shareUrl: string;
+  slug: string;
 }) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [copied, setCopied] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [imageState, setImageState] = useState<"idle" | "working" | "copied" | "unsupported">("idle");
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const shareImageUrl = `/api/collector-card/${slug}/share`;
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -163,6 +168,75 @@ export default function HolographicCard({
     }
   }, [shareUrl]);
 
+  /**
+   * Save the card as a PNG.
+   *
+   * The bytes come from the server rendered share endpoint rather than from
+   * rasterising this DOM node. html2canvas and friends reimplement a subset of
+   * CSS, and this card is built almost entirely from the parts they do not
+   * support: mix-blend-mode, mask-image and conic-gradient. Rasterising it in
+   * the browser would hand people a flat, broken copy of the thing they wanted
+   * to show off.
+   */
+  const downloadImage = useCallback(async () => {
+    setImageState("working");
+    try {
+      const res = await fetch(shareImageUrl);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ethereum-history-card-${slug}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setImageState("idle");
+    } catch {
+      // Fall back to simply opening the image, which every browser can save.
+      window.open(shareImageUrl, "_blank", "noopener,noreferrer");
+      setImageState("idle");
+    }
+  }, [shareImageUrl, slug]);
+
+  /**
+   * Copy the card image to the clipboard so it can be pasted into a compose box.
+   *
+   * Safari resolves the clipboard promise before the fetch would finish unless
+   * the ClipboardItem is handed a promise directly, so the promise form is used
+   * rather than awaiting the blob first. Firefox has no image clipboard write at
+   * all, which is reported rather than failing silently.
+   */
+  const copyImage = useCallback(async () => {
+    const canWriteImages =
+      typeof window !== "undefined" &&
+      typeof ClipboardItem !== "undefined" &&
+      !!navigator.clipboard?.write;
+
+    if (!canWriteImages) {
+      setImageState("unsupported");
+      window.setTimeout(() => setImageState("idle"), 2600);
+      return;
+    }
+
+    setImageState("working");
+    try {
+      const item = new ClipboardItem({
+        "image/png": fetch(shareImageUrl).then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.blob();
+        }),
+      });
+      await navigator.clipboard.write([item]);
+      setImageState("copied");
+      window.setTimeout(() => setImageState("idle"), 2000);
+    } catch {
+      setImageState("unsupported");
+      window.setTimeout(() => setImageState("idle"), 2600);
+    }
+  }, [shareImageUrl]);
+
   // Centre means resting, so the card is flat until pointed at.
   const px = pointer?.x ?? 0.5;
   const py = pointer?.y ?? 0.5;
@@ -188,13 +262,13 @@ export default function HolographicCard({
   const tweetUrl = `https://twitter.com/intent/tweet?text=${tweet}&url=${encodeURIComponent(shareUrl)}`;
 
   return (
-    <div className="flex flex-col items-center gap-8">
+    <div className="flex flex-col items-center gap-4 sm:gap-8">
       <div style={{ perspective: "1500px" }}>
         <div
           ref={cardRef}
           onPointerMove={onPointerMove}
           onPointerLeave={() => setPointer(null)}
-          className="relative w-[min(92vw,23rem)] select-none rounded-[1.25rem]"
+          className="relative w-[min(88vw,20rem)] select-none rounded-[1.25rem] sm:w-[23rem]"
           style={{
             transform: `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`,
             transformStyle: "preserve-3d",
@@ -270,13 +344,13 @@ export default function HolographicCard({
                 />
               ))}
 
-              <div className="relative z-10 flex flex-col items-center px-6 pb-6 pt-7 text-center">
+              <div className="relative z-10 flex flex-col items-center px-4 pb-4 pt-4 text-center sm:px-6 sm:pb-6 sm:pt-7">
                 <p className="text-[0.5625rem] font-medium uppercase tracking-[0.3em] text-ether-400">
                   Ethereum History
                 </p>
 
                 {/* Portrait */}
-                <div className="relative mt-5">
+                <div className="relative mt-3 sm:mt-5">
                   <div
                     aria-hidden
                     className="absolute -inset-2 rounded-full blur-lg"
@@ -288,7 +362,7 @@ export default function HolographicCard({
                     }}
                   />
                   <div
-                    className="relative h-28 w-28 rounded-full p-[2px]"
+                    className="relative h-20 w-20 rounded-full p-[2px] sm:h-28 sm:w-28"
                     style={{
                       background:
                         "conic-gradient(from 140deg, #a4b8fc, #626ef1, #b23dff, #3da8ff, #a4b8fc)",
@@ -307,7 +381,7 @@ export default function HolographicCard({
                 </div>
 
                 {/* Identity */}
-                <h1 className="mt-4 max-w-full truncate text-lg font-semibold text-obsidian-50">
+                <h1 className="mt-3 max-w-full truncate text-base font-semibold text-obsidian-50 sm:mt-4 sm:text-lg">
                   {card.owner.name}
                 </h1>
                 <div className="mt-1 flex items-center gap-1.5">
@@ -330,8 +404,8 @@ export default function HolographicCard({
                 </div>
 
                 {/* Tier */}
-                <div className="mt-5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                  <p className="text-base font-semibold tracking-tight text-ether-200">
+                <div className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 sm:mt-5 sm:px-4 sm:py-3">
+                  <p className="text-sm font-semibold tracking-tight text-ether-200 sm:text-base">
                     {card.tier.label}
                   </p>
                   <p className="mt-0.5 text-[0.6875rem] leading-snug text-obsidian-400">
@@ -341,11 +415,11 @@ export default function HolographicCard({
 
                 {/* Standouts */}
                 {card.standouts.length > 0 ? (
-                  <ul className="mt-4 flex w-full flex-col gap-2.5 text-left">
-                    {card.standouts.map((s) => (
+                  <ul className="mt-3 flex w-full flex-col gap-1.5 text-left sm:mt-4 sm:gap-2.5">
+                    {card.standouts.map((s, i) => (
                       <li
                         key={s.contractAddress}
-                        className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5"
+                        className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 sm:px-3 sm:py-2.5"
                       >
                         <div className="flex items-baseline gap-2">
                           <span className="font-mono text-[0.625rem] tabular-nums text-ether-400/90">
@@ -359,7 +433,11 @@ export default function HolographicCard({
                           {s.headline}
                         </p>
                         {s.story ? (
-                          <p className="mt-1 text-[0.625rem] leading-snug text-obsidian-500">
+                          <p
+                            className={`mt-1 text-[0.625rem] leading-snug text-obsidian-500 ${
+                              i === 0 ? "" : "hidden sm:block"
+                            }`}
+                          >
                             {s.story}
                           </p>
                         ) : null}
@@ -369,7 +447,7 @@ export default function HolographicCard({
                 ) : null}
 
                 {/* Stats bar */}
-                <div className="mt-5 grid w-full grid-cols-4 gap-1 border-t border-white/10 pt-4">
+                <div className="mt-3 grid w-full grid-cols-4 gap-1 border-t border-white/10 pt-3 sm:mt-5 sm:pt-4">
                   <Stat label="Score" value={String(card.stats.score)} accent />
                   <Stat label="Held" value={String(card.stats.contractCount)} />
                   <Stat
@@ -387,22 +465,45 @@ export default function HolographicCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <a
-          href={tweetUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
-        >
-          Share on X
-        </a>
-        <button
-          type="button"
-          onClick={copyLink}
-          className="rounded-lg border border-white/10 px-4 py-2 text-sm text-obsidian-300 transition-colors hover:border-white/20 hover:text-obsidian-100"
-        >
-          {copied ? "Link copied" : "Copy link"}
-        </button>
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <a
+            href={tweetUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+          >
+            Share on X
+          </a>
+          <button
+            type="button"
+            onClick={downloadImage}
+            disabled={imageState === "working"}
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-obsidian-200 transition-colors hover:border-white/30 disabled:opacity-50"
+          >
+            {imageState === "working" ? "Preparing" : "Download PNG"}
+          </button>
+          <button
+            type="button"
+            onClick={copyImage}
+            disabled={imageState === "working"}
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm text-obsidian-200 transition-colors hover:border-white/30 disabled:opacity-50"
+          >
+            {imageState === "copied" ? "Image copied" : "Copy image"}
+          </button>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-obsidian-400 transition-colors hover:border-white/20 hover:text-obsidian-100"
+          >
+            {copied ? "Link copied" : "Copy link"}
+          </button>
+        </div>
+        {imageState === "unsupported" ? (
+          <p className="text-xs text-obsidian-500">
+            This browser cannot copy images. Use Download PNG instead.
+          </p>
+        ) : null}
       </div>
     </div>
   );

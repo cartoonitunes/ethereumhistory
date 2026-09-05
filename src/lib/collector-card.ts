@@ -470,6 +470,13 @@ export function computeCollectorScore(
  * bands are contiguous and cover 0 to 100 with no gaps, so every score resolves
  * to exactly one tier.
  *
+ * Every blurb describes what the holder HOLDS, never where they were. The score
+ * measures the deployment date of the contracts in a wallet, which says nothing
+ * about when the wallet acquired them: a 2022 wallet can hold a 2015 token it
+ * bought last week. Earlier wording ("Present for the first contracts ever
+ * deployed", "Came through the fork") asserted a history the data cannot
+ * support and that is usually false.
+ *
  * Ordered high to low; the first band whose `min` is met wins.
  */
 export interface Tier {
@@ -479,9 +486,9 @@ export interface Tier {
 }
 
 const TIERS: Tier[] = [
-  { min: 95, label: "Genesis Architect", blurb: "Holding code from the ground floor of Ethereum" },
-  { min: 85, label: "Frontier Pioneer", blurb: "Present for the first contracts ever deployed" },
-  { min: 70, label: "DAO Survivor", blurb: "Came through the fork with the receipts to prove it" },
+  { min: 95, label: "Genesis Architect", blurb: "Holds tokens from Ethereum's earliest contracts" },
+  { min: 85, label: "Frontier Pioneer", blurb: "Holds tokens from the first contracts ever deployed" },
+  { min: 70, label: "DAO Survivor", blurb: "Holds tokens that came through the fork" },
   { min: 50, label: "Chain Historian", blurb: "Curating the early record one contract at a time" },
   { min: 30, label: "Block Explorer", blurb: "Digging through the archive for what mattered" },
   { min: 0, label: "Ethereum Apprentice", blurb: "Just beginning to collect the early chain" },
@@ -519,10 +526,20 @@ const ERA_LABEL: Record<string, string> = {
   byzantium: "Byzantium",
 };
 
-/** First sentence of an editorial field, trimmed to fit a card. */
+/**
+ * First sentence of an editorial field, trimmed to fit a card.
+ *
+ * Em and en dashes are folded to a comma for DISPLAY ONLY. The stored
+ * editorial text is untouched; this only affects what the card renders, so the
+ * card holds to the project's no-dash convention without rewriting anything a
+ * historian actually wrote.
+ */
 function firstSentence(text: string | null, max = 150): string | null {
   if (!text) return null;
-  const flat = text.replace(/\s+/g, " ").trim();
+  const flat = text
+    .replace(/\s*[\u2014\u2013]\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!flat) return null;
   const match = flat.match(/^(.{20,}?[.!?])(\s|$)/);
   const sentence = match ? match[1] : flat;
@@ -539,16 +556,19 @@ function buildHeadline(h: {
 }): string {
   const era = h.eraId ? ERA_LABEL[h.eraId] ?? null : null;
 
+  // Earliest by deploy date outranks everything, since that is what the card is
+  // ordered by and what makes a holding notable.
+  if (h.isEarliest && h.year) {
+    // Describes the contract's deploy date, not when the wallet acquired it,
+    // which we do not know and must not imply.
+    return h.viaWrapper
+      ? `Their earliest holding by deploy date, ${h.year}, held through its wrapper`
+      : `Their earliest holding by deploy date, ${h.year}`;
+  }
   if (h.viaWrapper) {
     return h.year
       ? `Holds the ${h.year} original through its wrapper`
       : "Holds the original through its wrapper";
-  }
-  if (h.isEarliest && h.year) {
-    return `Their earliest holding, deployed in ${h.year}`;
-  }
-  if (era === "Frontier") {
-    return "A Frontier era contract, from Ethereum's first months";
   }
   if (h.tokenType === "erc721") {
     const n = Number(h.balance);
@@ -556,7 +576,12 @@ function buildHeadline(h: {
       ? `Owns ${n} from this collection`
       : "Owns a piece of this collection";
   }
-  if (era && h.year) return `${era} era, ${h.year}`;
+  // Name the era and the year, and stop. An earlier version appended "from
+  // Ethereum's first months" to anything Frontier, which is false for most of
+  // that era: Frontier ran to block 1,150,000 in March 2016, so a contract
+  // deployed eight months in was still Frontier and still not early.
+  if (era && h.year) return `${era} era contract, deployed ${h.year}`;
+  if (era) return `${era} era contract`;
   if (h.year) return `Deployed in ${h.year}`;
   return "From the documented archive";
 }
@@ -578,6 +603,7 @@ export function pickStandouts(
     viaWrapper: string | null;
     eraId: string | null;
     deployedYear: number | null;
+    deploymentBlock?: number | null;
     significance?: string | null;
     shortDescription?: string | null;
   }[],
@@ -585,31 +611,43 @@ export function pickStandouts(
 ): Standout[] {
   if (holdings.length === 0) return [];
 
-  const earliestYear = holdings.reduce<number | null>(
-    (acc, h) => (h.deployedYear != null && (acc === null || h.deployedYear < acc) ? h.deployedYear : acc),
-    null
-  );
+  // The single earliest contract by block, so "earliest holding" names one
+  // specific contract rather than everything sharing the earliest year.
+  const earliestAddress = holdings.reduce<string | null>((acc, h) => {
+    if (h.deploymentBlock == null) return acc;
+    const best = holdings.find((x) => x.contractAddress === acc);
+    if (!best || best.deploymentBlock == null) return h.contractAddress;
+    return h.deploymentBlock < best.deploymentBlock ? h.contractAddress : acc;
+  }, null);
 
+  // Strict chronological order by deployment block, earliest first. Nothing
+  // else outranks it.
+  //
+  // The previous ranking put "has a story" first and then fell back to
+  // deployment YEAR and finally to the token name alphabetically. Two effects,
+  // both wrong: a 2015 contract could be outranked by a 2018 one that happened
+  // to carry editorial text, and within a shared year the order was decided by
+  // spelling. That is how a "bitcoin" token minted late in 2015 by a passer-by
+  // sorted above MistCoin from November 2015, purely because b precedes m.
+  //
+  // Block number rather than year because year is far too coarse: hundreds of
+  // documented contracts share 2015, and the block is the only field that
+  // actually orders them. Contracts with no recorded block sort last rather
+  // than to the front, since an unknown block is not evidence of being early.
   const ranked = [...holdings].sort((a, b) => {
-    // A story is what makes an entry worth the space.
-    const aStory = a.significance || a.shortDescription ? 1 : 0;
-    const bStory = b.significance || b.shortDescription ? 1 : 0;
-    if (aStory !== bStory) return bStory - aStory;
+    const ab = a.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+    const bb = b.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+    if (ab !== bb) return ab - bb;
+    // Same block is effectively a tie; fall back to year, then to a stable
+    // address comparison so the order never depends on display text.
     const ay = a.deployedYear ?? 9999;
     const by = b.deployedYear ?? 9999;
     if (ay !== by) return ay - by;
-    return (a.tokenName ?? "").localeCompare(b.tokenName ?? "");
+    return a.contractAddress.localeCompare(b.contractAddress);
   });
 
-  // Only the single top-ranked holding may claim "earliest". Several contracts
-  // routinely share the earliest year, and letting each one say so produced two
-  // entries with word-for-word identical headlines.
-  let earliestClaimed = false;
-
   return ranked.slice(0, limit).map((h) => {
-    const isEarliest =
-      !earliestClaimed && h.deployedYear != null && h.deployedYear === earliestYear;
-    if (isEarliest) earliestClaimed = true;
+    const isEarliest = earliestAddress !== null && h.contractAddress === earliestAddress;
     return {
       contractAddress: h.contractAddress,
       name: h.tokenName ?? h.contractAddress.slice(0, 10),
@@ -954,9 +992,24 @@ export function normalizeCardData(raw: unknown): CardData {
       avatarSource: owner.avatarSource ?? "generated",
       verified: owner.verified ?? stats.allWalletsVerified ?? false,
     },
-    tier: c.tier ?? tierForScore(score),
-    // v1 holdings carry no editorial text, so these come back headline-only.
-    standouts: Array.isArray(c.standouts) ? c.standouts : pickStandouts(holdings),
+    // Tier and standouts are DERIVED, so they are always recomputed here rather
+    // than trusted from the stored row.
+    //
+    // Freezing them at build time means any later correction to the tier
+    // wording or the ranking never reaches a card that already exists, and the
+    // owner sees stale text with no way to know they must rebuild. Both are
+    // pure functions of data the row already carries (the score, and the
+    // holdings), so recomputing costs nothing and every card self-corrects on
+    // the next view.
+    //
+    // Stories are the exception: they come from the contracts table at build
+    // time and stored holdings do not carry them, so any story already computed
+    // is carried across by contract address rather than thrown away.
+    tier: tierForScore(score),
+    standouts: mergeStories(
+      pickStandouts(holdings),
+      Array.isArray(c.standouts) ? (c.standouts as Standout[]) : []
+    ),
     wallets,
     holdings,
     stats: {
@@ -984,4 +1037,11 @@ export function normalizeCardData(raw: unknown): CardData {
     },
     generatedAt: c.generatedAt ?? new Date().toISOString(),
   };
+}
+
+/** Carry stories from a previously built card onto freshly ranked standouts. */
+function mergeStories(fresh: Standout[], stored: Standout[]): Standout[] {
+  if (stored.length === 0) return fresh;
+  const byAddress = new Map(stored.map((s) => [s.contractAddress, s]));
+  return fresh.map((s) => (s.story ? s : { ...s, story: byAddress.get(s.contractAddress)?.story ?? null }));
 }
