@@ -35,6 +35,15 @@ const PAPER = "#f4f4f8";
 const MUTED = "#8b8b9c";
 const ACCENT = "#a4b8fc";
 
+function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <span style={{ fontSize: 44, fontWeight: 700, color: accent ? ACCENT : PAPER }}>{value}</span>
+      <span style={{ fontSize: 15, letterSpacing: 3, color: MUTED }}>{label}</span>
+    </div>
+  );
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -55,7 +64,6 @@ export async function GET(
 
   const card: CardData = normalizeCardData(row.cardDataJson);
   const stats = card.stats;
-  const standouts = (card.standouts ?? []).slice(0, 3);
   const avatar = card.owner?.avatarUrl ?? null;
 
   return new ImageResponse(
@@ -186,55 +194,32 @@ export async function GET(
                 {card.tier?.blurb ?? ""}
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 9, marginTop: 10 }}>
-                {standouts.map((s) => (
-                  <div key={s.contractAddress} style={{ display: "flex", flexDirection: "column" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 11, fontSize: 21 }}>
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          minWidth: 66,
-                          padding: "2px 9px",
-                          borderRadius: 6,
-                          background: "rgba(255,255,255,0.06)",
-                          color: ACCENT,
-                          fontSize: 17,
-                        }}
-                      >
-                        {s.year ?? "----"}
-                      </span>
-                      <span style={{ display: "flex", color: PAPER }}>{s.name}</span>
-                    </div>
-                    <div style={{ display: "flex", fontSize: 15, color: MUTED, marginLeft: 77 }}>
-                      {s.headline}
-                    </div>
-                  </div>
-                ))}
+              {/* One line, then the numbers. No holdings list: the card is
+                  about the person, the assets page is the portfolio. */}
+              <div style={{ display: "flex", fontSize: 22, color: MUTED, marginTop: 6, maxWidth: 620 }}>
+                {card.headline}
               </div>
 
               <div
                 style={{
                   display: "flex",
-                  gap: 30,
-                  marginTop: 16,
-                  paddingTop: 14,
+                  gap: 48,
+                  marginTop: 30,
+                  paddingTop: 24,
                   borderTop: "1px solid rgba(255,255,255,0.09)",
-                  fontSize: 18,
-                  color: MUTED,
                 }}
               >
-                <span style={{ display: "flex" }}>{stats.contractCount} documented</span>
-                <span style={{ display: "flex" }}>
-                  {stats.earliestYear ? `oldest ${stats.earliestYear}` : "no dated holdings"}
-                </span>
-                {stats.walletAgeYears !== null && stats.walletAgeYears !== undefined ? (
-                  <span style={{ display: "flex" }}>{stats.walletAgeYears}y onchain</span>
-                ) : null}
-                {stats.allWalletsVerified ? (
-                  <span style={{ display: "flex", color: ACCENT }}>verified</span>
-                ) : null}
+                <Stat label="HOLDINGS" value={String(stats.contractCount)} />
+                <Stat label="EARLIEST" value={stats.earliestYear ? String(stats.earliestYear) : "n/a"} />
+                <Stat
+                  label="ONCHAIN"
+                  value={
+                    stats.walletAgeYears !== null && stats.walletAgeYears !== undefined
+                      ? `${stats.walletAgeYears}y`
+                      : "n/a"
+                  }
+                />
+                {stats.allWalletsVerified ? <Stat label="STATUS" value="Verified" accent /> : null}
               </div>
             </div>
           </div>

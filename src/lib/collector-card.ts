@@ -22,7 +22,7 @@
  */
 
 import { getDb } from "@/lib/db-client";
-import { contracts, userWallets, walletHoldings } from "@/lib/schema";
+import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getEnsAvatar, getEnsName } from "@/lib/ens";
 
@@ -494,176 +494,25 @@ const TIERS: Tier[] = [
   { min: 0, label: "Ethereum Apprentice", blurb: "Just beginning to collect the early chain" },
 ];
 
+/**
+ * The card's one-line summary.
+ *
+ * Deliberately narrow: it counts what is in the archive and names the earliest
+ * deploy year, and says nothing about when the holder acquired anything. The
+ * card is public and shareable, so a line that flattered by implication would
+ * be a claim the data cannot back.
+ */
+export function buildCardHeadline(contractCount: number, earliestYear: number | null): string {
+  if (contractCount === 0) return "No documented holdings yet";
+  const noun = contractCount === 1 ? "documented Ethereum artifact" : "documented Ethereum artifacts";
+  return earliestYear
+    ? `Collector of ${contractCount} ${noun}, dating back to ${earliestYear}`
+    : `Collector of ${contractCount} ${noun}`;
+}
+
 export function tierForScore(score: number): Tier {
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
   return TIERS.find((t) => clamped >= t.min) ?? TIERS[TIERS.length - 1];
-}
-
-/**
- * A highlighted holding with the story attached.
- *
- * `headline` is derived from structured facts we hold (era, deploy year,
- * whether it is held through a wrapper, token type). `story` is the contract's
- * own editorial text, never invented here. That split matters: the headline can
- * be generated safely because it only restates data, and the story is real
- * because a historian wrote it.
- */
-export interface Standout {
-  contractAddress: string;
-  name: string;
-  headline: string;
-  story: string | null;
-  year: number | null;
-  eraId: string | null;
-}
-
-const ERA_LABEL: Record<string, string> = {
-  frontier: "Frontier",
-  homestead: "Homestead",
-  dao: "DAO fork",
-  tangerine: "Tangerine Whistle",
-  spurious: "Spurious Dragon",
-  byzantium: "Byzantium",
-};
-
-/**
- * First sentence of an editorial field, trimmed to fit a card.
- *
- * Em and en dashes are folded to a comma for DISPLAY ONLY. The stored
- * editorial text is untouched; this only affects what the card renders, so the
- * card holds to the project's no-dash convention without rewriting anything a
- * historian actually wrote.
- */
-function firstSentence(text: string | null, max = 150): string | null {
-  if (!text) return null;
-  const flat = text
-    .replace(/\s*[\u2014\u2013]\s*/g, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!flat) return null;
-  const match = flat.match(/^(.{20,}?[.!?])(\s|$)/);
-  const sentence = match ? match[1] : flat;
-  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
-}
-
-function buildHeadline(h: {
-  year: number | null;
-  eraId: string | null;
-  viaWrapper: string | null;
-  tokenType: string;
-  balance: string;
-  isEarliest: boolean;
-}): string {
-  const era = h.eraId ? ERA_LABEL[h.eraId] ?? null : null;
-
-  // Earliest by deploy date outranks everything, since that is what the card is
-  // ordered by and what makes a holding notable.
-  if (h.isEarliest && h.year) {
-    // Describes the contract's deploy date, not when the wallet acquired it,
-    // which we do not know and must not imply.
-    return h.viaWrapper
-      ? `Their earliest holding by deploy date, ${h.year}, held through its wrapper`
-      : `Their earliest holding by deploy date, ${h.year}`;
-  }
-  if (h.viaWrapper) {
-    return h.year
-      ? `Holds the ${h.year} original through its wrapper`
-      : "Holds the original through its wrapper";
-  }
-  if (h.tokenType === "erc721") {
-    const n = Number(h.balance);
-    return Number.isFinite(n) && n > 1
-      ? `Owns ${n} from this collection`
-      : "Owns a piece of this collection";
-  }
-  // Name the era and the year, and stop. An earlier version appended "from
-  // Ethereum's first months" to anything Frontier, which is false for most of
-  // that era: Frontier ran to block 1,150,000 in March 2016, so a contract
-  // deployed eight months in was still Frontier and still not early.
-  if (era && h.year) return `${era} era contract, deployed ${h.year}`;
-  if (era) return `${era} era contract`;
-  if (h.year) return `Deployed in ${h.year}`;
-  return "From the documented archive";
-}
-
-/**
- * Pick the two or three holdings worth putting on the card.
- *
- * Ranked by what makes a card interesting rather than by balance: oldest first,
- * then whatever carries a real story. A card with three well chosen entries
- * reads better than one listing everything, which is what the flat list did.
- */
-export function pickStandouts(
-  holdings: {
-    contractAddress: string;
-    tokenName: string | null;
-    tokenSymbol: string | null;
-    balance: string;
-    tokenType: string;
-    viaWrapper: string | null;
-    eraId: string | null;
-    deployedYear: number | null;
-    deploymentBlock?: number | null;
-    significance?: string | null;
-    shortDescription?: string | null;
-  }[],
-  limit = 3
-): Standout[] {
-  if (holdings.length === 0) return [];
-
-  // The single earliest contract by block, so "earliest holding" names one
-  // specific contract rather than everything sharing the earliest year.
-  const earliestAddress = holdings.reduce<string | null>((acc, h) => {
-    if (h.deploymentBlock == null) return acc;
-    const best = holdings.find((x) => x.contractAddress === acc);
-    if (!best || best.deploymentBlock == null) return h.contractAddress;
-    return h.deploymentBlock < best.deploymentBlock ? h.contractAddress : acc;
-  }, null);
-
-  // Strict chronological order by deployment block, earliest first. Nothing
-  // else outranks it.
-  //
-  // The previous ranking put "has a story" first and then fell back to
-  // deployment YEAR and finally to the token name alphabetically. Two effects,
-  // both wrong: a 2015 contract could be outranked by a 2018 one that happened
-  // to carry editorial text, and within a shared year the order was decided by
-  // spelling. That is how a "bitcoin" token minted late in 2015 by a passer-by
-  // sorted above MistCoin from November 2015, purely because b precedes m.
-  //
-  // Block number rather than year because year is far too coarse: hundreds of
-  // documented contracts share 2015, and the block is the only field that
-  // actually orders them. Contracts with no recorded block sort last rather
-  // than to the front, since an unknown block is not evidence of being early.
-  const ranked = [...holdings].sort((a, b) => {
-    const ab = a.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
-    const bb = b.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
-    if (ab !== bb) return ab - bb;
-    // Same block is effectively a tie; fall back to year, then to a stable
-    // address comparison so the order never depends on display text.
-    const ay = a.deployedYear ?? 9999;
-    const by = b.deployedYear ?? 9999;
-    if (ay !== by) return ay - by;
-    return a.contractAddress.localeCompare(b.contractAddress);
-  });
-
-  return ranked.slice(0, limit).map((h) => {
-    const isEarliest = earliestAddress !== null && h.contractAddress === earliestAddress;
-    return {
-      contractAddress: h.contractAddress,
-      name: h.tokenName ?? h.contractAddress.slice(0, 10),
-      headline: buildHeadline({
-        year: h.deployedYear,
-        eraId: h.eraId,
-        viaWrapper: h.viaWrapper,
-        tokenType: h.tokenType,
-        balance: h.balance,
-        isEarliest,
-      }),
-      story: firstSentence(h.significance ?? null) ?? firstSentence(h.shortDescription ?? null),
-      year: h.deployedYear,
-      eraId: h.eraId,
-    };
-  });
 }
 
 /** Shape persisted in collector_cards.card_data_json and rendered by /card/[slug]. */
@@ -680,7 +529,12 @@ export interface CardData {
     verified: boolean;
   };
   tier: Tier;
-  standouts: Standout[];
+  /**
+   * One sentence for the card to lead with. Generated from the stats only, so
+   * it states what is measurable and never implies the wallet was present when
+   * these contracts were deployed.
+   */
+  headline: string;
   wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: {
     contractAddress: string;
@@ -766,7 +620,7 @@ export async function buildCardData(
       version: 2,
       owner: { ...identity, verified: false },
       tier: tierForScore(0),
-      standouts: [],
+      headline: buildCardHeadline(0, null),
       wallets: [],
       holdings: [],
       stats: emptyStats,
@@ -852,7 +706,7 @@ export async function buildCardData(
     version: 2,
     owner: { ...identity, verified: verifiedCount > 0 && verifiedCount === wallets.length },
     tier: tierForScore(scoring.score),
-    standouts: pickStandouts(enriched),
+    headline: buildCardHeadline(enriched.length, years.length > 0 ? Math.min(...years) : null),
     wallets: wallets.map((w) => ({
       address: w.address,
       label: w.label,
@@ -1005,10 +859,16 @@ export function normalizeCardData(raw: unknown): CardData {
     // Stories are the exception: they come from the contracts table at build
     // time and stored holdings do not carry them, so any story already computed
     // is carried across by contract address rather than thrown away.
+    // Tier and headline are DERIVED, so they are always recomputed here rather
+    // than trusted from the stored row. Freezing them at build time means any
+    // later correction never reaches a card that already exists, and the owner
+    // sees stale text with no way to know they must rebuild. Both are pure
+    // functions of data the row already carries, so this costs nothing and
+    // every card self-corrects on the next view.
     tier: tierForScore(score),
-    standouts: mergeStories(
-      pickStandouts(holdings),
-      Array.isArray(c.standouts) ? (c.standouts as Standout[]) : []
+    headline: buildCardHeadline(
+      stats.contractCount ?? holdings.length,
+      stats.earliestYear ?? null
     ),
     wallets,
     holdings,
@@ -1039,9 +899,132 @@ export function normalizeCardData(raw: unknown): CardData {
   };
 }
 
-/** Carry stories from a previously built card onto freshly ranked standouts. */
-function mergeStories(fresh: Standout[], stored: Standout[]): Standout[] {
-  if (stored.length === 0) return fresh;
-  const byAddress = new Map(stored.map((s) => [s.contractAddress, s]));
-  return fresh.map((s) => (s.story ? s : { ...s, story: byAddress.get(s.contractAddress)?.story ?? null }));
+/** A single holding as shown on the public portfolio page. */
+export interface PortfolioHolding {
+  contractAddress: string;
+  name: string;
+  symbol: string | null;
+  /** Raw integer string. Format with tokenDecimals at render time. */
+  balance: string;
+  tokenDecimals: number | null;
+  tokenType: string;
+  /** Set when credited through a wrapper rather than held directly. */
+  viaWrapper: string | null;
+  deployedYear: number | null;
+  deploymentBlock: number | null;
+  eraId: string | null;
+  /** Why this contract matters, from the EH record. */
+  shortDescription: string | null;
+}
+
+export interface PublicPortfolio {
+  slug: string;
+  owner: { name: string; ensName: string | null; avatarUrl: string | null; verified: boolean };
+  tier: Tier;
+  headline: string;
+  stats: CardData["stats"];
+  holdings: PortfolioHolding[];
+}
+
+/**
+ * The detailed collection behind a card, for the public /assets/[slug] page.
+ *
+ * Deliberately queried live rather than read from card_data_json. The card is a
+ * snapshot built for sharing; this page is the reference view, so descriptions
+ * and names should reflect the archive as it stands now, not as it stood when
+ * someone last pressed a button.
+ *
+ * Ordered by deployment block, earliest first, matching how the card ranks.
+ */
+export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio | null> {
+  const db = getDb();
+
+  const [card] = await db
+    .select({
+      shareSlug: collectorCards.shareSlug,
+      cardDataJson: collectorCards.cardDataJson,
+      historianId: collectorCards.historianId,
+    })
+    .from(collectorCards)
+    .where(eq(collectorCards.shareSlug, slug));
+
+  if (!card) return null;
+
+  const normalized = normalizeCardData(card.cardDataJson);
+
+  const wallets = await db
+    .select({ id: userWallets.id })
+    .from(userWallets)
+    .where(eq(userWallets.historianId, card.historianId));
+
+  let holdings: PortfolioHolding[] = [];
+  if (wallets.length > 0) {
+    const rows = await db
+      .select({
+        contractAddress: walletHoldings.contractAddress,
+        tokenName: walletHoldings.tokenName,
+        tokenSymbol: walletHoldings.tokenSymbol,
+        balance: walletHoldings.balance,
+        tokenDecimals: walletHoldings.tokenDecimals,
+        tokenType: walletHoldings.tokenType,
+        viaWrapper: walletHoldings.viaWrapper,
+        eraId: contracts.eraId,
+        deploymentBlock: contracts.deploymentBlock,
+        deploymentTimestamp: contracts.deploymentTimestamp,
+        shortDescription: contracts.shortDescription,
+        etherscanContractName: contracts.etherscanContractName,
+        isDocumented: contracts.isDocumented,
+      })
+      .from(walletHoldings)
+      .leftJoin(contracts, eq(contracts.address, walletHoldings.contractAddress))
+      .where(inArray(walletHoldings.walletId, wallets.map((w) => w.id)));
+
+    // One row per contract even when several wallets hold it, same as the card.
+    const merged = new Map<string, PortfolioHolding>();
+    for (const r of rows) {
+      if (!r.isDocumented) continue;
+      const existing = merged.get(r.contractAddress);
+      if (existing) {
+        existing.balance = (BigInt(existing.balance) + BigInt(r.balance)).toString();
+        if (!r.viaWrapper) existing.viaWrapper = null;
+        continue;
+      }
+      merged.set(r.contractAddress, {
+        contractAddress: r.contractAddress,
+        name: r.tokenName ?? r.etherscanContractName ?? r.contractAddress.slice(0, 10),
+        symbol: r.tokenSymbol,
+        balance: r.balance,
+        tokenDecimals: r.tokenDecimals,
+        tokenType: r.tokenType,
+        viaWrapper: r.viaWrapper,
+        deployedYear: r.deploymentTimestamp
+          ? new Date(r.deploymentTimestamp).getUTCFullYear()
+          : null,
+        deploymentBlock: r.deploymentBlock,
+        eraId: r.eraId,
+        shortDescription: r.shortDescription,
+      });
+    }
+
+    holdings = [...merged.values()].sort((a, b) => {
+      const ab = a.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+      const bb = b.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+      if (ab !== bb) return ab - bb;
+      return a.contractAddress.localeCompare(b.contractAddress);
+    });
+  }
+
+  return {
+    slug: card.shareSlug,
+    owner: {
+      name: normalized.owner.name,
+      ensName: normalized.owner.ensName,
+      avatarUrl: normalized.owner.avatarUrl,
+      verified: normalized.owner.verified,
+    },
+    tier: normalized.tier,
+    headline: normalized.headline,
+    stats: normalized.stats,
+    holdings,
+  };
 }

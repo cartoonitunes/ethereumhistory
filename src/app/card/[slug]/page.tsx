@@ -7,6 +7,7 @@
  */
 
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
@@ -89,12 +90,20 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
           archive.
         </p>
 
-        <a
-          href="/assets"
-          className="text-xs text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
-        >
-          Make your own collector card
-        </a>
+        <div className="flex flex-col items-center gap-2">
+          <Link
+            href={`/assets/${slug}`}
+            className="text-xs text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
+          >
+            See the full collection
+          </Link>
+          <Link
+            href="/assets"
+            className="text-xs text-obsidian-500 underline-offset-4 transition-colors hover:text-obsidian-300 hover:underline"
+          >
+            Make your own collector card
+          </Link>
+        </div>
       </main>
     </div>
   );

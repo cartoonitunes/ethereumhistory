@@ -45,15 +45,6 @@ export interface CardHolding {
   deploymentBlock: number | null;
 }
 
-export interface CardStandout {
-  contractAddress: string;
-  name: string;
-  headline: string;
-  story: string | null;
-  year: number | null;
-  eraId: string | null;
-}
-
 export interface CardPayload {
   owner: {
     name: string;
@@ -63,7 +54,7 @@ export interface CardPayload {
     verified: boolean;
   };
   tier: { label: string; blurb: string; min: number };
-  standouts: CardStandout[];
+  headline: string;
   wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: CardHolding[];
   stats: {
@@ -362,7 +353,7 @@ export default function HolographicCard({
                     }}
                   />
                   <div
-                    className="relative h-20 w-20 rounded-full p-[2px] sm:h-28 sm:w-28"
+                    className="relative h-28 w-28 rounded-full p-[2px] sm:h-36 sm:w-36"
                     style={{
                       background:
                         "conic-gradient(from 140deg, #a4b8fc, #626ef1, #b23dff, #3da8ff, #a4b8fc)",
@@ -372,8 +363,8 @@ export default function HolographicCard({
                     <img
                       src={avatar}
                       alt=""
-                      width={112}
-                      height={112}
+                      width={144}
+                      height={144}
                       onError={() => setAvatarFailed(true)}
                       className="h-full w-full rounded-full object-cover"
                     />
@@ -381,7 +372,7 @@ export default function HolographicCard({
                 </div>
 
                 {/* Identity */}
-                <h1 className="mt-3 max-w-full truncate text-base font-semibold text-obsidian-50 sm:mt-4 sm:text-lg">
+                <h1 className="mt-4 max-w-full truncate text-xl font-semibold text-obsidian-50 sm:mt-5 sm:text-2xl">
                   {card.owner.name}
                 </h1>
                 <div className="mt-1 flex items-center gap-1.5">
@@ -404,50 +395,23 @@ export default function HolographicCard({
                 </div>
 
                 {/* Tier */}
-                <div className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 sm:mt-5 sm:px-4 sm:py-3">
-                  <p className="text-sm font-semibold tracking-tight text-ether-200 sm:text-base">
+                <div className="mt-5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:mt-6 sm:px-4 sm:py-4">
+                  <p className="text-lg font-semibold tracking-tight text-ether-200 sm:text-xl">
                     {card.tier.label}
                   </p>
-                  <p className="mt-0.5 text-[0.6875rem] leading-snug text-obsidian-400">
+                  <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-400">
                     {card.tier.blurb}
                   </p>
                 </div>
 
-                {/* Standouts */}
-                {card.standouts.length > 0 ? (
-                  <ul className="mt-3 flex w-full flex-col gap-1.5 text-left sm:mt-4 sm:gap-2.5">
-                    {card.standouts.map((s, i) => (
-                      <li
-                        key={s.contractAddress}
-                        className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1.5 sm:px-3 sm:py-2.5"
-                      >
-                        <div className="flex items-baseline gap-2">
-                          <span className="font-mono text-[0.625rem] tabular-nums text-ether-400/90">
-                            {s.year ?? "·"}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-obsidian-100">
-                            {s.name}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-300">
-                          {s.headline}
-                        </p>
-                        {s.story ? (
-                          <p
-                            className={`mt-1 text-[0.625rem] leading-snug text-obsidian-500 ${
-                              i === 0 ? "" : "hidden sm:block"
-                            }`}
-                          >
-                            {s.story}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                {/* One line about the person. The holdings breakdown lives on
+                    the assets page; this card is identity, not portfolio. */}
+                <p className="mt-4 max-w-[17rem] text-[0.8125rem] leading-relaxed text-obsidian-300">
+                  {card.headline}
+                </p>
 
                 {/* Stats bar */}
-                <div className="mt-3 grid w-full grid-cols-4 gap-1 border-t border-white/10 pt-3 sm:mt-5 sm:pt-4">
+                <div className="mt-6 grid w-full grid-cols-4 gap-1 border-t border-white/10 pt-4">
                   <Stat label="Score" value={String(card.stats.score)} accent />
                   <Stat label="Held" value={String(card.stats.contractCount)} />
                   <Stat

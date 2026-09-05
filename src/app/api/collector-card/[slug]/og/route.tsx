@@ -49,6 +49,15 @@ function fallback(message: string): ImageResponse {
   );
 }
 
+function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ fontSize: 40, fontWeight: 700, color: accent ? ACCENT : PAPER }}>{value}</span>
+      <span style={{ fontSize: 15, letterSpacing: 3, color: MUTED }}>{label}</span>
+    </div>
+  );
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -69,8 +78,6 @@ export async function GET(
 
   const card: CardData = normalizeCardData(row.cardDataJson);
   const stats = card.stats;
-  // Two standouts, not three: at timeline thumbnail size a third row is noise.
-  const standouts = (card.standouts ?? []).slice(0, 2);
   const avatar = card.owner?.avatarUrl ?? null;
 
   return new ImageResponse(
@@ -189,43 +196,24 @@ export async function GET(
             </span>
           </div>
 
-          {standouts.map((s) => (
-            <div
-              key={s.contractAddress}
-              style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10, fontSize: 22 }}
-            >
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minWidth: 74,
-                  padding: "3px 10px",
-                  borderRadius: 7,
-                  background: "rgba(255,255,255,0.06)",
-                  color: ACCENT,
-                  fontSize: 19,
-                }}
-              >
-                {s.year ?? "----"}
-              </span>
-              <span style={{ display: "flex", color: PAPER }}>{s.name}</span>
-            </div>
-          ))}
+          {/* One line about the person, then the numbers. No holdings list:
+              the card is about who they are, the assets page is the portfolio. */}
+          <div style={{ display: "flex", fontSize: 24, color: MUTED, marginTop: 12 }}>
+            {card.headline}
+          </div>
 
-          <div style={{ display: "flex", gap: 26, marginTop: 22, fontSize: 20, color: MUTED }}>
-            <span style={{ display: "flex" }}>
-              {stats.contractCount} documented
-            </span>
-            <span style={{ display: "flex" }}>
-              {stats.earliestYear ? `oldest ${stats.earliestYear}` : "no dated holdings"}
-            </span>
-            {stats.walletAgeYears !== null && stats.walletAgeYears !== undefined ? (
-              <span style={{ display: "flex" }}>{stats.walletAgeYears}y onchain</span>
-            ) : null}
-            {stats.allWalletsVerified ? (
-              <span style={{ display: "flex", color: ACCENT }}>verified</span>
-            ) : null}
+          <div style={{ display: "flex", gap: 44, marginTop: 26 }}>
+            <Stat label="HOLDINGS" value={String(stats.contractCount)} />
+            <Stat label="EARLIEST" value={stats.earliestYear ? String(stats.earliestYear) : "n/a"} />
+            <Stat
+              label="ONCHAIN"
+              value={
+                stats.walletAgeYears !== null && stats.walletAgeYears !== undefined
+                  ? `${stats.walletAgeYears}y`
+                  : "n/a"
+              }
+            />
+            {stats.allWalletsVerified ? <Stat label="STATUS" value="Verified" accent /> : null}
           </div>
 
           <div style={{ display: "flex", marginTop: 20, fontSize: 18, color: "#5a5a68" }}>

@@ -430,9 +430,17 @@ export default function AssetsClient() {
             {busy === "card" ? "Building" : "Build my card"}
           </button>
           {cardUrl ? (
-            <a href={cardUrl} className="text-sm text-ether-400 underline-offset-4 hover:underline">
-              View your card
-            </a>
+            <>
+              <a href={cardUrl} className="text-sm text-ether-400 underline-offset-4 hover:underline">
+                View your card
+              </a>
+              <a
+                href={cardUrl.replace("/card/", "/assets/")}
+                className="text-sm text-obsidian-400 underline-offset-4 hover:text-obsidian-200 hover:underline"
+              >
+                Public collection page
+              </a>
+            </>
           ) : null}
         </div>
       </section>
