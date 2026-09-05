@@ -22,7 +22,7 @@
  */
 
 import { getDb } from "@/lib/db-client";
-import { contracts, userWallets, walletHoldings, wrapperRegistry } from "@/lib/schema";
+import { contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 /** A scan should never hold a request open longer than this per call. */
@@ -51,6 +51,8 @@ export interface DetectedHolding {
    */
   eraId: string | null;
   deployedYear: number | null;
+  /** Deployment block, the input to the collector score. */
+  deploymentBlock: number | null;
 }
 
 export interface ScanResult {
@@ -230,19 +232,16 @@ export async function crossReferenceAgainstArchive(
 
   const scanned = [...new Set(raw.map((r) => r.contractAddress))];
 
-  // Query builder rather than a raw `= ANY(...)`: drizzle's sql template expands
-  // a JS array into a parenthesised parameter list, which Postgres rejects for
-  // ANY. inArray emits the correct form.
+  // Wrapper links live on the contract itself (migration 082). Query builder
+  // rather than a raw `= ANY(...)`: drizzle's sql template expands a JS array
+  // into a parenthesised parameter list, which Postgres rejects for ANY.
   const wrapperRows = await db
-    .select({
-      wrapperAddress: wrapperRegistry.wrapperAddress,
-      underlyingAddress: wrapperRegistry.underlyingAddress,
-    })
-    .from(wrapperRegistry)
-    .where(inArray(wrapperRegistry.wrapperAddress, scanned));
+    .select({ address: contracts.address, wrapperOf: contracts.wrapperOf })
+    .from(contracts)
+    .where(and(inArray(contracts.address, scanned), isNotNull(contracts.wrapperOf)));
 
   const wrappers = new Map<string, { underlyingAddress: string | null }>();
-  for (const w of wrapperRows) wrappers.set(w.wrapperAddress, w);
+  for (const w of wrapperRows) wrappers.set(w.address, { underlyingAddress: w.wrapperOf });
 
   // Map each scanned address to the contract it should be credited as.
   type Candidate = { target: string; viaWrapper: string | null; raw: (typeof raw)[number] };
@@ -260,6 +259,10 @@ export async function crossReferenceAgainstArchive(
   if (candidates.length === 0) return [];
 
   const targets = [...new Set(candidates.map((c) => c.target))];
+  // is_documented only. A collector card is a claim about the documented
+  // archive, so an undocumented match is noise: the holder gets a row with no
+  // story attached and nothing to link to. This also drops the WETH and WBTC
+  // rows that migration 081 carried purely so a scan could recognise them.
   const archiveRows = await db
     .select({
       address: contracts.address,
@@ -269,9 +272,10 @@ export async function crossReferenceAgainstArchive(
       etherscanContractName: contracts.etherscanContractName,
       eraId: contracts.eraId,
       deploymentTimestamp: contracts.deploymentTimestamp,
+      deploymentBlock: contracts.deploymentBlock,
     })
     .from(contracts)
-    .where(inArray(contracts.address, targets));
+    .where(and(inArray(contracts.address, targets), eq(contracts.isDocumented, true)));
 
   const archive = new Map<string, (typeof archiveRows)[number]>();
   for (const a of archiveRows) archive.set(a.address, a);
@@ -301,6 +305,7 @@ export async function crossReferenceAgainstArchive(
       viaWrapper: c.viaWrapper,
       eraId: meta.eraId ?? null,
       deployedYear: meta.deploymentTimestamp ? new Date(meta.deploymentTimestamp).getUTCFullYear() : null,
+      deploymentBlock: meta.deploymentBlock ?? null,
     });
   }
 
@@ -403,6 +408,58 @@ export function buildVerificationMessage(address: string, nonce: string): string
   ].join("\n");
 }
 
+
+/**
+ * Reference ceiling for the collector score, PINNED ON PURPOSE.
+ *
+ * The score divides by a fixed constant rather than by the highest block in the
+ * archive. If the divisor tracked the archive's current maximum, then indexing
+ * one newer contract would silently restate every score already published on
+ * every shared card, with no user action and no code change. A published number
+ * that moves on its own is the same failure mode as a coverage percentage that
+ * swings when a cron happens to finish.
+ *
+ * Roughly 25M is a little above the present maximum documented block
+ * (24,694,283 at the time of writing). Raising it later rescales every score, so
+ * treat it as a released constant, not a tuning knob.
+ */
+export const SCORE_REFERENCE_BLOCK = 25_000_000;
+
+/**
+ * Collector score, 0 to 100. Earlier holdings score higher.
+ *
+ * The whole formula: take the mean deployment block of the documented holdings
+ * and invert it against a fixed ceiling. Nothing else feeds in. In particular
+ * there is no holder count (an ephemeral market fact that would make a score
+ * drift as other people trade), no era coverage (which punished early holders
+ * for not owning newer contracts, the precise opposite of the intent), and no
+ * wrapper or breadth term.
+ *
+ * Holdings with no recorded block are skipped rather than counted as zero,
+ * which would otherwise hand a perfect score to a wallet full of contracts we
+ * simply lack block data for. 12 of ~950k documented contracts are missing one.
+ *
+ * Note the mean is sensitive to outliers by construction: a single 2026 token
+ * pulls an otherwise 2015 portfolio's average up noticeably. That is inherent
+ * to averaging deployment order. A median would be steadier if that turns out
+ * to matter in practice.
+ */
+export function computeCollectorScore(
+  holdings: { deploymentBlock: number | null }[]
+): { score: number; averageBlock: number | null; scoredCount: number } {
+  const blocks = holdings
+    .map((h) => h.deploymentBlock)
+    .filter((b): b is number => typeof b === "number" && b > 0);
+
+  if (blocks.length === 0) return { score: 0, averageBlock: null, scoredCount: 0 };
+
+  const averageBlock = Math.round(blocks.reduce((a, b) => a + b, 0) / blocks.length);
+  const ratio = averageBlock / SCORE_REFERENCE_BLOCK;
+  const score = Math.max(0, Math.min(100, Math.round((1 - ratio) * 100)));
+
+  return { score, averageBlock, scoredCount: blocks.length };
+}
+
 /** Shape persisted in collector_cards.card_data_json and rendered by /card/[slug]. */
 export interface CardData {
   version: 1;
@@ -419,6 +476,7 @@ export interface CardData {
     viaWrapper: string | null;
     eraId: string | null;
     deployedYear: number | null;
+    deploymentBlock: number | null;
   }[];
   stats: {
     contractCount: number;
@@ -428,6 +486,10 @@ export interface CardData {
     /** Earliest first-transaction date across the verified wallets. */
     onChainSince: string | null;
     eraCounts: Record<string, number>;
+    /** 0 to 100, earlier deployment order scores higher. */
+    score: number;
+    /** Mean deployment block behind the score, shown for transparency. */
+    averageBlock: number | null;
   };
   generatedAt: string;
 }
@@ -464,7 +526,15 @@ export async function buildCardData(
       owner,
       wallets: [],
       holdings: [],
-      stats: { contractCount: 0, walletCount: 0, earliestYear: null, onChainSince: null, eraCounts: {} },
+      stats: {
+        contractCount: 0,
+        walletCount: 0,
+        earliestYear: null,
+        onChainSince: null,
+        eraCounts: {},
+        score: 0,
+        averageBlock: null,
+      },
       generatedAt: new Date().toISOString(),
     };
   }
@@ -481,6 +551,8 @@ export async function buildCardData(
       viaWrapper: walletHoldings.viaWrapper,
       eraId: contracts.eraId,
       deploymentTimestamp: contracts.deploymentTimestamp,
+      deploymentBlock: contracts.deploymentBlock,
+      isDocumented: contracts.isDocumented,
     })
     .from(walletHoldings)
     .leftJoin(contracts, eq(contracts.address, walletHoldings.contractAddress))
@@ -489,6 +561,10 @@ export async function buildCardData(
   // One entry per contract even when several wallets on the account hold it.
   const merged = new Map<string, CardData["holdings"][number]>();
   for (const r of rows) {
+    // Re-checked here, not just at scan time: wallet_holdings can hold rows
+    // stored before this rule existed, or whose contract has since lost its
+    // documented flag. The card is the published surface, so it filters.
+    if (!r.isDocumented) continue;
     const year = r.deploymentTimestamp ? new Date(r.deploymentTimestamp).getUTCFullYear() : null;
     const existing = merged.get(r.contractAddress);
     if (existing) {
@@ -506,6 +582,7 @@ export async function buildCardData(
       viaWrapper: r.viaWrapper,
       eraId: r.eraId,
       deployedYear: year,
+      deploymentBlock: r.deploymentBlock,
     });
   }
 
@@ -522,6 +599,8 @@ export async function buildCardData(
     const key = h.eraId ?? "unknown";
     eraCounts[key] = (eraCounts[key] ?? 0) + 1;
   }
+
+  const scoring = computeCollectorScore(holdings);
 
   const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
   const firstTxDates = wallets
@@ -546,6 +625,8 @@ export async function buildCardData(
           ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))).toISOString()
           : null,
       eraCounts,
+      score: scoring.score,
+      averageBlock: scoring.averageBlock,
     },
     generatedAt: new Date().toISOString(),
   };

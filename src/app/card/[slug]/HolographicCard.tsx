@@ -40,6 +40,7 @@ export interface CardHolding {
   viaWrapper: string | null;
   eraId: string | null;
   deployedYear: number | null;
+  deploymentBlock: number | null;
 }
 
 export interface CardPayload {
@@ -52,6 +53,8 @@ export interface CardPayload {
     earliestYear: number | null;
     onChainSince: string | null;
     eraCounts: Record<string, number>;
+    score: number;
+    averageBlock: number | null;
   };
   generatedAt: string;
 }
@@ -133,9 +136,11 @@ export default function HolographicCard({
   const overflow = card.holdings.length - rows.length;
 
   const tweetText = encodeURIComponent(
-    `My Ethereum History collector card: ${card.stats.contractCount} historic ${
-      card.stats.contractCount === 1 ? "contract" : "contracts"
-    }${card.stats.earliestYear ? `, oldest from ${card.stats.earliestYear}` : ""}.`
+    `My Ethereum History collector card scores ${card.stats.score}: ${
+      card.stats.contractCount
+    } documented ${card.stats.contractCount === 1 ? "contract" : "contracts"}${
+      card.stats.earliestYear ? `, oldest from ${card.stats.earliestYear}` : ""
+    }.`
   );
   const tweetUrl = `https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`;
 
@@ -216,14 +221,11 @@ export default function HolographicCard({
 
               {/* Headline stats. The earliest year is the number that matters. */}
               <div className="grid grid-cols-3 gap-3 border-y border-white/5 py-4">
+                <Stat label="Score" value={String(card.stats.score)} accent />
                 <Stat label="Contracts" value={String(card.stats.contractCount)} />
                 <Stat
                   label="Earliest"
                   value={card.stats.earliestYear ? String(card.stats.earliestYear) : "n/a"}
-                />
-                <Stat
-                  label="Wallets"
-                  value={String(card.stats.walletCount)}
                 />
               </div>
 
@@ -294,10 +296,14 @@ export default function HolographicCard({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-lg tabular-nums text-obsidian-100">{value}</span>
+      <span
+        className={`font-mono text-lg tabular-nums ${accent ? "text-ether-300" : "text-obsidian-100"}`}
+      >
+        {value}
+      </span>
       <span className="text-[0.5625rem] uppercase tracking-[0.16em] text-obsidian-500">{label}</span>
     </div>
   );

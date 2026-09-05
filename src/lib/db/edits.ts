@@ -29,6 +29,7 @@ export async function updateContractHistoryFieldsFromDb(
     historicalSignificance?: string | null;
     historicalContext?: string | null;
     sourcifyMatch?: string | null;
+    wrapperOf?: string | null;
   }
 ): Promise<void> {
   const database = getDb();
@@ -43,6 +44,10 @@ export async function updateContractHistoryFieldsFromDb(
   }
   if (patch.tokenName !== undefined) {
     updates.tokenName = patch.tokenName;
+    hasFieldUpdates = true;
+  }
+  if (patch.wrapperOf !== undefined) {
+    updates.wrapperOf = patch.wrapperOf;
     hasFieldUpdates = true;
   }
   if (patch.contractType !== undefined) {

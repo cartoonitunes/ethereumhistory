@@ -81,6 +81,7 @@ export function dbRowToContract(row: schema.Contract): AppContract {
     compilerCommit: row.compilerCommit ?? null,
     compilerRepo: row.compilerRepo ?? null,
     canonicalAddress: row.canonicalAddress ?? null,
+    wrapperOf: row.wrapperOf ?? null,
     verificationMethod: row.verificationMethod ?? null,
     verificationProofUrl: row.verificationProofUrl ?? null,
     verificationNotes: row.verificationNotes ?? null,
@@ -782,4 +783,34 @@ export async function enrichContractsWithRank(
     console.warn("[enrichContractsWithRank] failed, returning without ranks:", err);
     return contractList;
   }
+}
+
+/**
+ * Contracts that declare themselves wrappers of `address` (migration 082).
+ *
+ * Drives the "Wrapped as" section on a contract page: setting X.wrapper_of = Y
+ * makes X show up on Y's page without Y being edited. Backed by the partial
+ * index on wrapper_of, so this stays cheap despite `contracts` being large.
+ */
+export async function getWrappersForContractFromDb(address: string): Promise<
+  { address: string; name: string | null; tokenSymbol: string | null; deployedYear: number | null }[]
+> {
+  const database = getDb();
+  const rows = await database
+    .select({
+      address: schema.contracts.address,
+      etherscanContractName: schema.contracts.etherscanContractName,
+      tokenName: schema.contracts.tokenName,
+      tokenSymbol: schema.contracts.tokenSymbol,
+      deploymentTimestamp: schema.contracts.deploymentTimestamp,
+    })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.wrapperOf, address.toLowerCase()));
+
+  return rows.map((r) => ({
+    address: r.address,
+    name: r.etherscanContractName ?? r.tokenName ?? null,
+    tokenSymbol: r.tokenSymbol ?? null,
+    deployedYear: r.deploymentTimestamp ? new Date(r.deploymentTimestamp).getUTCFullYear() : null,
+  }));
 }

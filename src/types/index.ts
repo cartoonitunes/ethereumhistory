@@ -201,6 +201,8 @@ export interface Contract {
   compilerCommit: string | null;
   compilerRepo: string | null;
   canonicalAddress?: string | null;
+  /** The historic contract this token wraps, if any (migration 082). */
+  wrapperOf?: string | null;
   verificationMethod: string | null;
   verificationProofUrl: string | null;
   verificationNotes: string | null;

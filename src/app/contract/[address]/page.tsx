@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ContractPageClient } from "./ContractPageClient";
 import { IndexedContractPage } from "./IndexedContractPage";
 import { getContractPageData, getContractWithTokenMetadata, getContract } from "@/lib/db";
-import { getRelatedContractsFromDb } from "@/lib/db/contracts";
+import { getRelatedContractsFromDb, getWrappersForContractFromDb } from "@/lib/db/contracts";
 import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
@@ -248,13 +248,20 @@ export default async function ContractPage({ params }: Props) {
     );
   } catch {}
 
+  // Contracts that declare themselves wrappers of this one. Non-fatal: a
+  // missing wrappers list must never take down a contract page.
+  let wrappers: Awaited<ReturnType<typeof getWrappersForContractFromDb>> = [];
+  try {
+    wrappers = await getWrappersForContractFromDb(address.toLowerCase());
+  } catch {}
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <ContractPageClient address={address} data={data} error={null} relatedContracts={relatedContracts} />
+      <ContractPageClient address={address} data={data} error={null} relatedContracts={relatedContracts} wrappers={wrappers} />
     </>
   );
 }

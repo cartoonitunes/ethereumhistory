@@ -91,6 +91,13 @@ export const contracts = pgTable(
     shapeSignature: text("shape_signature"),
     runtimeBytecodeHash: text("runtime_bytecode_hash"),
     canonicalAddress: text("canonical_address"),
+    /**
+     * The historic contract this token wraps, if any. Editorial: a historian
+     * sets it via the manage API. Distinct from canonicalAddress, which links
+     * bytecode-identical deployments of the same contract; a wrapper is a
+     * different contract that represents another one.
+     */
+    wrapperOf: text("wrapper_of"),
     deployedBytecode: text("deployed_bytecode"),
     deployedBytecodeHash: text("deployed_bytecode_hash"),
 
@@ -134,6 +141,7 @@ export const contracts = pgTable(
       table.deploymentTraceIndex
     ),
     typeIdx: index("contracts_type_idx").on(table.contractType),
+    wrapperOfIdx: index("contracts_wrapper_of_idx").on(table.wrapperOf),
     decompiledIdx: index("contracts_decompiled_idx").on(table.decompilationSuccess),
     featuredIdx: index("contracts_featured_idx").on(table.shortDescription),
     featuredFlagIdx: index("contracts_featured_flag_idx").on(table.featured),
@@ -698,29 +706,6 @@ export const walletHoldings = pgTable(
 
 export type WalletHolding = typeof walletHoldings.$inferSelect;
 export type NewWalletHolding = typeof walletHoldings.$inferInsert;
-
-export const wrapperRegistry = pgTable(
-  "wrapper_registry",
-  {
-    id: serial("id").primaryKey(),
-    wrapperAddress: text("wrapper_address").notNull(),
-    /** NULL when the underlying is not an Ethereum contract (WETH, WBTC). */
-    underlyingAddress: text("underlying_address"),
-    wrapperName: text("wrapper_name"),
-    underlyingName: text("underlying_name"),
-    type: text("type").notNull().default("wrapped"),
-    /** How the mapping was established, so it can be re-checked later. */
-    evidence: text("evidence"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => ({
-    wrapperIdx: uniqueIndex("wrapper_registry_wrapper_unique").on(table.wrapperAddress),
-    underlyingIdx: index("wrapper_registry_underlying_idx").on(table.underlyingAddress),
-  })
-);
-
-export type WrapperRegistryEntry = typeof wrapperRegistry.$inferSelect;
-export type NewWrapperRegistryEntry = typeof wrapperRegistry.$inferInsert;
 
 export const collectorCards = pgTable(
   "collector_cards",

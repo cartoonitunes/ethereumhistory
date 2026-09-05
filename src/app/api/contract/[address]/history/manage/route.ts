@@ -341,6 +341,32 @@ export async function POST(
       }
     }
 
+    // wrapper_of: the historic contract this token wraps. Validated here so a
+    // malformed or self-referential value returns 400 instead of tripping the
+    // CHECK constraints as a 500. Empty string clears the link.
+    let wrapperOfPatch: string | null | undefined;
+    if (contractPatch.wrapperOf !== undefined) {
+      const rawWrapperOf = String(contractPatch.wrapperOf || "").trim();
+      if (rawWrapperOf === "") {
+        wrapperOfPatch = null;
+      } else if (!/^0x[0-9a-fA-F]{40}$/.test(rawWrapperOf)) {
+        return NextResponse.json(
+          { data: null, error: "wrapperOf must be a 0x-prefixed 40 character address, or empty to clear it." },
+          { status: 400 }
+        );
+      } else if (rawWrapperOf.toLowerCase() === normalized) {
+        return NextResponse.json(
+          { data: null, error: "A contract cannot be a wrapper of itself." },
+          { status: 400 }
+        );
+      } else {
+        wrapperOfPatch = rawWrapperOf.toLowerCase();
+      }
+      if (wrapperOfPatch !== (currentContract?.wrapperOf ?? null)) {
+        fieldsChanged.push("wrapperOf");
+      }
+    }
+
     const currentDeployerAddress = currentContract?.deployerAddress?.toLowerCase() || null;
 
     await updateContractHistoryFieldsFromDb(normalized, {
@@ -352,6 +378,7 @@ export async function POST(
         contractPatch.tokenName !== undefined
           ? (String(contractPatch.tokenName || "").trim() || null)
           : undefined,
+      wrapperOf: wrapperOfPatch,
       // Funnelled through the canonical vocabulary so a historian typing
       // "Multi-Sig" can't reintroduce a second spelling of an existing
       // category. Unmappable values are stored as-is rather than dropped, so

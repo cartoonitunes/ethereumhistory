@@ -81,12 +81,13 @@ interface ContractPageClientProps {
   data: ContractPageData | null;
   error: string | null;
   relatedContracts?: RelatedContractItem[];
+  wrappers?: WrapperItem[];
 }
 
 // Max characters for the header short description display.
 const SHORT_DESCRIPTION_MAX_CHARS = 160;
 
-export function ContractPageClient({ address, data, error, relatedContracts = [] }: ContractPageClientProps) {
+export function ContractPageClient({ address, data, error, relatedContracts = [], wrappers = [] }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -847,6 +848,7 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
         </motion.div>
 
         {/* Related contracts — same deployer or era */}
+        <WrappersSection contracts={wrappers} />
         <RelatedContractsSection contracts={relatedContracts} />
       </div>
     </div>
@@ -4296,5 +4298,54 @@ function CompareButton({ sourceAddress }: { sourceAddress: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+export interface WrapperItem {
+  address: string;
+  name: string | null;
+  tokenSymbol: string | null;
+  deployedYear: number | null;
+}
+
+/**
+ * Contracts that wrap this one, set by a historian via `wrapper_of`.
+ *
+ * Renders nothing when there are none, which is the overwhelmingly common case,
+ * so this adds no empty chrome to a normal contract page.
+ */
+function WrappersSection({ contracts }: { contracts: WrapperItem[] }) {
+  if (contracts.length === 0) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-medium text-obsidian-200">Wrapped as</h2>
+      <p className="mt-1 text-xs text-obsidian-500">
+        Later contracts that represent this one. Holding one of these counts as
+        holding the original on a collector card.
+      </p>
+      <ul className="mt-3 flex flex-col gap-2">
+        {contracts.map((c) => (
+          <li key={c.address}>
+            <a
+              href={`/contract/${c.address}`}
+              className="flex items-center gap-3 rounded-lg border border-white/10 px-3 py-2 transition-colors hover:border-white/25"
+            >
+              <span className="w-10 shrink-0 font-mono text-[0.6875rem] tabular-nums text-ether-400/90">
+                {c.deployedYear ?? "\u00b7"}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm text-obsidian-200">
+                {c.name ?? c.address}
+              </span>
+              {c.tokenSymbol ? (
+                <span className="shrink-0 font-mono text-[0.6875rem] text-obsidian-500">
+                  {c.tokenSymbol}
+                </span>
+              ) : null}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -93,9 +93,20 @@ export async function GET(
           <div style={{ display: "flex", fontSize: 62, fontWeight: 700, lineHeight: 1.05 }}>
             {card.owner.name}
           </div>
-          <div style={{ display: "flex", fontSize: 26, color: MUTED }}>
-            {card.stats.contractCount} historic {card.stats.contractCount === 1 ? "contract" : "contracts"} held
-            {card.stats.earliestYear ? `  ·  collecting since ${card.stats.earliestYear}` : ""}
+          <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 4 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+              <span style={{ fontSize: 68, fontWeight: 700, color: "#b9aefc", lineHeight: 1 }}>
+                {card.stats.score}
+              </span>
+              <span style={{ fontSize: 20, letterSpacing: 3, color: MUTED, textTransform: "uppercase" }}>
+                Score
+              </span>
+            </div>
+            <div style={{ display: "flex", fontSize: 24, color: MUTED }}>
+              {card.stats.contractCount} documented{" "}
+              {card.stats.contractCount === 1 ? "contract" : "contracts"}
+              {card.stats.earliestYear ? `  ·  oldest ${card.stats.earliestYear}` : ""}
+            </div>
           </div>
         </div>
 
