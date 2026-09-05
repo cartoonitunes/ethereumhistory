@@ -39,12 +39,20 @@ export default function CollectorCardCta() {
 
         if (!body || body.error || !body.data) {
           setError(body?.error ?? "Could not build a card for that address.");
+          setBusy(false);
           return;
         }
+
+        // Deliberately no setBusy(false) on the way out, and no finally block.
+        // router.push resolves as soon as navigation is requested, not when the
+        // new route has rendered, and the preview route is server rendered
+        // behind a scan. Clearing the state here put the button back to "Get my
+        // card" about a second before anything moved, which reads as a failed
+        // press and invites a second one. The component unmounts on arrival, so
+        // the pending state ends on its own.
         router.push(`/preview/${body.data.address}`);
       } catch {
         setError("Something went wrong. Try again shortly.");
-      } finally {
         setBusy(false);
       }
     },
@@ -60,7 +68,7 @@ export default function CollectorCardCta() {
           placeholder="Your address or ENS name"
           spellCheck={false}
           aria-label="Wallet address or ENS name"
-          className="min-w-0 flex-1 rounded-lg border border-obsidian-700 bg-obsidian-900/50 px-4 py-2.5 text-sm text-obsidian-100 outline-none placeholder:text-obsidian-600 focus:border-ether-500/60"
+          className="min-w-0 flex-1 rounded-lg border border-obsidian-700 bg-obsidian-900/50 px-4 py-2.5 text-sm text-obsidian-100 outline-none placeholder:text-obsidian-400 focus:border-ether-500/60"
         />
         <button
           type="submit"
@@ -75,7 +83,7 @@ export default function CollectorCardCta() {
           {error}
         </p>
       ) : (
-        <p className="mt-2 text-center text-xs text-obsidian-600">
+        <p className="mt-2 text-center text-xs text-obsidian-400">
           See which historic Ethereum contracts you hold. No account needed.
         </p>
       )}

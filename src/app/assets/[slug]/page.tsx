@@ -106,7 +106,7 @@ export default async function PublicAssetsPage({
 
         <HoldingsList holdings={p.holdings} />
 
-        <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-500">
+        <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-400">
           {p.owner.verified
             ? "Every wallet behind this collection was verified by signature."
             : "The wallets behind this collection have not been verified by signature, so these holdings are a claim rather than a proof."}{" "}
@@ -125,7 +125,7 @@ function Stat({ label, value, accent = false }: { label: string; value: string; 
       >
         {value}
       </span>
-      <span className="text-[0.5625rem] uppercase tracking-[0.14em] text-obsidian-500">{label}</span>
+      <span className="text-[0.5625rem] uppercase tracking-[0.14em] text-obsidian-400">{label}</span>
     </div>
   );
 }

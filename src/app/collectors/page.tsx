@@ -156,7 +156,7 @@ export default async function CollectorsPage() {
                 className="flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg border border-white/10 px-4 py-3"
               >
                 <span className={`text-sm font-semibold ${t.color}`}>{t.label}</span>
-                <span className="font-mono text-xs text-obsidian-500">{t.threshold}</span>
+                <span className="font-mono text-xs text-obsidian-400">{t.threshold}</span>
                 <span className="w-full text-xs text-obsidian-400 sm:w-auto sm:flex-1">
                   {t.blurb}
                 </span>

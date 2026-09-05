@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import HoldingsList, { type HoldingItem } from "./[slug]/HoldingsList";
 
 interface Wallet {
@@ -82,6 +83,7 @@ export default function AssetsClient() {
   const [cardUrl, setCardUrl] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<HoldingItem[] | null>(null);
   const [hasCard, setHasCard] = useState(false);
+  const [signedOut, setSignedOut] = useState(false);
   /** Resolution of whatever is in the address field, when it is an ENS name. */
   const [ens, setEns] = useState<
     { state: "idle" } | { state: "resolving" } | { state: "found"; address: string } | { state: "missing" }
@@ -94,7 +96,11 @@ export default function AssetsClient() {
     const res = await fetch("/api/wallets", { cache: "no-store" });
     if (res.status === 401) {
       setWallets([]);
-      setError("Sign in as a historian to manage wallets.");
+      // Not an error state, a signed out one. It gets its own flag because the
+      // error banner has no route forward, and this is a page people reach from
+      // the preview CTA: telling a collector they are not a historian, with no
+      // link, is the end of the journey rather than a step in it.
+      setSignedOut(true);
       return;
     }
     const { data, error: err } = await readJson(res);
@@ -456,6 +462,43 @@ export default function AssetsClient() {
         </p>
       </header>
 
+      {/* Signed out. Everything below needs an account, so this replaces the
+          tools rather than sitting above them, and it names the thing the
+          visitor came for rather than the role the system files them under. */}
+      {signedOut ? (
+        <section className="flex flex-col items-center gap-4 rounded-xl border border-ether-500/30 bg-gradient-to-b from-ether-500/10 to-transparent px-5 py-8 text-center">
+          <h2 className="text-lg font-semibold text-obsidian-50">
+            Sign in to save your collection
+          </h2>
+          <p className="max-w-md text-sm leading-relaxed text-obsidian-300">
+            Your wallets, your holdings and your collector card live on your account.
+            Create one or sign in and they are kept for you, along with a public
+            collection page you can share.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              href="/historian/login?next=%2Fassets"
+              className="rounded-lg bg-ether-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+            >
+              Create an account
+            </Link>
+            <Link
+              href="/historian/login?next=%2Fassets"
+              className="rounded-lg border border-white/15 px-5 py-2.5 text-sm font-medium text-obsidian-100 transition-colors hover:border-white/30 hover:bg-white/5"
+            >
+              Sign in
+            </Link>
+          </div>
+          <Link
+            href="/collectors"
+            className="text-xs text-ether-300 underline-offset-4 transition-colors hover:underline"
+          >
+            Or check a wallet without an account
+          </Link>
+        </section>
+      ) : null}
+
+      {!signedOut ? (
       <form onSubmit={addWallet} className="flex flex-col gap-3 rounded-xl border border-white/10 p-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <input
@@ -467,14 +510,14 @@ export default function AssetsClient() {
             autoCorrect="off"
             aria-label="Wallet address or ENS name"
             aria-describedby="add-wallet-resolution"
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-obsidian-100 outline-none placeholder:text-obsidian-600 focus:border-ether-500"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-obsidian-100 outline-none placeholder:text-obsidian-400 focus:border-ether-500"
           />
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
             placeholder="Label (optional)"
             aria-label="Wallet label"
-            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-obsidian-100 outline-none placeholder:text-obsidian-600 focus:border-ether-500 sm:w-44"
+            className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-obsidian-100 outline-none placeholder:text-obsidian-400 focus:border-ether-500 sm:w-44"
           />
           <button
             type="submit"
@@ -499,7 +542,7 @@ export default function AssetsClient() {
           className="min-h-[1.25rem] text-xs"
         >
           {ens.state === "resolving" ? (
-            <span className="text-obsidian-500">Resolving {address.trim().toLowerCase()}...</span>
+            <span className="text-obsidian-400">Resolving {address.trim().toLowerCase()}...</span>
           ) : ens.state === "found" ? (
             <span className="text-obsidian-400">
               {address.trim().toLowerCase()} resolves to{" "}
@@ -513,6 +556,7 @@ export default function AssetsClient() {
           ) : null}
         </p>
       </form>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -526,10 +570,10 @@ export default function AssetsClient() {
       ) : null}
 
       <section className="flex flex-col gap-3">
-        {wallets === null ? (
-          <p className="text-sm text-obsidian-500">Loading wallets.</p>
+        {signedOut ? null : wallets === null ? (
+          <p className="text-sm text-obsidian-400">Loading wallets.</p>
         ) : wallets.length === 0 ? (
-          <p className="text-sm text-obsidian-500">No wallets yet. Add one above to begin.</p>
+          <p className="text-sm text-obsidian-400">No wallets yet. Add one above to begin.</p>
         ) : (
           wallets.map((w) => (
             <article
@@ -557,7 +601,7 @@ export default function AssetsClient() {
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-obsidian-500">
+                <p className="mt-1 text-xs text-obsidian-400">
                   {w.label ? `${w.label} · ` : ""}
                   {w.holdingCount} documented {w.holdingCount === 1 ? "holding" : "holdings"}
                   {w.lastScannedAt ? ` · scanned ${new Date(w.lastScannedAt).toLocaleDateString()}` : " · never scanned"}
@@ -587,7 +631,7 @@ export default function AssetsClient() {
                   type="button"
                   onClick={() => remove(w)}
                   disabled={busy !== null}
-                  className="rounded-lg px-2 py-1.5 text-xs text-obsidian-500 transition-colors hover:text-red-400 disabled:opacity-40"
+                  className="rounded-lg px-2 py-1.5 text-xs text-obsidian-400 transition-colors hover:text-red-400 disabled:opacity-40"
                 >
                   Remove
                 </button>
@@ -597,6 +641,7 @@ export default function AssetsClient() {
         )}
       </section>
 
+      {!signedOut ? (
       <section className="flex flex-col gap-4 rounded-xl border border-ether-500/25 bg-ether-500/[0.04] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -633,7 +678,7 @@ export default function AssetsClient() {
             ) : null}
           </div>
         </div>
-        <p className="text-xs text-obsidian-500">
+        <p className="text-xs text-obsidian-400">
           {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} holdings,{" "}
           {verifiedCount} verified.
           {(wallets ?? []).length > 0 && !allVerified
@@ -642,11 +687,12 @@ export default function AssetsClient() {
           Balances are never shown on the public collection page.
         </p>
       </section>
+      ) : null}
 
-      {holdings && holdings.length > 0 ? (
+      {signedOut ? null : holdings && holdings.length > 0 ? (
         <HoldingsList holdings={holdings} showBalances compact title="What you hold" />
       ) : holdings ? (
-        <p className="text-sm text-obsidian-500">
+        <p className="text-sm text-obsidian-400">
           No documented holdings yet. Add a wallet above and scan it.
         </p>
       ) : null}

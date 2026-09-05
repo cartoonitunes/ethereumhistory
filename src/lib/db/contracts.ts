@@ -792,6 +792,57 @@ export async function enrichContractsWithRank(
  * makes X show up on Y's page without Y being edited. Backed by the partial
  * index on wrapper_of, so this stays cheap despite `contracts` being large.
  */
+/**
+ * The contract that `address` declares itself a wrapper of, if any.
+ *
+ * The exact inverse of getWrappersForContractFromDb. That one answers "who
+ * wraps me", read off other rows' wrapper_of; this answers "what do I wrap",
+ * read off this row's own. Both directions are needed because a reader can
+ * arrive at either end of the pair, and arriving at the wrapper is the common
+ * case: a collector card credits a holding through the wrapper, so the wrapper
+ * is what gets linked.
+ *
+ * Returns null when wrapper_of is unset, and also when it points at an address
+ * with no row. The column takes any well formed address without checking that
+ * it resolves, so a dangling link is possible and must render as nothing rather
+ * than as a broken row.
+ */
+export async function getWrappedContractFromDb(
+  address: string
+): Promise<{ address: string; name: string | null; tokenSymbol: string | null; deployedYear: number | null } | null> {
+  const database = getDb();
+
+  const [self] = await database
+    .select({ wrapperOf: schema.contracts.wrapperOf })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, address.toLowerCase()))
+    .limit(1);
+
+  const target = self?.wrapperOf;
+  if (!target) return null;
+
+  const [row] = await database
+    .select({
+      address: schema.contracts.address,
+      etherscanContractName: schema.contracts.etherscanContractName,
+      tokenName: schema.contracts.tokenName,
+      tokenSymbol: schema.contracts.tokenSymbol,
+      deploymentTimestamp: schema.contracts.deploymentTimestamp,
+    })
+    .from(schema.contracts)
+    .where(eq(schema.contracts.address, target))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    address: row.address,
+    name: row.etherscanContractName ?? row.tokenName ?? null,
+    tokenSymbol: row.tokenSymbol ?? null,
+    deployedYear: row.deploymentTimestamp ? new Date(row.deploymentTimestamp).getUTCFullYear() : null,
+  };
+}
+
 export async function getWrappersForContractFromDb(address: string): Promise<
   { address: string; name: string | null; tokenSymbol: string | null; deployedYear: number | null }[]
 > {

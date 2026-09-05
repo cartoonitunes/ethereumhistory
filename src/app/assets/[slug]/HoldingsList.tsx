@@ -136,7 +136,7 @@ export default function HoldingsList({
       </div>
 
       {holdings.length === 0 ? (
-        <p className="mt-3 text-sm text-obsidian-500">
+        <p className="mt-3 text-sm text-obsidian-400">
           No documented holdings on this collection yet.
         </p>
       ) : (
@@ -162,12 +162,12 @@ export default function HoldingsList({
                     </span>
                     <span className="text-sm font-medium text-obsidian-100">{h.name}</span>
                     {h.symbol ? (
-                      <span className="font-mono text-[0.6875rem] text-obsidian-500">{h.symbol}</span>
+                      <span className="font-mono text-[0.6875rem] text-obsidian-400">{h.symbol}</span>
                     ) : null}
                     {showBalances ? (
                       <span
                         className={`ml-auto font-mono text-xs tabular-nums ${
-                          showAmounts ? "text-obsidian-300" : "select-none text-obsidian-600"
+                          showAmounts ? "text-obsidian-300" : "select-none text-obsidian-400"
                         }`}
                       >
                         {showAmounts ? amount : "••••"}
@@ -183,7 +183,7 @@ export default function HoldingsList({
                         </p>
                       ) : null}
 
-                      <div className="flex flex-wrap items-center gap-2 pl-14 text-[0.625rem] uppercase tracking-wider text-obsidian-600">
+                      <div className="flex flex-wrap items-center gap-2 pl-14 text-[0.625rem] uppercase tracking-wider text-obsidian-400">
                         {era ? <span>{era}</span> : null}
                         <span>{isNft ? "ERC-721" : "ERC-20"}</span>
                         {h.viaWrapper ? (

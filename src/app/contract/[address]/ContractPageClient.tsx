@@ -81,12 +81,14 @@ interface ContractPageClientProps {
   error: string | null;
   relatedContracts?: RelatedContractItem[];
   wrappers?: WrapperItem[];
+  /** The contract this one wraps, when it is itself a wrapper. */
+  wraps?: WrapperItem | null;
 }
 
 // Max characters for the header short description display.
 const SHORT_DESCRIPTION_MAX_CHARS = 160;
 
-export function ContractPageClient({ address, data, error, relatedContracts = [], wrappers = [] }: ContractPageClientProps) {
+export function ContractPageClient({ address, data, error, relatedContracts = [], wrappers = [], wraps = null }: ContractPageClientProps) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [me, setMe] = useState<HistorianMe | null>(null);
@@ -806,6 +808,7 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
         </motion.div>
 
         {/* Related contracts — same deployer or era */}
+        <WrapsSection contract={wraps} />
         <WrappersSection contracts={wrappers} />
         <RelatedContractsSection contracts={relatedContracts} />
       </div>
@@ -4310,6 +4313,51 @@ export interface WrapperItem {
   name: string | null;
   tokenSymbol: string | null;
   deployedYear: number | null;
+}
+
+/**
+ * What this contract wraps, the inverse of the section below.
+ *
+ * Both directions have to render or the pair is only half navigable. An
+ * original has always shown "Wrapped as"; a wrapper showed nothing, which left
+ * a reader who arrived at the wrapper with no route to the thing it represents.
+ * That is the arrival most collector cards produce, since a card credits a
+ * holding through the wrapper and links to the wrapper.
+ *
+ * Singular rather than a list: wrapper_of holds one address. A wrapper that
+ * covers many originals, as the Curio and Peperium ERC1155 wrappers do, leaves
+ * the column null on purpose and renders nothing here.
+ */
+function WrapsSection({ contract }: { contract: WrapperItem | null }) {
+  if (!contract) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-medium text-obsidian-200">Wraps</h2>
+      <p className="mt-1 text-xs text-obsidian-400">
+        The earlier contract this one represents. Holding this counts as holding
+        that original on a collector card.
+      </p>
+      <div className="mt-3">
+        <a
+          href={`/contract/${contract.address}`}
+          className="flex items-center gap-3 rounded-lg border border-white/10 px-3 py-2 transition-colors hover:border-white/25"
+        >
+          <span className="w-10 shrink-0 font-mono text-[0.6875rem] tabular-nums text-ether-400/90">
+            {contract.deployedYear ?? "\u00b7"}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-obsidian-200">
+            {contract.name ?? contract.address}
+          </span>
+          {contract.tokenSymbol ? (
+            <span className="shrink-0 font-mono text-[0.6875rem] text-obsidian-400">
+              {contract.tokenSymbol}
+            </span>
+          ) : null}
+        </a>
+      </div>
+    </section>
+  );
 }
 
 /**

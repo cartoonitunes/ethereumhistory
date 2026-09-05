@@ -9,7 +9,15 @@
 import type { CardData } from "@/lib/collector-card";
 
 export const SHARE_WIDTH = 1200;
-export const SHARE_HEIGHT = 675;
+/**
+ * 630, not 675, to match every other og:image on the site.
+ *
+ * X sizes summary_large_image at roughly 1.91:1. At 675 the preview card, which
+ * is the most shared surface of the three, was the one image that got cropped
+ * or letterboxed while /card, /assets and /collectors all sat at 630. The card
+ * drawn inside is 560 tall, so it still clears the frame.
+ */
+export const SHARE_HEIGHT = 630;
 
 const INK = "#08080c";
 const PAPER = "#f4f4f8";

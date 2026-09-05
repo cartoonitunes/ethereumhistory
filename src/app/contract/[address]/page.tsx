@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ContractPageClient } from "./ContractPageClient";
 import { IndexedContractPage } from "./IndexedContractPage";
 import { getContractPageData, getContractWithTokenMetadata, getContract } from "@/lib/db";
-import { getRelatedContractsFromDb, getWrappersForContractFromDb } from "@/lib/db/contracts";
+import {
+  getRelatedContractsFromDb,
+  getWrappedContractFromDb,
+  getWrappersForContractFromDb,
+} from "@/lib/db/contracts";
 import { isValidAddress, formatAddress } from "@/lib/utils";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
@@ -255,13 +259,27 @@ export default async function ContractPage({ params }: Props) {
     wrappers = await getWrappersForContractFromDb(address.toLowerCase());
   } catch {}
 
+  // The other direction: what this contract wraps, if it is itself a wrapper.
+  // Same non-fatal treatment, for the same reason.
+  let wraps: Awaited<ReturnType<typeof getWrappedContractFromDb>> = null;
+  try {
+    wraps = await getWrappedContractFromDb(address.toLowerCase());
+  } catch {}
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <ContractPageClient address={address} data={data} error={null} relatedContracts={relatedContracts} wrappers={wrappers} />
+      <ContractPageClient
+        address={address}
+        data={data}
+        error={null}
+        relatedContracts={relatedContracts}
+        wrappers={wrappers}
+        wraps={wraps}
+      />
     </>
   );
 }

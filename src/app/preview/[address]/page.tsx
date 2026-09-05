@@ -49,7 +49,7 @@ export async function generateMetadata({
     // Not indexed: these are generated on demand for arbitrary addresses and
     // are not pages anyone owns.
     robots: { index: false, follow: false },
-    openGraph: { title, description: card.headline, images: [{ url: image, width: 1200, height: 675 }] },
+    openGraph: { title, description: card.headline, images: [{ url: image, width: 1200, height: 630 }] },
     twitter: { card: "summary_large_image", title, description: card.headline, images: [image] },
   };
 }
@@ -113,7 +113,7 @@ export default async function PreviewPage({
 
         {me ? (
           <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <p className="text-xs leading-relaxed text-obsidian-500">
+            <p className="text-xs leading-relaxed text-obsidian-400">
               This preview is generated on the spot and is not saved. Add the wallet to
               your account to keep it alongside your others.
             </p>

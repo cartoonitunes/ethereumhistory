@@ -272,6 +272,13 @@ export default function HolographicCard({
    */
   // Two of the six tiers start with a vowel, so a hardcoded article ships
   // "I'm a Apprentice" and "I'm a Archivist" in every tweet those users post.
+  // Nothing documented means nothing to boast about. A card showing zero should
+  // not offer to post "I'm an Apprentice" behind an empty picture, and the tier
+  // badge on an empty collection claims a standing the holder has not got. The
+  // headline already says "No documented holdings yet", which is the honest
+  // version of both.
+  const isEmpty = card.stats.contractCount === 0;
+
   const article = /^[aeiou]/i.test(card.tier.label) ? "an" : "a";
   const tweetText = `I'm ${article} ${card.tier.label} on @ethereumhistory. See my collection and make yours:`;
 
@@ -409,7 +416,7 @@ export default function HolographicCard({
                       the sub-line falls back to the address rather than
                       printing the same string twice. */}
                   {subline ? (
-                    <span className="font-mono text-[0.6875rem] text-obsidian-500">{subline}</span>
+                    <span className="font-mono text-[0.6875rem] text-obsidian-400">{subline}</span>
                   ) : null}
                   {card.owner.verified ? (
                     <span
@@ -423,18 +430,33 @@ export default function HolographicCard({
                   ) : null}
                 </div>
 
-                {/* Tier */}
+                {/* Tier. Suppressed on an empty collection: the lowest tier is
+                    still a standing, and awarding it for holding nothing reads
+                    as flattery the data does not support. */}
                 <div className="mt-5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:mt-6 sm:px-4 sm:py-4">
-                  <p
-                    className={`text-lg font-semibold tracking-tight sm:text-xl ${
-                      card.tier.color ?? "text-ether-200"
-                    }`}
-                  >
-                    {card.tier.label}
-                  </p>
-                  <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-400">
-                    {card.tier.blurb}
-                  </p>
+                  {isEmpty ? (
+                    <>
+                      <p className="text-lg font-semibold tracking-tight text-obsidian-300 sm:text-xl">
+                        Not collecting yet
+                      </p>
+                      <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-400">
+                        Nothing in this wallet appears in the archive so far
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p
+                        className={`text-lg font-semibold tracking-tight sm:text-xl ${
+                          card.tier.color ?? "text-ether-200"
+                        }`}
+                      >
+                        {card.tier.label}
+                      </p>
+                      <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-400">
+                        {card.tier.blurb}
+                      </p>
+                    </>
+                  )}
                 </div>
 
                 {/* One line about the person. The holdings breakdown lives on
@@ -464,14 +486,16 @@ export default function HolographicCard({
 
       <div className="flex flex-col items-center gap-2">
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <a
-            href={tweetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
-          >
-            Share on X
-          </a>
+          {!isEmpty ? (
+            <a
+              href={tweetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+            >
+              Share on X
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={downloadImage}
@@ -497,7 +521,7 @@ export default function HolographicCard({
           </button>
         </div>
         {imageState === "unsupported" ? (
-          <p className="text-xs text-obsidian-500">
+          <p className="text-xs text-obsidian-400">
             This browser cannot copy images. Use Download PNG instead.
           </p>
         ) : null}
@@ -514,7 +538,10 @@ function Stat({ label, value, accent = false }: { label: string; value: string; 
       >
         {value}
       </span>
-      <span className="text-[0.5rem] uppercase tracking-[0.12em] text-obsidian-500">{label}</span>
+      {/* 11px, not 8px. These four words are the only thing explaining the only
+          numbers on the card, and 8px is below what most people can read at a
+          glance on a phone. */}
+      <span className="text-[0.6875rem] uppercase tracking-[0.1em] text-obsidian-400">{label}</span>
     </div>
   );
 }

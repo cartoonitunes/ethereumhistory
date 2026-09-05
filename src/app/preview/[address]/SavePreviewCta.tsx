@@ -77,7 +77,7 @@ export default function SavePreviewCta({
           >
             Sign in
           </Link>
-          <span className="text-xs text-obsidian-500 sm:ml-2">
+          <span className="text-xs text-obsidian-400 sm:ml-2">
             Your wallet and holdings are saved for you on the way back.
           </span>
         </div>

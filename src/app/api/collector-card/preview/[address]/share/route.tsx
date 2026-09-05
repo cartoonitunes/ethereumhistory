@@ -1,7 +1,7 @@
 /**
  * GET /api/collector-card/preview/[address]/share
  *
- * The share image for an ephemeral preview card, at the same 1200x675 as a
+ * The share image for an ephemeral preview card, at the same 1200x630 as a
  * saved card's. Recomputed rather than read from storage, and cached per
  * address so an unfurl does not trigger a fresh provider scan every time.
  */

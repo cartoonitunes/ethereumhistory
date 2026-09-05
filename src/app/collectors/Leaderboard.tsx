@@ -13,14 +13,53 @@
 import Link from "next/link";
 import type { LeaderboardEntry } from "@/lib/collector-card";
 
+/**
+ * Collectors needed before the ranking is shown at all.
+ *
+ * A leaderboard is a claim that a field exists to be ranked. With one or two
+ * names on it, and especially with the site's own operator at the top, it says
+ * the opposite of what it is there to say. Below the threshold the section
+ * still appears, as a stated goal rather than a ranking, which is honest and
+ * gives a visitor a reason to be the one who fills it.
+ */
+export const LEADERBOARD_MIN_ENTRIES = 5;
+
 export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   if (entries.length === 0) return null;
+
+  if (entries.length < LEADERBOARD_MIN_ENTRIES) {
+    const remaining = LEADERBOARD_MIN_ENTRIES - entries.length;
+    return (
+      <section className="mt-16">
+        <h2 className="text-xl font-semibold">Leaderboard</h2>
+        <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-white/15 px-5 py-8 text-center">
+          <span className="font-mono text-xs uppercase tracking-[0.13em] text-obsidian-400">
+            Locked
+          </span>
+          <p className="max-w-sm text-sm leading-relaxed text-obsidian-300">
+            The leaderboard unlocks when {LEADERBOARD_MIN_ENTRIES} collectors have built
+            a card.{" "}
+            {entries.length === 1
+              ? "One has so far."
+              : `${entries.length} have so far.`}{" "}
+            {remaining === 1 ? "One more" : `${remaining} more`} and the ranking goes live.
+          </p>
+          <Link
+            href="/assets"
+            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+          >
+            Build your card
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-16">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-xl font-semibold">Leaderboard</h2>
-        <p className="font-mono text-xs text-obsidian-500">
+        <p className="font-mono text-xs text-obsidian-400">
           {entries.length === 1 ? "1 collector" : `top ${entries.length}`}
         </p>
       </div>
@@ -48,8 +87,8 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs">
                   <span className={e.tier.color}>{e.tier.label}</span>
-                  <span className="hidden text-obsidian-600 sm:inline">/</span>
-                  <span className="hidden text-obsidian-500 sm:inline">
+                  <span className="hidden text-obsidian-400 sm:inline">/</span>
+                  <span className="hidden text-obsidian-400 sm:inline">
                     {e.contractCount} {e.contractCount === 1 ? "contract" : "contracts"}
                     {e.earliestYear ? `, from ${e.earliestYear}` : ""}
                   </span>
@@ -60,7 +99,7 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
                 <div className="font-mono text-base leading-none text-obsidian-50 tabular-nums">
                   {e.score}
                 </div>
-                <div className="mt-1 text-[10px] uppercase tracking-wider text-obsidian-600">
+                <div className="mt-1 text-[10px] uppercase tracking-wider text-obsidian-400">
                   score
                 </div>
               </div>
@@ -69,7 +108,7 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
         ))}
       </ol>
 
-      <p className="mt-3 text-center text-xs text-obsidian-500">
+      <p className="mt-3 text-center text-xs text-obsidian-400">
         Built a card? You are on it. Scores update as the archive grows.
       </p>
     </section>
@@ -91,7 +130,7 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
  * rather than assembled.
  */
 function Rank({ rank }: { rank: number }) {
-  const tone = rank <= 3 ? "text-obsidian-300" : "text-obsidian-600";
+  const tone = rank <= 3 ? "text-obsidian-300" : "text-obsidian-400";
   return (
     <span className={`w-6 shrink-0 text-right font-mono text-sm tabular-nums ${tone}`}>{rank}</span>
   );
