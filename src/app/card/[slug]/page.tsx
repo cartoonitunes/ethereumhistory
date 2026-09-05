@@ -1,0 +1,92 @@
+/**
+ * /card/[slug]  the public, shareable collector card.
+ *
+ * Server rendered from the stored snapshot so a link posted to X resolves for
+ * anyone, signed in or not, and so the crawler gets real metadata rather than
+ * an empty client shell.
+ */
+
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { getDb, isDatabaseConfigured } from "@/lib/db-client";
+import { collectorCards } from "@/lib/schema";
+import { eq } from "drizzle-orm";
+import HolographicCard, { type CardPayload } from "./HolographicCard";
+
+export const dynamic = "force-dynamic";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.ethereumhistory.com";
+
+const SLUG_PATTERN = /^[a-z0-9]{6,32}$/;
+
+async function loadCard(slug: string): Promise<CardPayload | null> {
+  if (!isDatabaseConfigured() || !SLUG_PATTERN.test(slug)) return null;
+  const db = getDb();
+  const [row] = await db
+    .select({ cardDataJson: collectorCards.cardDataJson })
+    .from(collectorCards)
+    .where(eq(collectorCards.shareSlug, slug));
+  return row ? (row.cardDataJson as CardPayload) : null;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const card = await loadCard(slug);
+
+  if (!card) {
+    return { title: "Card not found", robots: { index: false, follow: false } };
+  }
+
+  const title = `${card.owner.name} on Ethereum History`;
+  const count = card.stats.contractCount;
+  const description = `${count} historic ${count === 1 ? "contract" : "contracts"} held${
+    card.stats.earliestYear ? `, the oldest deployed in ${card.stats.earliestYear}` : ""
+  }.`;
+  const ogImage = `${SITE_URL}/api/collector-card/${slug}/og`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `${SITE_URL}/card/${slug}`,
+      images: [{ url: ogImage, width: 1200, height: 630 }],
+      type: "profile",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogImage],
+    },
+  };
+}
+
+export default async function CardPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const card = await loadCard(slug);
+  if (!card) notFound();
+
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-4 py-16">
+      <HolographicCard card={card} shareUrl={`${SITE_URL}/card/${slug}`} />
+
+      <p className="max-w-sm text-center text-xs leading-relaxed text-obsidian-500">
+        Every wallet behind this card was verified by signature. Balances were read
+        from the chain and matched against the Ethereum History archive.
+      </p>
+
+      <a
+        href="/assets"
+        className="text-xs text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
+      >
+        Make your own collector card
+      </a>
+    </main>
+  );
+}
