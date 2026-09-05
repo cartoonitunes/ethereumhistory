@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart, Search, ChevronDown } from "lucide-react";
+import { LogIn, UserPlus, User, Github, ClipboardCheck, Menu, X, Heart, Search, ChevronDown, Wallet } from "lucide-react";
 import type { HistorianMe } from "@/types";
 
 interface HeaderProps {
@@ -256,6 +256,10 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                       Invite
                     </Link>
                   )}
+                  <Link href="/assets" className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
+                    <Wallet className="w-4 h-4" />
+                    Assets
+                  </Link>
                   <Link href="/historian/profile" className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
                     {me.avatarUrl ? (
                       <img src={me.avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
@@ -365,6 +369,11 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
 
                   <div className="border-t border-obsidian-800 mt-1 pt-3 pb-1 flex flex-col gap-2 px-3">
                     {me ? (
+                      <>
+                      <Link href="/assets" className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-obsidian-300 text-sm font-medium">
+                        <Wallet className="w-4 h-4" />
+                        Assets
+                      </Link>
                       <Link href="/historian/profile" className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-obsidian-800 bg-obsidian-900/40 text-obsidian-300 text-sm font-medium">
                         {me.avatarUrl ? (
                           <img src={me.avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
@@ -375,6 +384,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                         )}
                         {me.name}
                       </Link>
+                      </>
                     ) : (
                       <>
                         <Link href={loginUrl} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-ether-600 hover:bg-ether-500 text-white text-sm font-medium transition-colors">
