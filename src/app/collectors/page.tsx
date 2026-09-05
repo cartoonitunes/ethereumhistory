@@ -10,7 +10,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import CollectorCardCta from "@/app/CollectorCardCta";
-import { allTiers } from "@/lib/collector-card";
+import { allTiers, getLeaderboard, type LeaderboardEntry } from "@/lib/collector-card";
+import { isDatabaseConfigured } from "@/lib/db-client";
+import Leaderboard from "./Leaderboard";
+
+/**
+ * Revalidated rather than force-dynamic. This is a marketing page that was
+ * fully static until the leaderboard arrived, and rankings do not need to be
+ * to the second. Five minutes keeps it cheap for the common case, which is a
+ * visitor who followed a shared link and will never see it change.
+ */
+export const revalidate = 300;
+
+/** How many rows the page shows. The API accepts more for a future "show more". */
+const LEADERBOARD_SIZE = 25;
 
 /**
  * Same helper the other metadata-bearing pages declare locally. Kept local
@@ -72,8 +85,26 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function CollectorsPage() {
+/**
+ * The leaderboard is the only part of this page that touches the database, and
+ * everything else on it is worth serving without one. A failed query renders no
+ * section rather than no page: this is the entry point people arrive at from a
+ * shared link, and losing the whole thing because a rank could not be computed
+ * would be a bad trade.
+ */
+async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
+  if (!isDatabaseConfigured()) return [];
+  try {
+    return await getLeaderboard(LEADERBOARD_SIZE);
+  } catch (err) {
+    console.error("[collectors] leaderboard unavailable:", err);
+    return [];
+  }
+}
+
+export default async function CollectorsPage() {
   const tiers = allTiers();
+  const leaderboard = await loadLeaderboard();
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
@@ -133,6 +164,10 @@ export default function CollectorsPage() {
             ))}
           </ul>
         </section>
+
+        {/* After Tiers on purpose: the rows are labelled with tier names, so the
+            ladder has to be explained before the ranking that uses it. */}
+        <Leaderboard entries={leaderboard} />
 
         <section className="mt-16 rounded-xl border border-white/10 p-6 text-center">
           <h2 className="text-lg font-semibold">Keep your card</h2>

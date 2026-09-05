@@ -26,6 +26,8 @@ import {
   computeCollectorScore,
   SCORE_REFERENCE_BLOCK,
   walletAgeYears,
+  compareLeaderboard,
+  type CardData,
 } from "../src/lib/collector-card";
 
 type Holding = { deploymentBlock: number | null };
@@ -155,3 +157,72 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log("\nAll properties hold.");
+
+// ---------------------------------------------------------------------------
+// Leaderboard ordering.
+//
+// Separate from the score properties above: this checks the RANKING, not the
+// number. It matters because the live table has a single card, so the tiebreak
+// chain would otherwise ship having never run.
+// ---------------------------------------------------------------------------
+
+type Ranked = { stats: { score: number; contractCount: number; earliestYear: number | null }; owner: { name: string } };
+
+const mk = (score: number, contractCount: number, earliestYear: number | null, name: string): Ranked => ({
+  stats: { score, contractCount, earliestYear },
+  owner: { name },
+});
+
+function order(list: Ranked[]): string[] {
+  return [...list]
+    .sort((a, b) =>
+      compareLeaderboard(a as unknown as CardData, b as unknown as CardData)
+    )
+    .map((e) => e.owner.name);
+}
+
+const rankChecks: [string, boolean][] = [
+  [
+    "score wins over everything",
+    order([mk(50, 99, 2015, "a"), mk(90, 1, 2020, "b")]).join() === "b,a",
+  ],
+  [
+    "equal score breaks on collection size",
+    order([mk(90, 3, 2016, "a"), mk(90, 8, 2016, "b")]).join() === "b,a",
+  ],
+  [
+    "equal score and size break on earliest year",
+    order([mk(90, 5, 2017, "a"), mk(90, 5, 2015, "b")]).join() === "b,a",
+  ],
+  [
+    "a null earliest year sorts last",
+    order([mk(90, 5, null, "a"), mk(90, 5, 2019, "b")]).join() === "b,a",
+  ],
+  [
+    "fully tied entries fall back to name, not input order",
+    order([mk(90, 5, 2015, "zoe"), mk(90, 5, 2015, "adam")]).join() === "adam,zoe" &&
+      order([mk(90, 5, 2015, "adam"), mk(90, 5, 2015, "zoe")]).join() === "adam,zoe",
+  ],
+  [
+    "ordering is a descending total order over a mixed set",
+    (() => {
+      const list = [
+        mk(70, 2, 2018, "c"),
+        mk(95, 30, 2015, "a"),
+        mk(70, 9, 2019, "b"),
+        mk(12, 1, 2021, "d"),
+      ];
+      return order(list).join() === "a,b,c,d";
+    })(),
+  ],
+];
+
+let rankFailures = 0;
+for (const [name, ok] of rankChecks) {
+  if (!ok) {
+    console.log(`  FAIL ${name}`);
+    rankFailures += 1;
+  }
+}
+console.log(`\nleaderboard order: ${rankChecks.length - rankFailures}/${rankChecks.length} passed`);
+if (rankFailures > 0) process.exit(1);

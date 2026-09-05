@@ -22,7 +22,7 @@
  */
 
 import { getDb } from "@/lib/db-client";
-import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
+import { collectorCards, contracts, historians, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
 
@@ -1378,4 +1378,118 @@ export async function buildEphemeralCard(
       generatedAt: new Date().toISOString(),
     },
   };
+}
+
+/** One row of the public leaderboard. */
+export interface LeaderboardEntry {
+  rank: number;
+  slug: string;
+  name: string;
+  ensName: string | null;
+  avatarUrl: string | null;
+  tier: Tier;
+  score: number;
+  contractCount: number;
+  earliestYear: number | null;
+  /** Every wallet behind the card proved by signature. */
+  verified: boolean;
+}
+
+/**
+ * Top collectors, ranked by score.
+ *
+ * WHO APPEARS: anyone who has generated a card that has at least one documented
+ * holding. Generating a card is the opt in, which is the product decision, and
+ * it is worth being explicit about what it changes. Migration 081 gave cards a
+ * random slug specifically so "the full set of cards is not enumerable from one
+ * shared link". A leaderboard enumerates them by construction. Nothing becomes
+ * visible that was not already public at /card and /assets, but going from
+ * "public if you have the link" to "listed" is a real change, and anyone who
+ * built a card before this existed did so under the old arrangement. If that
+ * needs walking back, the fix is a listed flag on collector_cards rather than
+ * anything here.
+ *
+ * WHY THE SORT HAPPENS IN JS: the stored score is a snapshot from card build
+ * time, and scores are deliberately recomputed on read (see normalizeCardData)
+ * so a formula change reaches existing cards. Ordering by the stored column
+ * would rank people by whatever formula was live when they last pressed Build,
+ * and the rank here would contradict the score on their own card page. So every
+ * qualifying row is normalised first and sorted afterwards.
+ *
+ * That costs a full scan of the table, which is fine and stays fine: there is
+ * one card per account, so this is bounded by the number of accounts, currently
+ * 67. If accounts ever reach the thousands, the fix is a stored score column
+ * kept current by a job, not a lossy ORDER BY on stale JSON.
+ */
+/**
+ * Ranking order for the leaderboard: score first, then a chain of tiebreaks.
+ *
+ * Separated out and exported so it can be tested without a database. Equal
+ * scores are not an edge case here, they are the normal state at the top of the
+ * range where the depth component saturates, so the tiebreaks decide real
+ * placements rather than tidying up a rare collision.
+ *
+ * The order is total and deterministic: a bigger collection wins, then one that
+ * reaches earlier, then the name. Without that last step two identical
+ * collections would swap places between requests, since the rows arrive in
+ * whatever order Postgres returns them.
+ */
+export function compareLeaderboard(
+  a: Pick<CardData, "stats" | "owner">,
+  b: Pick<CardData, "stats" | "owner">
+): number {
+  if (b.stats.score !== a.stats.score) return b.stats.score - a.stats.score;
+  if (b.stats.contractCount !== a.stats.contractCount) {
+    return b.stats.contractCount - a.stats.contractCount;
+  }
+  const ay = a.stats.earliestYear ?? 9999;
+  const by = b.stats.earliestYear ?? 9999;
+  if (ay !== by) return ay - by;
+  return a.owner.name.localeCompare(b.owner.name);
+}
+
+export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
+  const db = getDb();
+
+  const rows = await db
+    .select({
+      shareSlug: collectorCards.shareSlug,
+      cardDataJson: collectorCards.cardDataJson,
+      historianName: historians.name,
+      historianAvatarUrl: historians.avatarUrl,
+      historianActive: historians.active,
+    })
+    .from(collectorCards)
+    .leftJoin(historians, eq(historians.id, collectorCards.historianId));
+
+  const entries = rows
+    // A deactivated account should not be listed. The join is a left join so a
+    // card whose historian row is missing entirely still resolves rather than
+    // vanishing, and only an explicit false excludes.
+    .filter((r) => r.historianActive !== false)
+    .map((r) => {
+      const card = normalizeCardData(r.cardDataJson);
+      return { card, historianName: r.historianName, historianAvatarUrl: r.historianAvatarUrl, slug: r.shareSlug };
+    })
+    // No empty cards. A card with nothing documented behind it is a zero score
+    // and tells a visitor nothing.
+    .filter(({ card }) => card.stats.contractCount > 0 && card.holdings.length > 0)
+    .sort((a, b) => compareLeaderboard(a.card, b.card))
+    .slice(0, Math.max(1, Math.min(100, limit)));
+
+  return entries.map(({ card, historianName, historianAvatarUrl, slug }, i) => ({
+    rank: i + 1,
+    slug,
+    // The card's own identity wins: it has already resolved EH profile image,
+    // then ENS avatar, then nothing, and it carries the ENS name. The historian
+    // row is the fallback for a card built before that resolution existed.
+    name: card.owner.name || historianName || "Collector",
+    ensName: card.owner.ensName,
+    avatarUrl: card.owner.avatarUrl ?? historianAvatarUrl ?? null,
+    tier: card.tier,
+    score: card.stats.score,
+    contractCount: card.stats.contractCount,
+    earliestYear: card.stats.earliestYear,
+    verified: card.stats.allWalletsVerified,
+  }));
 }
