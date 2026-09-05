@@ -23,8 +23,9 @@
 
 import { getDb } from "@/lib/db-client";
 import { collectorCards, contracts, historians, userWallets, walletHoldings } from "@/lib/schema";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
+import { cached, CACHE_TTL } from "@/lib/cache";
 
 /** A scan should never hold a request open longer than this per call. */
 const RPC_TIMEOUT_MS = 15_000;
@@ -1290,7 +1291,11 @@ export async function buildEphemeralCard(
     return { error: "That does not look like an address or a .eth name." };
   }
 
-  const scan = await scanWallet(address);
+  // Cached under a key the preview claim flow also reads, so someone who views
+  // a preview and then signs in to keep it is scanned once rather than twice.
+  // The cache is per instance and in memory, so this is an optimisation and
+  // never a guarantee: a miss simply scans again.
+  const scan = await cached(`wallet-scan:${address}`, CACHE_TTL.MEDIUM, () => scanWallet(address));
   if (scan.degraded && scan.holdings.length === 0) {
     return { error: scan.warning ?? "Could not reach the token provider. Try again shortly." };
   }
@@ -1492,4 +1497,65 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
     earliestYear: card.stats.earliestYear,
     verified: card.stats.allWalletsVerified,
   }));
+}
+
+/**
+ * Write a scan's holdings onto a wallet row, replacing whatever was there.
+ *
+ * Extracted so the explicit scan endpoint and the preview claim flow persist
+ * results the same way. Two callers writing wallet_holdings by hand is how the
+ * two quietly drift apart, and the pruning step below is the one most likely to
+ * be forgotten by the second implementation.
+ *
+ * Returns false without touching anything when the scan came back degraded and
+ * empty. That is not the same as a wallet holding nothing: it means the
+ * provider failed, and replacing real holdings with an empty set on a failed
+ * read would silently erase a collection.
+ */
+export async function persistScanToWallet(
+  walletId: number,
+  scan: { holdings: DetectedHolding[]; firstTxDate: Date | null; degraded: boolean }
+): Promise<boolean> {
+  if (scan.degraded && scan.holdings.length === 0) return false;
+
+  const db = getDb();
+  const now = new Date();
+
+  for (const h of scan.holdings) {
+    const fields = {
+      tokenSymbol: h.tokenSymbol,
+      tokenName: h.tokenName,
+      balance: h.balance,
+      tokenDecimals: h.tokenDecimals,
+      tokenType: h.tokenType,
+      viaWrapper: h.viaWrapper,
+      lastScannedAt: now,
+    };
+    await db
+      .insert(walletHoldings)
+      .values({ walletId, contractAddress: h.contractAddress, ...fields })
+      .onConflictDoUpdate({
+        target: [walletHoldings.walletId, walletHoldings.contractAddress],
+        set: fields,
+      });
+  }
+
+  // Drop anything the wallet no longer holds. Only reached on a clean scan.
+  const keep = scan.holdings.map((h) => h.contractAddress);
+  await db
+    .delete(walletHoldings)
+    .where(
+      keep.length > 0
+        ? and(eq(walletHoldings.walletId, walletId), notInArray(walletHoldings.contractAddress, keep))
+        : eq(walletHoldings.walletId, walletId)
+    );
+
+  if (scan.firstTxDate) {
+    await db
+      .update(userWallets)
+      .set({ firstTxDate: scan.firstTxDate })
+      .where(eq(userWallets.id, walletId));
+  }
+
+  return true;
 }

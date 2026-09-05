@@ -12,10 +12,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
-import { userWallets, walletHoldings } from "@/lib/schema";
-import { and, eq, notInArray } from "drizzle-orm";
+import { userWallets } from "@/lib/schema";
+import { and, eq } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
-import { scanWallet } from "@/lib/collector-card";
+import { persistScanToWallet, scanWallet } from "@/lib/collector-card";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NO_STORE_HEADERS } from "@/lib/no-store";
 
@@ -86,52 +86,7 @@ export async function POST(
     );
   }
 
-  const now = new Date();
-  for (const h of result.holdings) {
-    await db
-      .insert(walletHoldings)
-      .values({
-        walletId: wallet.id,
-        contractAddress: h.contractAddress,
-        tokenSymbol: h.tokenSymbol,
-        tokenName: h.tokenName,
-        balance: h.balance,
-        tokenDecimals: h.tokenDecimals,
-        tokenType: h.tokenType,
-        viaWrapper: h.viaWrapper,
-        lastScannedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: [walletHoldings.walletId, walletHoldings.contractAddress],
-        set: {
-          tokenSymbol: h.tokenSymbol,
-          tokenName: h.tokenName,
-          balance: h.balance,
-          tokenDecimals: h.tokenDecimals,
-          tokenType: h.tokenType,
-          viaWrapper: h.viaWrapper,
-          lastScannedAt: now,
-        },
-      });
-  }
-
-  // Drop anything the wallet no longer holds. Only safe on a clean scan, which
-  // the degraded branch above has already returned for.
-  const keep = result.holdings.map((h) => h.contractAddress);
-  await db
-    .delete(walletHoldings)
-    .where(
-      keep.length > 0
-        ? and(eq(walletHoldings.walletId, wallet.id), notInArray(walletHoldings.contractAddress, keep))
-        : eq(walletHoldings.walletId, wallet.id)
-    );
-
-  if (result.firstTxDate) {
-    await db
-      .update(userWallets)
-      .set({ firstTxDate: result.firstTxDate })
-      .where(eq(userWallets.id, wallet.id));
-  }
+  await persistScanToWallet(wallet.id, result);
 
   return NextResponse.json({
     data: {

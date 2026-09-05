@@ -14,6 +14,8 @@ import { buildEphemeralCard } from "@/lib/collector-card";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import HolographicCard, { type CardPayload } from "@/app/card/[slug]/HolographicCard";
 import HoldingsList, { type HoldingItem } from "@/app/assets/[slug]/HoldingsList";
+import SavePreviewCta from "./SavePreviewCta";
+import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,10 @@ export default async function PreviewPage({
   const result = await load(address);
   if (!result) notFound();
 
+  // Signed in visitors already have somewhere to keep this, so the banner
+  // would be selling them something they own. They get the quieter footer.
+  const me = await getHistorianMeFromCookies();
+
   const shareUrl = `${SITE_URL}/preview/${encodeURIComponent(address)}`;
 
   return (
@@ -73,6 +79,13 @@ export default async function PreviewPage({
           slug={`preview/${encodeURIComponent(address)}`}
           previewMode
         />
+
+        {!me ? (
+          <SavePreviewCta
+            address={result.address}
+            holdingCount={result.card.holdings.length}
+          />
+        ) : null}
 
         {/* The card alone is thin value for a first visit, so the holdings sit
             right under it: what they own, why each one matters, and a way into
@@ -98,19 +111,20 @@ export default async function PreviewPage({
           </div>
         ) : null}
 
-        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-          <p className="text-xs leading-relaxed text-obsidian-500">
-            This card is generated on the spot and is not saved anywhere. Sign in to
-            keep it, verify your wallet for the badge, and get the full collection
-            page with every holding and its story.
-          </p>
-          <Link
-            href="/assets"
-            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
-          >
-            Save my card
-          </Link>
-        </div>
+        {me ? (
+          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+            <p className="text-xs leading-relaxed text-obsidian-500">
+              This preview is generated on the spot and is not saved. Add the wallet to
+              your account to keep it alongside your others.
+            </p>
+            <Link
+              href="/assets"
+              className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+            >
+              Go to your assets
+            </Link>
+          </div>
+        ) : null}
       </main>
     </div>
   );

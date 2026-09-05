@@ -11,7 +11,7 @@
  * for a reason the user has to guess at.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import HoldingsList, { type HoldingItem } from "./[slug]/HoldingsList";
 
 interface Wallet {
@@ -31,6 +31,26 @@ type EthereumProvider = {
 
 /** EIP-1193 rejection code, returned when the user dismisses a wallet prompt. */
 const USER_REJECTED = 4001;
+
+const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+/** Mirrors the server's check so the field only calls out for real candidates. */
+const ENS_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.(eth|xyz|art|luxe|kred|box)$/i;
+
+/**
+ * What the person has typed so far, as far as we can tell.
+ *
+ * Three outcomes rather than two: an address needs no lookup, a name does, and
+ * anything else is still being typed and should be left alone. Without the
+ * third state a half finished name gets sent to the resolver on every keystroke
+ * and comes back "not found", which reads as an error about something the user
+ * has not finished saying yet.
+ */
+function classifyInput(raw: string): "address" | "ens" | "unknown" {
+  const v = raw.trim();
+  if (ADDRESS_RE.test(v)) return "address";
+  if (ENS_RE.test(v)) return "ens";
+  return "unknown";
+}
 
 function providerErrorMessage(err: unknown): string {
   const code = (err as { code?: number })?.code;
@@ -62,6 +82,10 @@ export default function AssetsClient() {
   const [cardUrl, setCardUrl] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<HoldingItem[] | null>(null);
   const [hasCard, setHasCard] = useState(false);
+  /** Resolution of whatever is in the address field, when it is an ENS name. */
+  const [ens, setEns] = useState<
+    { state: "idle" } | { state: "resolving" } | { state: "found"; address: string } | { state: "missing" }
+  >({ state: "idle" });
 
   const load = useCallback(async () => {
     // cache: "no-store" belts-and-braces the server's no-store headers. Without
@@ -105,6 +129,92 @@ export default function AssetsClient() {
     void loadMine();
   }, [load, loadMine]);
 
+  /**
+   * Resolve an ENS name as it is typed, and show the address before anything is
+   * added. Debounced because this field is typed into character by character
+   * and each lookup is a provider call.
+   *
+   * The request is sequenced rather than cancelled: a slow lookup for an
+   * earlier name must not overwrite the answer for what is in the box now, or
+   * the confirmation line ends up showing an address for a name the person has
+   * already edited away from.
+   */
+  const ensSeq = useRef(0);
+  useEffect(() => {
+    const kind = classifyInput(address);
+    if (kind !== "ens") {
+      setEns({ state: "idle" });
+      return;
+    }
+    const name = address.trim().toLowerCase();
+    const seq = ++ensSeq.current;
+    setEns({ state: "resolving" });
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/ens/resolve?name=${encodeURIComponent(name)}`, {
+          cache: "no-store",
+        });
+        const { data } = await readJson(res);
+        if (seq !== ensSeq.current) return;
+        const resolved = (data as { address: string | null } | null)?.address ?? null;
+        setEns(resolved ? { state: "found", address: resolved } : { state: "missing" });
+      } catch {
+        if (seq === ensSeq.current) setEns({ state: "missing" });
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [address]);
+
+  /**
+   * Finish a preview that was started before signing in.
+   *
+   * The address rode here in a cookie set by /api/preview/claim, so the server
+   * does the work and this only reports it. Gated on the flag the sign in
+   * redirect adds, so an ordinary visit to this page costs no extra request.
+   */
+  const claimed = useRef(false);
+  useEffect(() => {
+    if (claimed.current) return;
+    if (typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).has("claimed")) return;
+    claimed.current = true;
+
+    void (async () => {
+      setBusy("claim");
+      try {
+        const res = await fetch("/api/preview/claim", { method: "POST", cache: "no-store" });
+        const { data } = await readJson(res);
+        const d = data as {
+          claimed: boolean;
+          address?: string;
+          alreadyAttached?: boolean;
+          holdingsSaved?: boolean;
+          holdingCount?: number;
+          shareSlug?: string | null;
+        } | null;
+        if (d?.claimed && d.address) {
+          const short = `${d.address.slice(0, 6)}...${d.address.slice(-4)}`;
+          setNotice(
+            d.holdingsSaved && (d.holdingCount ?? 0) > 0
+              ? `Saved ${short} with ${d.holdingCount} documented ${
+                  d.holdingCount === 1 ? "holding" : "holdings"
+                }.${d.shareSlug ? " Your card is ready." : ""}`
+              : `Saved ${short}. Scan it to find archive holdings.`
+          );
+          await Promise.all([load(), loadMine()]);
+        }
+      } catch {
+        setError("Your wallet could not be saved automatically. Add it below.");
+      } finally {
+        setBusy(null);
+        // Drop the flag so a refresh does not look like a second claim.
+        const url = new URL(window.location.href);
+        url.searchParams.delete("claimed");
+        window.history.replaceState({}, "", url.toString());
+      }
+    })();
+  }, [load, loadMine]);
+
   const addWallet = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -112,10 +222,31 @@ export default function AssetsClient() {
       setNotice(null);
       setBusy("add");
       try {
+        const typed = address.trim();
+        const kind = classifyInput(typed);
+
+        // An ENS name is only ever submitted as the address it resolved to.
+        // Refusing to guess here is the point: sending an unresolved name would
+        // fail server side anyway, and sending a stale resolution would attach
+        // the wrong wallet silently.
+        if (kind === "ens" && ens.state !== "found") {
+          setError(
+            ens.state === "resolving"
+              ? "Still looking that name up. Give it a moment."
+              : `${typed} does not resolve to an address.`
+          );
+          return;
+        }
+        const toAdd = kind === "ens" && ens.state === "found" ? ens.address : typed;
+
+        // With no label of their own, the name they typed is a better one than
+        // nothing, and it is how they think of the wallet.
+        const chosenLabel = label.trim() || (kind === "ens" ? typed.toLowerCase() : null);
+
         const res = await fetch("/api/wallets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address: address.trim(), label: label.trim() || null }),
+          body: JSON.stringify({ address: toAdd, label: chosenLabel }),
         });
         const { error: err } = await readJson(res);
         if (err) {
@@ -124,13 +255,14 @@ export default function AssetsClient() {
         }
         setAddress("");
         setLabel("");
+        setEns({ state: "idle" });
         setNotice("Wallet added. Scan it to find archive holdings.");
         await load();
       } finally {
         setBusy(null);
       }
     },
-    [address, label, load]
+    [address, label, ens, load]
   );
 
   const verify = useCallback(
@@ -329,9 +461,12 @@ export default function AssetsClient() {
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="0x..."
+            placeholder="0x... or yourname.eth"
             spellCheck={false}
-            aria-label="Wallet address"
+            autoCapitalize="none"
+            autoCorrect="off"
+            aria-label="Wallet address or ENS name"
+            aria-describedby="add-wallet-resolution"
             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-obsidian-100 outline-none placeholder:text-obsidian-600 focus:border-ether-500"
           />
           <input
@@ -343,12 +478,40 @@ export default function AssetsClient() {
           />
           <button
             type="submit"
-            disabled={busy === "add" || address.trim().length === 0}
+            disabled={
+              busy === "add" ||
+              address.trim().length === 0 ||
+              (classifyInput(address) === "ens" && ens.state === "resolving")
+            }
             className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === "add" ? "Adding" : "Add wallet"}
           </button>
         </div>
+
+        {/* The confirmation line. It occupies the same slot whatever the state,
+            so the form does not jump as a name resolves. aria-live announces the
+            resolved address to a screen reader, which otherwise gets no signal
+            that the field turned a name into something else entirely. */}
+        <p
+          id="add-wallet-resolution"
+          aria-live="polite"
+          className="min-h-[1.25rem] text-xs"
+        >
+          {ens.state === "resolving" ? (
+            <span className="text-obsidian-500">Resolving {address.trim().toLowerCase()}...</span>
+          ) : ens.state === "found" ? (
+            <span className="text-obsidian-400">
+              {address.trim().toLowerCase()} resolves to{" "}
+              <span className="font-mono text-ether-300">{ens.address}</span>. This is the
+              address that will be added.
+            </span>
+          ) : ens.state === "missing" ? (
+            <span className="text-amber-300">
+              {address.trim().toLowerCase()} does not resolve to an address.
+            </span>
+          ) : null}
+        </p>
       </form>
 
       {error ? (
