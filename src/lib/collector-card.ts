@@ -54,6 +54,8 @@ export interface DetectedHolding {
   deployedYear: number | null;
   /** Deployment block, the input to the collector score. */
   deploymentBlock: number | null;
+  /** Why this contract matters, from the EH record. */
+  shortDescription: string | null;
 }
 
 export interface ScanResult {
@@ -274,6 +276,7 @@ export async function crossReferenceAgainstArchive(
       eraId: contracts.eraId,
       deploymentTimestamp: contracts.deploymentTimestamp,
       deploymentBlock: contracts.deploymentBlock,
+      shortDescription: contracts.shortDescription,
     })
     .from(contracts)
     .where(and(inArray(contracts.address, targets), eq(contracts.isDocumented, true)));
@@ -307,6 +310,7 @@ export async function crossReferenceAgainstArchive(
       eraId: meta.eraId ?? null,
       deployedYear: meta.deploymentTimestamp ? new Date(meta.deploymentTimestamp).getUTCFullYear() : null,
       deploymentBlock: meta.deploymentBlock ?? null,
+      shortDescription: meta.shortDescription ?? null,
     });
   }
 
@@ -463,36 +467,87 @@ export function computeCollectorScore(
 
 
 /**
- * Score tiers.
+ * Collector tiers.
  *
- * A bare number says nothing about what it means to hold a 2015 contract, so
- * the card leads with a title and keeps the number as supporting detail. The
- * bands are contiguous and cover 0 to 100 with no gaps, so every score resolves
- * to exactly one tier.
+ * Modelled on the donor ladder in /supporters (Philanthropist, Benefactor,
+ * Sponsor, Patron, Supporter): single word role nouns, an explicit threshold,
+ * a colour that gets quieter as the tier does, and no narrative.
  *
- * Every blurb describes what the holder HOLDS, never where they were. The score
- * measures the deployment date of the contracts in a wallet, which says nothing
- * about when the wallet acquired them: a 2022 wallet can hold a 2015 token it
- * bought last week. Earlier wording ("Present for the first contracts ever
- * deployed", "Came through the fork") asserted a history the data cannot
- * support and that is usually false.
+ * Museum roles rather than event names, on purpose. The earlier set was themed
+ * around moments in Ethereum's history, and a title like "DAO Survivor" claims
+ * the holder lived through the fork. The score measures when the CONTRACTS were
+ * deployed, not when a wallet acquired them, so a four year old wallet holding
+ * 2016 tokens it bought last year would have been handed a badge for something
+ * it was not there for. A curator is defined by what they hold and look after,
+ * which is the thing the score actually measures.
  *
+ * Bands are contiguous across 0 to 100, so every score resolves to exactly one.
  * Ordered high to low; the first band whose `min` is met wins.
  */
 export interface Tier {
   label: string;
   blurb: string;
   min: number;
+  /** Threshold text, shown the way the donor tiers show "1.0+ ETH". */
+  threshold: string;
+  /** Tailwind text colour, mirroring the donor tier palette. */
+  color: string;
 }
 
 const TIERS: Tier[] = [
-  { min: 95, label: "Genesis Architect", blurb: "Holds tokens from Ethereum's earliest contracts" },
-  { min: 85, label: "Frontier Pioneer", blurb: "Holds tokens from the first contracts ever deployed" },
-  { min: 70, label: "DAO Survivor", blurb: "Holds tokens that came through the fork" },
-  { min: 50, label: "Chain Historian", blurb: "Curating the early record one contract at a time" },
-  { min: 30, label: "Block Explorer", blurb: "Digging through the archive for what mattered" },
-  { min: 0, label: "Ethereum Apprentice", blurb: "Just beginning to collect the early chain" },
+  {
+    min: 95,
+    label: "Master Curator",
+    blurb: "A collection drawn almost entirely from Ethereum's first contracts",
+    threshold: "score 95+",
+    color: "text-yellow-400",
+  },
+  {
+    min: 85,
+    label: "Senior Curator",
+    blurb: "A collection weighted heavily toward the earliest years",
+    threshold: "score 85+",
+    color: "text-ether-200",
+  },
+  {
+    min: 70,
+    label: "Curator",
+    blurb: "A collection with real depth in early Ethereum",
+    threshold: "score 70+",
+    color: "text-ether-300",
+  },
+  {
+    min: 50,
+    label: "Archivist",
+    blurb: "Holding a steady share of documented early contracts",
+    threshold: "score 50+",
+    color: "text-obsidian-200",
+  },
+  {
+    min: 30,
+    label: "Collector",
+    blurb: "Building a collection out of the documented archive",
+    threshold: "score 30+",
+    color: "text-obsidian-300",
+  },
+  {
+    min: 0,
+    label: "Apprentice",
+    blurb: "Starting a collection from the documented archive",
+    threshold: "any score",
+    color: "text-obsidian-400",
+  },
 ];
+
+export function tierForScore(score: number): Tier {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  return TIERS.find((t) => clamped >= t.min) ?? TIERS[TIERS.length - 1];
+}
+
+/** All tiers, highest first, for a legend. */
+export function allTiers(): Tier[] {
+  return TIERS;
+}
 
 /**
  * The card's one-line summary.
@@ -508,11 +563,6 @@ export function buildCardHeadline(contractCount: number, earliestYear: number | 
   return earliestYear
     ? `Collector of ${contractCount} ${noun}, dating back to ${earliestYear}`
     : `Collector of ${contractCount} ${noun}`;
-}
-
-export function tierForScore(score: number): Tier {
-  const clamped = Math.max(0, Math.min(100, Math.round(score)));
-  return TIERS.find((t) => clamped >= t.min) ?? TIERS[TIERS.length - 1];
 }
 
 /** Shape persisted in collector_cards.card_data_json and rendered by /card/[slug]. */
@@ -547,6 +597,8 @@ export interface CardData {
     eraId: string | null;
     deployedYear: number | null;
     deploymentBlock: number | null;
+    /** Present on ephemeral previews; absent on older stored cards. */
+    shortDescription?: string | null;
   }[];
   stats: {
     contractCount: number;
@@ -1093,6 +1145,7 @@ export async function buildEphemeralCard(
     eraId: h.eraId,
     deployedYear: h.deployedYear,
     deploymentBlock: h.deploymentBlock,
+    shortDescription: h.shortDescription,
   }));
 
   const scoring = computeCollectorScore(holdings);

@@ -53,7 +53,7 @@ export interface CardPayload {
     avatarSource: "profile" | "ens" | "generated";
     verified: boolean;
   };
-  tier: { label: string; blurb: string; min: number };
+  tier: { label: string; blurb: string; min: number; threshold?: string; color?: string };
   headline: string;
   wallets: { address: string; label: string | null; firstTxDate: string | null; verified: boolean }[];
   holdings: CardHolding[];
@@ -436,7 +436,11 @@ export default function HolographicCard({
 
                 {/* Tier */}
                 <div className="mt-5 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 sm:mt-6 sm:px-4 sm:py-4">
-                  <p className="text-lg font-semibold tracking-tight text-ether-200 sm:text-xl">
+                  <p
+                    className={`text-lg font-semibold tracking-tight sm:text-xl ${
+                      card.tier.color ?? "text-ether-200"
+                    }`}
+                  >
                     {card.tier.label}
                   </p>
                   <p className="mt-1 text-[0.6875rem] leading-snug text-obsidian-400">

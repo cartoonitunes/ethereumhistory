@@ -210,11 +210,6 @@ export default function HomePageClient({
               </Suspense>
             </div>
 
-            {/* Collector card funnel: paste an address, get a card, no account */}
-            <div className="mx-auto w-full max-w-3xl">
-              <CollectorCardCta />
-            </div>
-
             {/* Quick-link discovery chips */}
             <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto">
               <span className="text-xs text-obsidian-600 mr-1 hidden sm:inline">Jump to</span>
@@ -552,6 +547,25 @@ export default function HomePageClient({
               title="Historical Context"
               description="Every contract is placed in its historical context with era information."
             />
+          </div>
+        </div>
+      </section>
+
+      {/* Collector card.
+          Deliberately a small section well down the page rather than a hero
+          CTA. The archive and its search are what this site is for; the card is
+          a side door into it, so it sits among the other secondary sections and
+          is sized to match. */}
+      <section className="py-14 border-t border-obsidian-800">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-lg font-semibold text-obsidian-100">
+            Do you hold a piece of Ethereum history?
+          </h2>
+          <p className="mt-2 text-sm text-obsidian-400">
+            Check any wallet against the archive and see which documented contracts it holds.
+          </p>
+          <div className="mt-5">
+            <CollectorCardCta />
           </div>
         </div>
       </section>

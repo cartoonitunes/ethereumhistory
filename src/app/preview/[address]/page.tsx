@@ -13,6 +13,7 @@ import { Header } from "@/components/Header";
 import { buildEphemeralCard } from "@/lib/collector-card";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import HolographicCard, { type CardPayload } from "@/app/card/[slug]/HolographicCard";
+import HoldingsList, { type HoldingItem } from "@/app/assets/[slug]/HoldingsList";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,30 @@ export default async function PreviewPage({
           slug={`preview/${encodeURIComponent(address)}`}
           previewMode
         />
+
+        {/* The card alone is thin value for a first visit, so the holdings sit
+            right under it: what they own, why each one matters, and a way into
+            the archive. This is the same list a saved collection page shows. */}
+        {result.card.holdings.length > 0 ? (
+          <div className="w-full max-w-3xl">
+            <HoldingsList
+              holdings={result.card.holdings.map(
+                (h): HoldingItem => ({
+                  contractAddress: h.contractAddress,
+                  name: h.tokenName ?? h.contractAddress.slice(0, 10),
+                  symbol: h.tokenSymbol,
+                  balance: h.balance,
+                  tokenDecimals: h.tokenDecimals,
+                  tokenType: h.tokenType,
+                  viaWrapper: h.viaWrapper,
+                  deployedYear: h.deployedYear,
+                  eraId: h.eraId,
+                  shortDescription: h.shortDescription ?? null,
+                })
+              )}
+            />
+          </div>
+        ) : null}
 
         <div className="flex max-w-sm flex-col items-center gap-3 text-center">
           <p className="text-xs leading-relaxed text-obsidian-500">
