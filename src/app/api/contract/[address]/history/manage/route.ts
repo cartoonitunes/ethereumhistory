@@ -349,7 +349,9 @@ export async function POST(
       const rawWrapperOf = String(contractPatch.wrapperOf || "").trim();
       if (rawWrapperOf === "") {
         wrapperOfPatch = null;
-      } else if (!/^0x[0-9a-fA-F]{40}$/.test(rawWrapperOf)) {
+        // 0X as well as 0x: some tools emit an uppercased prefix, and rejecting
+        // a paste for that is a pointless failure. Normalised below.
+      } else if (!/^0[xX][0-9a-fA-F]{40}$/.test(rawWrapperOf)) {
         return NextResponse.json(
           { data: null, error: "wrapperOf must be a 0x-prefixed 40 character address, or empty to clear it." },
           { status: 400 }

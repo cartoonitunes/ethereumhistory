@@ -3188,6 +3188,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   const [savedContext, setSavedContext] = useState(contract.historicalContext || "");
   const [savedTokenLogo, setSavedTokenLogo] = useState(contract.tokenLogo || "");
   const [savedDeployerAddress, setSavedDeployerAddress] = useState(contract.deployerAddress || "");
+  const [savedWrapperOf, setSavedWrapperOf] = useState(contract.wrapperOf || "");
 
   const [draftEtherscanContractName, setDraftEtherscanContractName] = useState(savedEtherscanContractName);
   const [draftTokenName, setDraftTokenName] = useState(savedTokenName);
@@ -3199,6 +3200,11 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
   const [draftContext, setDraftContext] = useState(savedContext);
   const [draftTokenLogo, setDraftTokenLogo] = useState(savedTokenLogo);
   const [draftDeployerAddress, setDraftDeployerAddress] = useState(savedDeployerAddress);
+  const [draftWrapperOf, setDraftWrapperOf] = useState(savedWrapperOf);
+  // Name of the contract the address points at, looked up as it is typed so a
+  // historian can see they picked the right one instead of trusting 40 hex
+  // characters. null = not found, undefined = not looked up yet.
+  const [wrapperOfName, setWrapperOfName] = useState<string | null | undefined>(undefined);
   const [draftLinks, setDraftLinks] = useState<DraftLink[]>([]);
   
   // People list for dropdown
@@ -3219,6 +3225,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setSavedSignificance(contract.historicalSignificance || "");
     setSavedContext(contract.historicalContext || "");
     setSavedTokenLogo(contract.tokenLogo || "");
+    setSavedWrapperOf(contract.wrapperOf || "");
 
     setDraftEtherscanContractName(contract.etherscanContractName || "");
     setDraftTokenName(contract.tokenName || "");
@@ -3230,6 +3237,8 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setDraftContext(contract.historicalContext || "");
     setDraftTokenLogo(contract.tokenLogo || "");
     setDraftDeployerAddress(contract.deployerAddress || "");
+    setDraftWrapperOf(contract.wrapperOf || "");
+    setWrapperOfName(undefined);
     setDraftLinks([]);
     setEditMode(false);
     setSaveError(null);
@@ -3237,6 +3246,45 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
     setNewPersonName("");
   }, [contract.address]);
 
+
+  // Resolve the "Wrapper of" address to a contract name while the historian
+  // types. Debounced, and only fires on a well formed address, so typing does
+  // not generate a request per keystroke. Purely advisory: the value still
+  // saves if the lookup fails, since the archive may lag the chain.
+  useEffect(() => {
+    const value = draftWrapperOf.trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(value)) {
+      setWrapperOfName(undefined);
+      return;
+    }
+    if (value === contract.address.toLowerCase()) {
+      // Handled in render as its own case; do not look it up.
+      setWrapperOfName(undefined);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/contract/${value}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setWrapperOfName(null);
+          return;
+        }
+        const json = await res.json();
+        const c = json?.data?.contract;
+        setWrapperOfName(
+          c ? (c.etherscanContractName || c.tokenName || c.ensName || value) : null
+        );
+      } catch {
+        if (!cancelled) setWrapperOfName(null);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [draftWrapperOf, contract.address]);
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -3429,6 +3477,7 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
             historicalContext: draftContext,
             tokenLogo: draftTokenLogo,
             deployerAddress: draftDeployerAddress || null,
+            wrapperOf: draftWrapperOf.trim(),
           },
           links: visibleLinks.map((l) => ({
             id: l.id,
@@ -3746,6 +3795,35 @@ function HistoricalDocsSection({ contract }: { contract: ContractPageData["contr
               />
               <div className="text-xs text-obsidian-500 mt-1">
                 Tip: this uses the existing <code className="font-mono">tokenLogo</code> field so it renders immediately.
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-obsidian-500 mb-1">Wrapper of</div>
+              <input
+                value={draftWrapperOf}
+                onChange={(e) => setDraftWrapperOf(e.target.value)}
+                spellCheck={false}
+                className="w-full rounded-lg bg-obsidian-900/50 border border-obsidian-800 px-3 py-2 text-sm font-mono outline-none focus:border-ether-500/50 focus:ring-2 focus:ring-ether-500/20"
+                placeholder="0x... address of the historic contract this one wraps"
+              />
+              <div className="text-xs mt-1">
+                {draftWrapperOf.trim().toLowerCase() === contract.address.toLowerCase() ? (
+                  <span className="text-amber-400">
+                    A contract cannot be a wrapper of itself.
+                  </span>
+                ) : wrapperOfName === undefined ? (
+                  <span className="text-obsidian-500">
+                    Set this when the contract is a wrapper. It will then appear under
+                    &quot;Wrapped as&quot; on the original&apos;s page, and holding it counts as
+                    holding the original on a collector card. Leave blank to clear.
+                  </span>
+                ) : wrapperOfName === null ? (
+                  <span className="text-amber-400">
+                    No contract with that address is in the archive. Double check it before saving.
+                  </span>
+                ) : (
+                  <span className="text-ether-300">Wraps: {wrapperOfName}</span>
+                )}
               </div>
             </div>
             <div>

@@ -8,6 +8,7 @@
 
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { Header } from "@/components/Header";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -73,23 +74,26 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
   if (!card) notFound();
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-4 py-16">
-      <HolographicCard card={card} shareUrl={`${SITE_URL}/card/${slug}`} />
+    <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
+      <Header />
+      <main className="flex flex-col items-center gap-10 px-4 py-16">
+        <HolographicCard card={card} shareUrl={`${SITE_URL}/card/${slug}`} />
 
-      <p className="max-w-sm text-center text-xs leading-relaxed text-obsidian-500">
-        {card.stats.allWalletsVerified
-          ? "Every wallet behind this card was verified by signature."
-          : "The wallets behind this card have not been verified by signature, so these holdings are a claim rather than a proof."}{" "}
-        Balances were read from the chain and matched against the Ethereum History
-        archive.
-      </p>
+        <p className="max-w-sm text-center text-xs leading-relaxed text-obsidian-500">
+          {card.stats.allWalletsVerified
+            ? "Every wallet behind this card was verified by signature."
+            : "The wallets behind this card have not been verified by signature, so these holdings are a claim rather than a proof."}{" "}
+          Balances were read from the chain and matched against the Ethereum History
+          archive.
+        </p>
 
-      <a
-        href="/assets"
-        className="text-xs text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
-      >
-        Make your own collector card
-      </a>
-    </main>
+        <a
+          href="/assets"
+          className="text-xs text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
+        >
+          Make your own collector card
+        </a>
+      </main>
+    </div>
   );
 }
