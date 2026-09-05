@@ -141,6 +141,11 @@ export default function HolographicCard({
   // Revealed after the first tweet opens, so the reply button only appears when
   // there is something to reply to.
   const [threadStarted, setThreadStarted] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  /** How the image reached the user, which decides what the instruction says. */
+  const [imageDelivery, setImageDelivery] = useState<"saved" | "opened" | "failed" | null>(null);
+  /** Set when the compose tab could not be opened, so a manual link is offered. */
+  const [popupBlocked, setPopupBlocked] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   // A preview's slug already carries its own path segment, since ephemeral
@@ -265,32 +270,96 @@ export default function HolographicCard({
   /**
    * Share as a two step thread.
    *
-   * X web intents cannot attach media and cannot chain a reply to a tweet that
-   * does not exist yet, so a genuine one click thread is not possible. Two
-   * things follow from that, and both shape this flow.
+   * X web intents cannot attach media, full stop. There is no parameter for it
+   * and no way around it, so the only honest flow is to put the file on the
+   * user's device first and tell them to attach it. That is what the share
+   * button does: save the PNG, open the compose window, say what to do next.
    *
-   * The image is not attached; it arrives because X unfurls the card URL into
-   * its summary_large_image card. That is why tweet one carries the card link.
-   * Anyone who wants the actual file rather than an unfurl has Download PNG and
-   * Copy image beside this.
+   * Intents also cannot chain a reply to a tweet that does not exist yet, so
+   * the reply is a second button that appears once the first tweet has been
+   * opened. The thread marker is never left promising a follow up that was
+   * never offered.
    *
-   * Tweet one ends with the thread marker, and the reply button appears only
-   * after it has been opened, so the marker is never left promising a follow up
-   * that was never offered. Tweet two carries the collection link.
+   * Tweet one carries no link. A link makes X render its own summary card,
+   * which competes with the image the user just attached and usually wins,
+   * and the whole point of this flow is that the card image is the post. The
+   * collection link belongs in the reply, where it is the subject rather than
+   * a decoration.
    */
-  const tweetOne = encodeURIComponent(
-    previewMode
-      ? `I am a ${card.tier.label} on Ethereum History, scoring ${card.stats.score}.\n\n${card.headline}.`
-      : `I am a ${card.tier.label} on Ethereum History, scoring ${card.stats.score}.\n\n${card.headline}.\n\n🧵`
-  );
-  const tweetOneUrl = `https://twitter.com/intent/tweet?text=${tweetOne}&url=${encodeURIComponent(shareUrl)}`;
+  // Two of the six tiers start with a vowel, so a hardcoded "a" ships
+  // "I am a Apprentice" and "I am a Archivist" in every tweet those users post.
+  const article = /^[aeiou]/i.test(card.tier.label) ? "an" : "a";
+  const opener = `I am ${article} ${card.tier.label} on Ethereum History, scoring ${card.stats.score}.\n\n${card.headline}.`;
+  const tweetOneText = previewMode ? opener : `${opener}\n\n🧵`;
 
-  const tweetTwo = encodeURIComponent(
-    `Every contract behind that score, with the story of each one, on @ethereumhistory:`
-  );
+  // The preview is the one case that keeps a link in the first tweet. It has no
+  // collection page, so there is no reply to carry one, and a post with neither
+  // link nor thread points nowhere at all.
+  const tweetOneUrl =
+    `https://x.com/intent/tweet?text=${encodeURIComponent(tweetOneText)}` +
+    (previewMode ? `&url=${encodeURIComponent(shareUrl)}` : "");
+
   const tweetTwoUrl = collectionUrl
-    ? `https://twitter.com/intent/tweet?text=${tweetTwo}&url=${encodeURIComponent(collectionUrl)}`
+    ? `https://x.com/intent/tweet?text=${encodeURIComponent(
+        "See my full collection on @ethereumhistory"
+      )}&url=${encodeURIComponent(collectionUrl)}`
     : null;
+
+  /**
+   * Save the card, then open the compose window.
+   *
+   * The ordering here is the whole trick, and both obvious orderings are wrong.
+   *
+   * Awaiting the image and then calling window.open gets the popup blocked,
+   * because the user gesture is spent by the time the call happens. Opening the
+   * tab first and then copying to the clipboard fails too, for a different
+   * reason: the new tab takes focus, and clipboard.write throws on a document
+   * that is not focused.
+   *
+   * So the window handle is taken synchronously while the gesture is still
+   * live, the image is saved into the original tab, and the handle is pointed
+   * at X afterwards. Saving rather than copying, because a download needs no
+   * focus and no permission and works in every browser, where the clipboard
+   * write does not. Copy image is still there as its own button for anyone who
+   * would rather paste.
+   */
+  const shareOnX = useCallback(async () => {
+    setSharing(true);
+    setPopupBlocked(false);
+
+    // Taken inside the gesture. A blocker cannot stop this one.
+    const win = window.open("", "_blank");
+
+    let delivery: "saved" | "opened" | "failed" = "failed";
+    try {
+      const res = await fetch(shareImageUrl);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `ethereum-history-card-${slug.replace(/[^a-z0-9]+/gi, "-")}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      delivery = "saved";
+    } catch {
+      delivery = "failed";
+    }
+
+    setImageDelivery(delivery);
+    setThreadStarted(true);
+    setSharing(false);
+
+    if (win && !win.closed) {
+      win.location.replace(tweetOneUrl);
+    } else {
+      // Never navigate the current tab: that would throw away the card the
+      // person is in the middle of sharing. Offer the link instead.
+      setPopupBlocked(true);
+    }
+  }, [shareImageUrl, slug, tweetOneUrl]);
 
   return (
     <div className="flex flex-col items-center gap-4 sm:gap-8">
@@ -475,15 +544,14 @@ export default function HolographicCard({
 
       <div className="flex flex-col items-center gap-2">
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <a
-            href={tweetOneUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setThreadStarted(true)}
-            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+          <button
+            type="button"
+            onClick={shareOnX}
+            disabled={sharing}
+            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500 disabled:opacity-60"
           >
-            Share on X
-          </a>
+            {sharing ? "Saving image" : "Share on X"}
+          </button>
           {threadStarted && tweetTwoUrl ? (
             <a
               href={tweetTwoUrl}
@@ -518,11 +586,50 @@ export default function HolographicCard({
             {copied ? "Link copied" : "Copy link"}
           </button>
         </div>
-        {threadStarted && tweetTwoUrl ? (
-          <p className="max-w-xs text-center text-xs leading-relaxed text-obsidian-500">
-            Post the first tweet, then use Post the reply and send it as a reply to
-            complete the thread.
-          </p>
+        {/* The instructions only appear once the flow has started. Explaining
+            the attach step to someone who has not pressed anything yet is noise
+            about a problem they do not have. */}
+        {threadStarted ? (
+          <div className="mt-1 flex max-w-sm flex-col gap-2 rounded-lg border border-ether-500/25 bg-ether-500/5 px-4 py-3 text-left">
+            <p className="text-xs font-medium text-ether-200">Finish the thread</p>
+            <ol className="flex flex-col gap-1.5 text-xs leading-relaxed text-obsidian-300">
+              {/* The wording tracks what actually happened. Telling someone to
+                  attach the image to "the tweet that just opened" when the
+                  compose window was blocked describes a screen they are not
+                  looking at. */}
+              <li>
+                <span className="text-obsidian-500">1.</span>{" "}
+                {imageDelivery === "saved" ? (
+                  <>Your card image was saved to your downloads.</>
+                ) : (
+                  <>The image could not be saved automatically, so use Download PNG below.</>
+                )}{" "}
+                {popupBlocked ? (
+                  <>Open the compose window with the link underneath, then attach it there.</>
+                ) : (
+                  <>Attach it to the tweet that just opened, then post it. X cannot attach it for us.</>
+                )}
+              </li>
+              <li>
+                <span className="text-obsidian-500">2.</span>{" "}
+                {tweetTwoUrl ? (
+                  <>Come back and press Post the reply, then send it as a reply to your own tweet.</>
+                ) : (
+                  <>That is the whole post. A preview has no collection page to link to yet.</>
+                )}
+              </li>
+            </ol>
+            {popupBlocked ? (
+              <a
+                href={tweetOneUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-medium text-ether-300 underline underline-offset-4"
+              >
+                Your browser blocked the compose window. Open it here.
+              </a>
+            ) : null}
+          </div>
         ) : null}
         {imageState === "unsupported" ? (
           <p className="text-xs text-obsidian-500">
