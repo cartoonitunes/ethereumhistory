@@ -11,6 +11,7 @@ import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { userWallets } from "@/lib/schema";
 import { and, eq } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +21,10 @@ export async function DELETE(
 ): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
   if (!isDatabaseConfigured()) {
-    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503 });
+    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
 
   const { address: raw } = await params;
@@ -45,9 +46,12 @@ export async function DELETE(
     );
   }
 
-  return NextResponse.json({
-    data: { removed: address },
-    error: null,
-    meta: { timestamp: new Date().toISOString(), cached: false },
-  });
+  return NextResponse.json(
+    {
+      data: { removed: address },
+      error: null,
+      meta: { timestamp: new Date().toISOString(), cached: false },
+    },
+    { headers: NO_STORE_HEADERS }
+  );
 }

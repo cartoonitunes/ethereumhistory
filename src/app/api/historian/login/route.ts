@@ -7,6 +7,7 @@ import {
   getHistorianSessionCookieOptions,
   hashHistorianToken,
 } from "@/lib/historian-auth";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,7 @@ export async function POST(
       meta: { timestamp: new Date().toISOString(), cached: false },
     },
     // Never cacheable: this response carries a Set-Cookie for a specific user.
-    { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate", Vary: "Cookie" } }
+    { headers: NO_STORE_HEADERS }
   );
 
   res.cookies.set(

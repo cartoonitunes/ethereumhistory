@@ -20,6 +20,7 @@ import { and, eq } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
 import { buildVerificationMessage } from "@/lib/collector-card";
 import { WALLET_NONCE_COOKIE } from "./challenge/route";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
@@ -29,10 +30,10 @@ export async function POST(
 ): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
   if (!isDatabaseConfigured()) {
-    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503 });
+    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
 
   const { address: raw } = await params;
@@ -96,11 +97,14 @@ export async function POST(
       .where(and(eq(userWallets.historianId, me.id), eq(userWallets.address, address)))
       .returning();
 
-    return NextResponse.json({
-      data: { wallet: row },
-      error: null,
-      meta: { timestamp: new Date().toISOString(), cached: false },
-    });
+    return NextResponse.json(
+      {
+        data: { wallet: row },
+        error: null,
+        meta: { timestamp: new Date().toISOString(), cached: false },
+      },
+      { headers: NO_STORE_HEADERS }
+    );
   } catch (err) {
     // The partial unique index allows one verified claim per address globally.
     const message = err instanceof Error ? err.message : String(err);

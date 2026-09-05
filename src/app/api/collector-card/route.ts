@@ -16,16 +16,17 @@ import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards } from "@/lib/schema";
 import { eq } from "drizzle-orm";
 import { buildCardData, generateShareSlug } from "@/lib/collector-card";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
   if (!isDatabaseConfigured()) {
-    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503 });
+    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
 
   const db = getDb();
@@ -59,9 +60,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     })
     .returning();
 
-  return NextResponse.json({
-    data: { card: row.cardDataJson, shareSlug: row.shareSlug, url: `/card/${row.shareSlug}` },
-    error: null,
-    meta: { timestamp: new Date().toISOString(), cached: false },
-  });
+  return NextResponse.json(
+    {
+      data: { card: row.cardDataJson, shareSlug: row.shareSlug, url: `/card/${row.shareSlug}` },
+      error: null,
+      meta: { timestamp: new Date().toISOString(), cached: false },
+    },
+    { headers: NO_STORE_HEADERS }
+  );
 }

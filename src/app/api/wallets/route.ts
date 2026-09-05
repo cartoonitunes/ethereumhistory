@@ -10,9 +10,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
-import { userWallets } from "@/lib/schema";
+import { userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +23,24 @@ const MAX_WALLETS_PER_ACCOUNT = 25;
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
   if (!isDatabaseConfigured()) {
-    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503 });
+    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
 
   const db = getDb();
+
+  // Aggregate over a LEFT JOIN rather than correlated subqueries. The previous
+  // version embedded `SELECT ... WHERE wh.wallet_id = ${userWallets.id}` inside
+  // a raw sql template; the interpolated column did not correlate to the outer
+  // row, so every wallet reported holdingCount 0 and lastScannedAt null no
+  // matter how many holdings it had. That is what made a successful scan still
+  // read as "0 holdings, never scanned" until the row was inspected directly.
+  //
+  // COUNT over the joined id, not COUNT(*): a LEFT JOIN with no match still
+  // yields one row, and COUNT(*) would report 1 holding for an unscanned
+  // wallet. Grouping by the primary key lets the other columns come along.
   const rows = await db
     .select({
       id: userWallets.id,
@@ -37,31 +49,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       verifiedAt: userWallets.verifiedAt,
       firstTxDate: userWallets.firstTxDate,
       addedAt: userWallets.addedAt,
-      holdingCount: sql<number>`(
-        SELECT COUNT(*)::int FROM wallet_holdings wh WHERE wh.wallet_id = ${userWallets.id}
-      )`,
-      lastScannedAt: sql<string | null>`(
-        SELECT MAX(wh.last_scanned_at) FROM wallet_holdings wh WHERE wh.wallet_id = ${userWallets.id}
-      )`,
+      holdingCount: sql<number>`COUNT(${walletHoldings.id})::int`,
+      lastScannedAt: sql<string | null>`MAX(${walletHoldings.lastScannedAt})`,
     })
     .from(userWallets)
+    .leftJoin(walletHoldings, eq(walletHoldings.walletId, userWallets.id))
     .where(eq(userWallets.historianId, me.id))
+    .groupBy(userWallets.id)
     .orderBy(userWallets.addedAt);
 
-  return NextResponse.json({
-    data: { wallets: rows },
-    error: null,
-    meta: { timestamp: new Date().toISOString(), cached: false },
-  });
+  return NextResponse.json(
+    {
+      data: { wallets: rows },
+      error: null,
+      meta: { timestamp: new Date().toISOString(), cached: false },
+    },
+    { headers: NO_STORE_HEADERS }
+  );
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
   if (!isDatabaseConfigured()) {
-    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503 });
+    return NextResponse.json({ data: null, error: "Database not configured" }, { status: 503, headers: NO_STORE_HEADERS });
   }
 
   const body = await req.json().catch(() => null);
@@ -113,6 +126,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       error: null,
       meta: { timestamp: new Date().toISOString(), cached: false },
     },
-    { status: 201 }
+    { status: 201, headers: NO_STORE_HEADERS }
   );
 }

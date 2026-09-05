@@ -61,7 +61,10 @@ export default function AssetsClient() {
   const [cardUrl, setCardUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/wallets");
+    // cache: "no-store" belts-and-braces the server's no-store headers. Without
+    // one or the other, the browser could serve this from cache and the list
+    // would still show pre-scan numbers.
+    const res = await fetch("/api/wallets", { cache: "no-store" });
     if (res.status === 401) {
       setWallets([]);
       setError("Sign in as a historian to manage wallets.");
@@ -189,7 +192,15 @@ export default function AssetsClient() {
       try {
         const res = await fetch(`/api/wallets/${wallet.address}/scan`, { method: "POST" });
         const body = (await res.json().catch(() => null)) as
-          | { data: { scanned: boolean; holdings: unknown[] } | null; error: string | null; meta?: { warning?: string } }
+          | {
+              data: {
+                scanned: boolean;
+                holdings: unknown[];
+                firstTxDate?: string | null;
+              } | null;
+              error: string | null;
+              meta?: { warning?: string };
+            }
           | null;
         if (!body || body.error) {
           setError(body?.error ?? "Scan failed.");
@@ -199,8 +210,34 @@ export default function AssetsClient() {
           setNotice(body.meta.warning);
         } else {
           const n = body.data?.holdings.length ?? 0;
-          setNotice(`Scan complete. ${n} archive ${n === 1 ? "holding" : "holdings"} found.`);
+          setNotice(`Scan complete. ${n} documented ${n === 1 ? "holding" : "holdings"} found.`);
         }
+
+        // Apply the scan's own result straight away. The refetch below is the
+        // source of truth, but it is a second round trip, and the counts it
+        // returns were the reason a completed scan still read as "never
+        // scanned" until the page was reloaded. Updating from the response the
+        // scan already handed us makes the card correct immediately.
+        if (body.data?.scanned) {
+          const scannedAt = new Date().toISOString();
+          const count = body.data.holdings.length;
+          const firstTx = body.data.firstTxDate ?? null;
+          setWallets((prev) =>
+            prev
+              ? prev.map((w) =>
+                  w.address === wallet.address
+                    ? {
+                        ...w,
+                        holdingCount: count,
+                        lastScannedAt: scannedAt,
+                        firstTxDate: firstTx ?? w.firstTxDate,
+                      }
+                    : w
+                )
+              : prev
+          );
+        }
+
         await load();
       } finally {
         setBusy(null);
@@ -334,7 +371,7 @@ export default function AssetsClient() {
                 </div>
                 <p className="mt-1 text-xs text-obsidian-500">
                   {w.label ? `${w.label} · ` : ""}
-                  {w.holdingCount} archive {w.holdingCount === 1 ? "holding" : "holdings"}
+                  {w.holdingCount} documented {w.holdingCount === 1 ? "holding" : "holdings"}
                   {w.lastScannedAt ? ` · scanned ${new Date(w.lastScannedAt).toLocaleDateString()}` : " · never scanned"}
                 </p>
               </div>

@@ -18,6 +18,7 @@ import { cookies } from "next/headers";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
 import { buildVerificationMessage } from "@/lib/collector-card";
+import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export async function GET(
 ): Promise<NextResponse> {
   const me = await getHistorianMeFromRequest(req);
   if (!me || !me.active) {
-    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ data: null, error: "Unauthorized" }, { status: 401, headers: NO_STORE_HEADERS });
   }
 
   const { address: raw } = await params;
@@ -52,9 +53,12 @@ export async function GET(
     maxAge: 600,
   });
 
-  return NextResponse.json({
-    data: { address, nonce, message },
-    error: null,
-    meta: { timestamp: new Date().toISOString(), cached: false },
-  });
+  return NextResponse.json(
+    {
+      data: { address, nonce, message },
+      error: null,
+      meta: { timestamp: new Date().toISOString(), cached: false },
+    },
+    { headers: NO_STORE_HEADERS }
+  );
 }
