@@ -118,19 +118,36 @@ export default function HolographicCard({
   card,
   shareUrl,
   slug,
+  collectionUrl,
+  previewMode = false,
 }: {
   card: CardPayload;
   shareUrl: string;
   slug: string;
+  /** Public collection page, posted as the second tweet in the thread. */
+  collectionUrl?: string;
+  /**
+   * Ephemeral card for an address with no account. There is no collection page
+   * to link to, so the thread collapses to a single tweet rather than promising
+   * a reply that has nowhere to point.
+   */
+  previewMode?: boolean;
 }) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [copied, setCopied] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [imageState, setImageState] = useState<"idle" | "working" | "copied" | "unsupported">("idle");
+  // Revealed after the first tweet opens, so the reply button only appears when
+  // there is something to reply to.
+  const [threadStarted, setThreadStarted] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const shareImageUrl = `/api/collector-card/${slug}/share`;
+  // A preview's slug already carries its own path segment, since ephemeral
+  // cards are addressed by wallet rather than by a stored slug.
+  const shareImageUrl = previewMode
+    ? `/api/collector-card/${slug}/share`
+    : `/api/collector-card/${slug}/share`;
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -178,7 +195,7 @@ export default function HolographicCard({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `ethereum-history-card-${slug}.png`;
+      a.download = `ethereum-history-card-${slug.replace(/[^a-z0-9]+/gi, "-")}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -245,12 +262,35 @@ export default function HolographicCard({
         : null;
   const avatar = !avatarFailed && card.owner.avatarUrl ? card.owner.avatarUrl : generatedAvatar(seed);
 
-  const tweet = encodeURIComponent(
-    `I am a ${card.tier.label} on Ethereum History, scoring ${card.stats.score} across ${
-      card.stats.contractCount
-    } documented ${card.stats.contractCount === 1 ? "contract" : "contracts"}.`
+  /**
+   * Share as a two step thread.
+   *
+   * X web intents cannot attach media and cannot chain a reply to a tweet that
+   * does not exist yet, so a genuine one click thread is not possible. Two
+   * things follow from that, and both shape this flow.
+   *
+   * The image is not attached; it arrives because X unfurls the card URL into
+   * its summary_large_image card. That is why tweet one carries the card link.
+   * Anyone who wants the actual file rather than an unfurl has Download PNG and
+   * Copy image beside this.
+   *
+   * Tweet one ends with the thread marker, and the reply button appears only
+   * after it has been opened, so the marker is never left promising a follow up
+   * that was never offered. Tweet two carries the collection link.
+   */
+  const tweetOne = encodeURIComponent(
+    previewMode
+      ? `I am a ${card.tier.label} on Ethereum History, scoring ${card.stats.score}.\n\n${card.headline}.`
+      : `I am a ${card.tier.label} on Ethereum History, scoring ${card.stats.score}.\n\n${card.headline}.\n\n🧵`
   );
-  const tweetUrl = `https://twitter.com/intent/tweet?text=${tweet}&url=${encodeURIComponent(shareUrl)}`;
+  const tweetOneUrl = `https://twitter.com/intent/tweet?text=${tweetOne}&url=${encodeURIComponent(shareUrl)}`;
+
+  const tweetTwo = encodeURIComponent(
+    `Every contract behind that score, with the story of each one, on @ethereumhistory:`
+  );
+  const tweetTwoUrl = collectionUrl
+    ? `https://twitter.com/intent/tweet?text=${tweetTwo}&url=${encodeURIComponent(collectionUrl)}`
+    : null;
 
   return (
     <div className="flex flex-col items-center gap-4 sm:gap-8">
@@ -432,13 +472,24 @@ export default function HolographicCard({
       <div className="flex flex-col items-center gap-2">
         <div className="flex flex-wrap items-center justify-center gap-2">
           <a
-            href={tweetUrl}
+            href={tweetOneUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => setThreadStarted(true)}
             className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
           >
             Share on X
           </a>
+          {threadStarted && tweetTwoUrl ? (
+            <a
+              href={tweetTwoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-lg border border-ether-500/50 bg-ether-500/10 px-4 py-2 text-sm font-medium text-ether-200 transition-colors hover:bg-ether-500/20"
+            >
+              Post the reply
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={downloadImage}
@@ -463,6 +514,12 @@ export default function HolographicCard({
             {copied ? "Link copied" : "Copy link"}
           </button>
         </div>
+        {threadStarted && tweetTwoUrl ? (
+          <p className="max-w-xs text-center text-xs leading-relaxed text-obsidian-500">
+            Post the first tweet, then use Post the reply and send it as a reply to
+            complete the thread.
+          </p>
+        ) : null}
         {imageState === "unsupported" ? (
           <p className="text-xs text-obsidian-500">
             This browser cannot copy images. Use Download PNG instead.

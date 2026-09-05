@@ -1,0 +1,92 @@
+/**
+ * /preview/[address]  an ephemeral collector card for any wallet.
+ *
+ * Server rendered and recomputed on each view rather than stored, so the card
+ * is shareable as a real URL (X can unfurl it) while still living nowhere in
+ * the database. Signing up is what turns it into a card someone owns.
+ */
+
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Header } from "@/components/Header";
+import { buildEphemeralCard } from "@/lib/collector-card";
+import { cached, CACHE_TTL } from "@/lib/cache";
+import HolographicCard, { type CardPayload } from "@/app/card/[slug]/HolographicCard";
+
+export const dynamic = "force-dynamic";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.ethereumhistory.com";
+
+/** Cached per address so a shared preview does not rescan on every view. */
+async function load(address: string) {
+  const key = decodeURIComponent(address).trim().toLowerCase();
+  if (!key || key.length > 128) return null;
+  const result = await cached(`card-preview:${key}`, CACHE_TTL.MEDIUM, () =>
+    buildEphemeralCard(key)
+  );
+  return "error" in result ? null : result;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ address: string }>;
+}): Promise<Metadata> {
+  const { address } = await params;
+  const result = await load(address);
+  if (!result) return { title: "Card preview", robots: { index: false, follow: false } };
+
+  const { card } = result;
+  const title = `${card.owner.name} on Ethereum History`;
+  const image = `${SITE_URL}/api/collector-card/preview/${encodeURIComponent(address)}/share`;
+  return {
+    title,
+    description: card.headline,
+    // Not indexed: these are generated on demand for arbitrary addresses and
+    // are not pages anyone owns.
+    robots: { index: false, follow: false },
+    openGraph: { title, description: card.headline, images: [{ url: image, width: 1200, height: 675 }] },
+    twitter: { card: "summary_large_image", title, description: card.headline, images: [image] },
+  };
+}
+
+export default async function PreviewPage({
+  params,
+}: {
+  params: Promise<{ address: string }>;
+}) {
+  const { address } = await params;
+  const result = await load(address);
+  if (!result) notFound();
+
+  const shareUrl = `${SITE_URL}/preview/${encodeURIComponent(address)}`;
+
+  return (
+    <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
+      <Header />
+      <main className="flex flex-col items-center gap-8 px-4 py-10 sm:py-14">
+        <HolographicCard
+          card={result.card as unknown as CardPayload}
+          shareUrl={shareUrl}
+          slug={`preview/${encodeURIComponent(address)}`}
+          previewMode
+        />
+
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <p className="text-xs leading-relaxed text-obsidian-500">
+            This card is generated on the spot and is not saved anywhere. Sign in to
+            keep it, verify your wallet for the badge, and get the full collection
+            page with every holding and its story.
+          </p>
+          <Link
+            href="/assets"
+            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
+          >
+            Save my card
+          </Link>
+        </div>
+      </main>
+    </div>
+  );
+}

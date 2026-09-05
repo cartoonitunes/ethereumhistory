@@ -78,3 +78,21 @@ export async function getEnsAvatar(name: string | null | undefined): Promise<str
     return null;
   }
 }
+
+/**
+ * Forward resolution: an ENS name to the address it points at.
+ *
+ * Used by the unauthenticated card preview, where a visitor is far more likely
+ * to type their .eth name than a 42 character hex string.
+ */
+export async function getEnsAddress(name: string | null | undefined): Promise<string | null> {
+  if (!name || typeof name !== "string") return null;
+  const client = getPublicClient();
+  if (!client) return null;
+  try {
+    const address = await client.getEnsAddress({ name: name.trim().toLowerCase() });
+    return address ? address.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}

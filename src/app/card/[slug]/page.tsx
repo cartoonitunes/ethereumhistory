@@ -80,7 +80,12 @@ export default async function CardPage({ params }: { params: Promise<{ slug: str
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
       <Header />
       <main className="flex flex-col items-center gap-10 px-4 py-16">
-        <HolographicCard card={card} shareUrl={`${SITE_URL}/card/${slug}`} slug={slug} />
+        <HolographicCard
+        card={card}
+        shareUrl={`${SITE_URL}/card/${slug}`}
+        slug={slug}
+        collectionUrl={`${SITE_URL}/assets/${slug}`}
+      />
 
         <p className="max-w-sm text-center text-xs leading-relaxed text-obsidian-500">
           {card.stats.allWalletsVerified

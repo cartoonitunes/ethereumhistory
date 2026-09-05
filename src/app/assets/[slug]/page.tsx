@@ -14,7 +14,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { isDatabaseConfigured } from "@/lib/db-client";
-import { getPublicPortfolio, formatBalance } from "@/lib/collector-card";
+import { getPublicPortfolio } from "@/lib/collector-card";
+import HoldingsList from "./HoldingsList";
 
 export const dynamic = "force-dynamic";
 
@@ -49,19 +50,6 @@ export async function generateMetadata({
   };
 }
 
-function eraLabel(eraId: string | null): string | null {
-  if (!eraId) return null;
-  const map: Record<string, string> = {
-    frontier: "Frontier",
-    homestead: "Homestead",
-    dao: "DAO fork",
-    tangerine: "Tangerine Whistle",
-    spurious: "Spurious Dragon",
-    byzantium: "Byzantium",
-    constantinople: "Constantinople",
-  };
-  return map[eraId] ?? eraId;
-}
 
 export default async function PublicAssetsPage({
   params,
@@ -116,61 +104,7 @@ export default async function PublicAssetsPage({
           </Link>
         </header>
 
-        {/* Holdings */}
-        <section className="mt-12">
-          <h2 className="text-sm font-medium text-obsidian-200">
-            Documented holdings, oldest first
-          </h2>
-          {p.holdings.length === 0 ? (
-            <p className="mt-3 text-sm text-obsidian-500">
-              No documented holdings on this collection yet.
-            </p>
-          ) : (
-            <ul className="mt-4 flex flex-col gap-3">
-              {p.holdings.map((h) => {
-                const era = eraLabel(h.eraId);
-                const isNft = h.tokenType === "erc721";
-                return (
-                  <li key={h.contractAddress}>
-                    <Link
-                      href={`/contract/${h.contractAddress}`}
-                      className="flex flex-col gap-2 rounded-xl border border-white/10 p-4 transition-colors hover:border-white/25"
-                    >
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span className="w-11 shrink-0 font-mono text-xs tabular-nums text-ether-400/90">
-                          {h.deployedYear ?? "·"}
-                        </span>
-                        <span className="text-sm font-medium text-obsidian-100">{h.name}</span>
-                        {h.symbol ? (
-                          <span className="font-mono text-[0.6875rem] text-obsidian-500">
-                            {h.symbol}
-                          </span>
-                        ) : null}
-                        <span className="ml-auto font-mono text-xs tabular-nums text-obsidian-300">
-                          {isNft
-                            ? `${h.balance} ${Number(h.balance) === 1 ? "token" : "tokens"}`
-                            : `${formatBalance(h.balance, h.tokenDecimals)}${h.symbol ? ` ${h.symbol}` : ""}`}
-                        </span>
-                      </div>
-
-                      {h.shortDescription ? (
-                        <p className="pl-14 text-xs leading-relaxed text-obsidian-400">
-                          {h.shortDescription}
-                        </p>
-                      ) : null}
-
-                      <div className="flex flex-wrap items-center gap-2 pl-14 text-[0.625rem] uppercase tracking-wider text-obsidian-600">
-                        {era ? <span>{era}</span> : null}
-                        {isNft ? <span>ERC-721</span> : <span>ERC-20</span>}
-                        {h.viaWrapper ? <span className="text-ether-400/70">held as wrapper</span> : null}
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+        <HoldingsList holdings={p.holdings} />
 
         <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-500">
           {p.owner.verified

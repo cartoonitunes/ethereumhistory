@@ -13,6 +13,7 @@ import { EraCompact } from "@/components/EraTimeline";
 import { Users as UsersIcon, PenLine, FileText } from "lucide-react";
 import type { FeaturedContract } from "@/types";
 import type { CollectionSummary } from "@/lib/db/collections";
+import CollectorCardCta from "./CollectorCardCta";
 
 export interface TopEditor {
   historianId: number;
@@ -207,6 +208,11 @@ export default function HomePageClient({
               >
                 <OmniSearch />
               </Suspense>
+            </div>
+
+            {/* Collector card funnel: paste an address, get a card, no account */}
+            <div className="mx-auto w-full max-w-3xl">
+              <CollectorCardCta />
             </div>
 
             {/* Quick-link discovery chips */}

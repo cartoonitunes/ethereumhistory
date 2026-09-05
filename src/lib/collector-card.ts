@@ -24,7 +24,7 @@
 import { getDb } from "@/lib/db-client";
 import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { getEnsAvatar, getEnsName } from "@/lib/ens";
+import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
 
 /** A scan should never hold a request open longer than this per call. */
 const RPC_TIMEOUT_MS = 15_000;
@@ -1026,5 +1026,130 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
     headline: normalized.headline,
     stats: normalized.stats,
     holdings,
+  };
+}
+
+/**
+ * Build a card for any address without touching the database.
+ *
+ * This is the unauthenticated funnel: a visitor pastes an address or ENS name
+ * and sees their card immediately, with no account. Nothing is persisted, so
+ * there is no row to clean up and no way for a stranger's address to end up
+ * stored against somebody's account.
+ *
+ * Necessarily unverified: no signature was given, so the card says so. It also
+ * costs a live provider scan per distinct address, which is why the route that
+ * calls this is rate limited and the result is cached.
+ */
+export async function buildEphemeralCard(
+  input: string
+): Promise<{ card: CardData; address: string } | { error: string }> {
+  const raw = input.trim();
+  if (!raw) return { error: "Enter a wallet address or ENS name." };
+
+  let address: string | null = null;
+  let ensName: string | null = null;
+
+  if (/^0x[0-9a-fA-F]{40}$/.test(raw)) {
+    address = raw.toLowerCase();
+  } else if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/i.test(raw)) {
+    ensName = raw.toLowerCase();
+    address = await getEnsAddress(ensName);
+    if (!address) return { error: `Could not resolve ${ensName}.` };
+  } else {
+    return { error: "That does not look like an address or a .eth name." };
+  }
+
+  const scan = await scanWallet(address);
+  if (scan.degraded && scan.holdings.length === 0) {
+    return { error: scan.warning ?? "Could not reach the token provider. Try again shortly." };
+  }
+
+  // Reverse resolve when given a raw address, so the card can lead with a name.
+  if (!ensName) {
+    try {
+      ensName = await getEnsName(address);
+    } catch {
+      ensName = null;
+    }
+  }
+  let avatarUrl: string | null = null;
+  if (ensName) {
+    try {
+      avatarUrl = await getEnsAvatar(ensName);
+    } catch {
+      avatarUrl = null;
+    }
+  }
+
+  const holdings = scan.holdings.map((h) => ({
+    contractAddress: h.contractAddress,
+    tokenName: h.tokenName,
+    tokenSymbol: h.tokenSymbol,
+    balance: h.balance,
+    tokenDecimals: h.tokenDecimals,
+    tokenType: h.tokenType,
+    viaWrapper: h.viaWrapper,
+    eraId: h.eraId,
+    deployedYear: h.deployedYear,
+    deploymentBlock: h.deploymentBlock,
+  }));
+
+  const scoring = computeCollectorScore(holdings);
+  const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
+  const earliestYear = years.length > 0 ? Math.min(...years) : null;
+  const eraCounts: Record<string, number> = {};
+  for (const h of holdings) {
+    const key = h.eraId ?? "unknown";
+    eraCounts[key] = (eraCounts[key] ?? 0) + 1;
+  }
+  const onChainSince = scan.firstTxDate;
+
+  return {
+    address,
+    card: {
+      version: 2,
+      owner: {
+        name: ensName ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
+        ensName,
+        avatarUrl,
+        avatarSource: avatarUrl ? "ens" : "generated",
+        // No signature was given, so this can never claim to be verified.
+        verified: false,
+      },
+      tier: tierForScore(scoring.score),
+      headline: buildCardHeadline(holdings.length, earliestYear),
+      wallets: [
+        {
+          address,
+          label: null,
+          firstTxDate: onChainSince ? onChainSince.toISOString() : null,
+          verified: false,
+        },
+      ],
+      holdings: holdings.sort((a, b) => {
+        const ab = a.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+        const bb = b.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
+        return ab - bb;
+      }),
+      stats: {
+        contractCount: holdings.length,
+        walletCount: 1,
+        verifiedWalletCount: 0,
+        allWalletsVerified: false,
+        earliestYear,
+        onChainSince: onChainSince ? onChainSince.toISOString() : null,
+        walletAgeYears: onChainSince
+          ? Math.max(
+              0,
+              Math.floor((Date.now() - onChainSince.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+            )
+          : null,
+        eraCounts,
+        score: scoring.score,
+        averageBlock: scoring.averageBlock,
+      },
+      generatedAt: new Date().toISOString(),
+    },
   };
 }
