@@ -449,18 +449,91 @@ export const SCORE_REFERENCE_BLOCK = 25_000_000;
  * to averaging deployment order. A median would be steadier if that turns out
  * to matter in practice.
  */
-export function computeCollectorScore(
-  holdings: { deploymentBlock: number | null }[]
-): { score: number; averageBlock: number | null; scoredCount: number } {
+/** How many of the earliest holdings the depth component considers. */
+export const SCORE_DEPTH_N = 5;
+
+/** Holdings needed for the full breadth component. */
+const SCORE_BREADTH_SATURATION = 25;
+
+/** Split of the 100 points between how early the collection is and how wide. */
+const DEPTH_WEIGHT = 85;
+const BREADTH_WEIGHT = 15;
+
+/**
+ * Collector score, 0 to 100. Earlier and wider collections score higher.
+ *
+ * THE INVARIANT: adding a holding can never lower the score.
+ *
+ * The previous formula used the MEAN deployment block of every holding, which
+ * broke that badly. A collector with nineteen holdings at 85 added seven more
+ * and dropped to 84, because each later contract pulled the average forward.
+ * The score punished people for collecting more, which is the opposite of what
+ * it should reward.
+ *
+ * Note that a median or percentile does not fix this. Any measure of central
+ * tendency can be dragged later by additions: holdings at 2015, 2015 and 2016
+ * have a median of 2015, and adding two contracts from 2020 moves that median
+ * to 2016. Only a measure that ignores the later end of the distribution is
+ * safe. This uses two such measures.
+ *
+ *   depth   the mean block of the N EARLIEST holdings, inverted against the
+ *           pinned reference. Monotone because the set of N earliest can only
+ *           move earlier when a holding is added: a new contract either
+ *           displaces a later one from that set, or is ignored.
+ *
+ *   breadth a saturating function of how many documented contracts are held.
+ *           Monotone because the count only rises.
+ *
+ * Both components are non decreasing in the holdings, so their sum is too.
+ *
+ * Depth uses the five earliest rather than the single earliest so that breadth
+ * of EARLY holdings still counts. Scoring on the minimum alone would make one
+ * lucky 2015 token worth exactly as much as fifty of them.
+ */
+export function computeCollectorScore(holdings: { deploymentBlock: number | null }[]): {
+  score: number;
+  /** Mean block of the earliest N, the input to the depth component. */
+  averageBlock: number | null;
+  scoredCount: number;
+} {
   const blocks = holdings
     .map((h) => h.deploymentBlock)
-    .filter((b): b is number => typeof b === "number" && b > 0);
+    .filter((b): b is number => typeof b === "number" && b > 0)
+    .sort((a, b) => a - b);
 
   if (blocks.length === 0) return { score: 0, averageBlock: null, scoredCount: 0 };
 
-  const averageBlock = Math.round(blocks.reduce((a, b) => a + b, 0) / blocks.length);
-  const ratio = averageBlock / SCORE_REFERENCE_BLOCK;
-  const score = Math.max(0, Math.min(100, Math.round((1 - ratio) * 100)));
+  // Always average over exactly N slots, padding missing ones with the
+  // reference ceiling.
+  //
+  // Averaging over however many holdings exist is NOT monotone, and a property
+  // test caught it: with two holdings the depth set is those two, and adding a
+  // third from 2026 makes it a set of three whose mean is far later. Padding
+  // fixes this because a new holding can only ever replace a padded worst case
+  // slot with a real block, or displace a later real block, and every position
+  // in the sorted first N therefore moves earlier or stays put.
+  //
+  // It also means depth genuinely measures early DEPTH. One lucky 2015 token
+  // leaves four slots at the ceiling and scores modestly, which is the intent:
+  // a Master Curator should hold several early contracts, not one.
+  const slots: number[] = [];
+  for (let i = 0; i < SCORE_DEPTH_N; i += 1) {
+    slots.push(i < blocks.length ? blocks[i] : SCORE_REFERENCE_BLOCK);
+  }
+  const averageBlock = Math.round(slots.reduce((a, b) => a + b, 0) / SCORE_DEPTH_N);
+
+  const depthRatio = Math.max(0, Math.min(1, 1 - averageBlock / SCORE_REFERENCE_BLOCK));
+  const depth = depthRatio * DEPTH_WEIGHT;
+
+  // Logarithmic so the first few holdings matter most and the hundredth is not
+  // worth the same as the second. Saturates rather than growing without bound.
+  const breadthRatio = Math.min(
+    1,
+    Math.log10(1 + blocks.length) / Math.log10(1 + SCORE_BREADTH_SATURATION)
+  );
+  const breadth = breadthRatio * BREADTH_WEIGHT;
+
+  const score = Math.max(0, Math.min(100, Math.round(depth + breadth)));
 
   return { score, averageBlock, scoredCount: blocks.length };
 }
@@ -883,7 +956,19 @@ export function normalizeCardData(raw: unknown): CardData {
   const owner = (c.owner ?? {}) as Partial<CardData["owner"]>;
   const holdings = Array.isArray(c.holdings) ? (c.holdings as CardData["holdings"]) : [];
   const wallets = Array.isArray(c.wallets) ? (c.wallets as CardData["wallets"]) : [];
-  const score = typeof stats.score === "number" ? stats.score : 0;
+
+  // Recomputed from the stored holdings rather than read from stats, for the
+  // same reason tier and headline are: a frozen score means a formula fix never
+  // reaches a card that already exists, and its owner sees an old number with
+  // no way to know they must rebuild. Stored holdings carry deploymentBlock, so
+  // this is exact. Falls back to the stored value only when they do not.
+  const recomputed = computeCollectorScore(holdings);
+  const score =
+    recomputed.scoredCount > 0
+      ? recomputed.score
+      : typeof stats.score === "number"
+        ? stats.score
+        : 0;
 
   const walletCount = stats.walletCount ?? wallets.length;
   const verifiedWalletCount =
@@ -945,7 +1030,7 @@ export function normalizeCardData(raw: unknown): CardData {
           : null),
       eraCounts: stats.eraCounts ?? {},
       score,
-      averageBlock: stats.averageBlock ?? null,
+      averageBlock: recomputed.scoredCount > 0 ? recomputed.averageBlock : (stats.averageBlock ?? null),
     },
     generatedAt: c.generatedAt ?? new Date().toISOString(),
   };
