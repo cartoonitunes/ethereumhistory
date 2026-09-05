@@ -17,6 +17,7 @@ import {
   index,
   uniqueIndex,
   primaryKey,
+  numeric,
 } from "drizzle-orm/pg-core";
 
 // =============================================================================
@@ -631,3 +632,113 @@ export const collections = pgTable(
 
 export type Collection = typeof collections.$inferSelect;
 export type NewCollection = typeof collections.$inferInsert;
+
+// =============================================================================
+// Collector Card (migration 081)
+//
+// `historians` is this codebase's account table, so every ownership link below
+// points at historians.id. Not to be confused with `people_wallets`, which is
+// editorial data about historical figures rather than user accounts.
+// =============================================================================
+
+export const userWallets = pgTable(
+  "user_wallets",
+  {
+    id: serial("id").primaryKey(),
+    historianId: integer("historian_id").notNull(),
+    /** Always lowercase. A CHECK constraint enforces this in Postgres. */
+    address: text("address").notNull(),
+    label: text("label"),
+    /** Set only once a personal_sign challenge recovered to this address. */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    firstTxDate: timestamp("first_tx_date", { withTimezone: true }),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    historianAddressIdx: uniqueIndex("user_wallets_historian_address_unique").on(
+      table.historianId,
+      table.address
+    ),
+    historianIdx: index("user_wallets_historian_idx").on(table.historianId),
+  })
+);
+
+export type UserWallet = typeof userWallets.$inferSelect;
+export type NewUserWallet = typeof userWallets.$inferInsert;
+
+export const walletHoldings = pgTable(
+  "wallet_holdings",
+  {
+    id: serial("id").primaryKey(),
+    walletId: integer("wallet_id").notNull(),
+    contractAddress: text("contract_address").notNull(),
+    tokenSymbol: text("token_symbol"),
+    tokenName: text("token_name"),
+    /**
+     * Raw on chain integer as a string, never a JS number. A uint256 balance
+     * exceeds Number.MAX_SAFE_INTEGER, so parsing it into a float would lose
+     * precision. Scale by tokenDecimals only at render time.
+     */
+    balance: numeric("balance", { precision: 78, scale: 0 }).notNull().default("0"),
+    tokenDecimals: integer("token_decimals"),
+    tokenType: text("token_type").notNull().default("erc20"),
+    /** Wrapper address this was credited through, when not held directly. */
+    viaWrapper: text("via_wrapper"),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    walletContractIdx: uniqueIndex("wallet_holdings_wallet_contract_unique").on(
+      table.walletId,
+      table.contractAddress
+    ),
+    walletIdx: index("wallet_holdings_wallet_idx").on(table.walletId),
+    contractIdx: index("wallet_holdings_contract_idx").on(table.contractAddress),
+  })
+);
+
+export type WalletHolding = typeof walletHoldings.$inferSelect;
+export type NewWalletHolding = typeof walletHoldings.$inferInsert;
+
+export const wrapperRegistry = pgTable(
+  "wrapper_registry",
+  {
+    id: serial("id").primaryKey(),
+    wrapperAddress: text("wrapper_address").notNull(),
+    /** NULL when the underlying is not an Ethereum contract (WETH, WBTC). */
+    underlyingAddress: text("underlying_address"),
+    wrapperName: text("wrapper_name"),
+    underlyingName: text("underlying_name"),
+    type: text("type").notNull().default("wrapped"),
+    /** How the mapping was established, so it can be re-checked later. */
+    evidence: text("evidence"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    wrapperIdx: uniqueIndex("wrapper_registry_wrapper_unique").on(table.wrapperAddress),
+    underlyingIdx: index("wrapper_registry_underlying_idx").on(table.underlyingAddress),
+  })
+);
+
+export type WrapperRegistryEntry = typeof wrapperRegistry.$inferSelect;
+export type NewWrapperRegistryEntry = typeof wrapperRegistry.$inferInsert;
+
+export const collectorCards = pgTable(
+  "collector_cards",
+  {
+    id: serial("id").primaryKey(),
+    historianId: integer("historian_id").notNull(),
+    /** Public URL segment. Random so cards are not enumerable. */
+    shareSlug: text("share_slug").notNull(),
+    cardDataJson: jsonb("card_data_json").notNull(),
+    ogImageUrl: text("og_image_url"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex("collector_cards_slug_unique").on(table.shareSlug),
+    historianIdx: uniqueIndex("collector_cards_historian_unique").on(table.historianId),
+  })
+);
+
+export type CollectorCard = typeof collectorCards.$inferSelect;
+export type NewCollectorCard = typeof collectorCards.$inferInsert;
