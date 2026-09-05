@@ -61,7 +61,6 @@ export default function AssetsClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [cardUrl, setCardUrl] = useState<string | null>(null);
   const [holdings, setHoldings] = useState<HoldingItem[] | null>(null);
-  const [balancesHidden, setBalancesHidden] = useState(false);
   const [hasCard, setHasCard] = useState(false);
 
   const load = useCallback(async () => {
@@ -98,7 +97,6 @@ export default function AssetsClient() {
     if (!d) return;
     setHoldings(d.holdings ?? []);
     setHasCard(!!d.card);
-    setBalancesHidden(!!d.card?.balancesHidden);
     if (d.card) setCardUrl(`/card/${d.card.shareSlug}`);
   }, []);
 
@@ -311,26 +309,6 @@ export default function AssetsClient() {
     }
   }, [loadMine]);
 
-  /** Owner level privacy: governs what visitors to the public page are served. */
-  const toggleBalancePrivacy = useCallback(async () => {
-    const next = !balancesHidden;
-    setBalancesHidden(next);
-    try {
-      const res = await fetch("/api/collector-card/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ balancesHidden: next }),
-      });
-      const { error: err } = await readJson(res);
-      if (err) {
-        setBalancesHidden(!next);
-        setError(err);
-      }
-    } catch {
-      setBalancesHidden(!next);
-    }
-  }, [balancesHidden]);
-
   const verifiedCount = (wallets ?? []).filter((w) => w.verifiedAt).length;
   const withHoldings = (wallets ?? []).filter((w) => w.holdingCount > 0).length;
   const allVerified = (wallets ?? []).length > 0 && verifiedCount === (wallets ?? []).length;
@@ -456,58 +434,60 @@ export default function AssetsClient() {
         )}
       </section>
 
+      <section className="flex flex-col gap-4 rounded-xl border border-ether-500/25 bg-ether-500/[0.04] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-obsidian-100">Collector card</h2>
+            <p className="mt-1 text-xs leading-relaxed text-obsidian-400">
+              A shareable card built from every wallet on your account. Verifying is
+              optional and earns the card a verified badge.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={buildCard}
+              disabled={busy !== null || withHoldings === 0}
+              className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {busy === "card" ? "Building" : hasCard ? "Rebuild card" : "Build my card"}
+            </button>
+            {cardUrl ? (
+              <a
+                href={cardUrl}
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-obsidian-200 transition-colors hover:border-white/30"
+              >
+                View card
+              </a>
+            ) : null}
+            {cardUrl ? (
+              <a
+                href={cardUrl.replace("/card/", "/assets/")}
+                className="rounded-lg border border-white/15 px-4 py-2 text-sm text-obsidian-200 transition-colors hover:border-white/30"
+              >
+                Public collection
+              </a>
+            ) : null}
+          </div>
+        </div>
+        <p className="text-xs text-obsidian-500">
+          {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} holdings,{" "}
+          {verifiedCount} verified.
+          {(wallets ?? []).length > 0 && !allVerified
+            ? " Verify every wallet to show the badge."
+            : ""}{" "}
+          Balances are never shown on the public collection page.
+        </p>
+      </section>
+
       {holdings && holdings.length > 0 ? (
-        <HoldingsList holdings={holdings} />
+        <HoldingsList holdings={holdings} showBalances compact title="What you hold" />
       ) : holdings ? (
         <p className="text-sm text-obsidian-500">
           No documented holdings yet. Add a wallet above and scan it.
         </p>
       ) : null}
 
-      <section className="flex flex-col gap-3 rounded-xl border border-white/10 p-4">
-        <h2 className="text-sm font-medium text-obsidian-200">Collector card</h2>
-        <p className="text-xs leading-relaxed text-obsidian-500">
-          Built from every wallet on your account. Verifying is optional: it earns the
-          card a verified badge and does not change which holdings appear.{" "}
-          {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} holdings,{" "}
-          {verifiedCount} verified.
-          {(wallets ?? []).length > 0 && !allVerified
-            ? " Verify every wallet to show the badge."
-            : ""}
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={buildCard}
-            disabled={busy !== null || withHoldings === 0}
-            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {busy === "card" ? "Building" : "Build my card"}
-          </button>
-          {hasCard ? (
-            <button
-              type="button"
-              onClick={toggleBalancePrivacy}
-              className="rounded-lg border border-white/15 px-3 py-2 text-xs text-obsidian-300 transition-colors hover:border-white/30"
-            >
-              {balancesHidden ? "Balances hidden from visitors" : "Balances visible to visitors"}
-            </button>
-          ) : null}
-          {cardUrl ? (
-            <>
-              <a href={cardUrl} className="text-sm text-ether-400 underline-offset-4 hover:underline">
-                View your card
-              </a>
-              <a
-                href={cardUrl.replace("/card/", "/assets/")}
-                className="text-sm text-obsidian-400 underline-offset-4 hover:text-obsidian-200 hover:underline"
-              >
-                Public collection page
-              </a>
-            </>
-          ) : null}
-        </div>
-      </section>
     </div>
   );
 }

@@ -140,7 +140,7 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(98,110,241,0.07),transparent_55%)]" />
         )}
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <Link
             href="/collections"
             className="inline-flex items-center gap-1.5 text-sm text-obsidian-500 hover:text-obsidian-300 transition-colors mb-8"
@@ -230,7 +230,7 @@ export default function CollectionPageClient({ collection, contracts }: Props) {
       </section>
 
       {/* Contract grid */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-24">
+      <section className="max-w-site mx-auto px-4 sm:px-6 lg:px-8 py-10 pb-24">
         {contracts.length === 0 ? (
           <div className="text-center py-24 text-obsidian-500">
             No contracts in this collection yet.

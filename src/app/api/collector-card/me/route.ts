@@ -1,6 +1,5 @@
 /**
- * GET   /api/collector-card/me  everything the signed-in user's assets page needs
- * PATCH /api/collector-card/me  update owner settings (currently balance privacy)
+ * GET /api/collector-card/me  everything the signed-in user's assets page needs
  *
  * Assets is a first class page, so it loads in one request: the wallets, the
  * holdings from the last scan, and the existing card if there is one. Nothing
@@ -39,7 +38,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     .select({
       shareSlug: collectorCards.shareSlug,
       cardDataJson: collectorCards.cardDataJson,
-      balancesHidden: collectorCards.balancesHidden,
       updatedAt: collectorCards.updatedAt,
     })
     .from(collectorCards)
@@ -114,7 +112,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           ? {
               shareSlug: card.shareSlug,
               data: normalizeCardData(card.cardDataJson),
-              balancesHidden: card.balancesHidden,
               updatedAt: card.updatedAt,
             }
           : null,
@@ -123,43 +120,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       error: null,
       meta: { timestamp: new Date().toISOString(), cached: false },
     },
-    { headers: NO_STORE_HEADERS }
-  );
-}
-
-export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const me = await getHistorianMeFromRequest(req);
-  if (!me || !me.active) {
-    return NextResponse.json(
-      { data: null, error: "Unauthorized" },
-      { status: 401, headers: NO_STORE_HEADERS }
-    );
-  }
-
-  const body = await req.json().catch(() => null);
-  if (typeof body?.balancesHidden !== "boolean") {
-    return NextResponse.json(
-      { data: null, error: "balancesHidden must be true or false." },
-      { status: 400, headers: NO_STORE_HEADERS }
-    );
-  }
-
-  const db = getDb();
-  const [row] = await db
-    .update(collectorCards)
-    .set({ balancesHidden: body.balancesHidden, updatedAt: new Date() })
-    .where(eq(collectorCards.historianId, me.id))
-    .returning({ balancesHidden: collectorCards.balancesHidden });
-
-  if (!row) {
-    return NextResponse.json(
-      { data: null, error: "Build your card before changing its settings." },
-      { status: 404, headers: NO_STORE_HEADERS }
-    );
-  }
-
-  return NextResponse.json(
-    { data: { balancesHidden: row.balancesHidden }, error: null },
     { headers: NO_STORE_HEADERS }
   );
 }

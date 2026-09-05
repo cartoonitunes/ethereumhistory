@@ -50,16 +50,28 @@ function formatBalance(balance: string, decimals: number | null): string {
 
 export default function HoldingsList({
   holdings,
-  ownerHidden = false,
+  showBalances = false,
+  compact = false,
+  title = "Documented holdings, oldest first",
 }: {
   holdings: HoldingItem[];
   /**
-   * The owner hid balances for everyone. The amounts are not in this data at
-   * all, so there is no reveal to offer and the toggle is replaced by a note
-   * explaining why. The viewer preference below is only ever about a viewer's
-   * own screen.
+   * Whether this view carries balances at all. Off by default, and the public
+   * collection page never turns it on: amounts are private and are not even
+   * sent to a visitor. Only the owner's own /assets page passes true.
    */
-  ownerHidden?: boolean;
+  showBalances?: boolean;
+  /**
+   * Compact is the owner's private ledger on /assets: what they hold and how
+   * much of it, one line each. The full form is the public collection page,
+   * where each holding gets its description and its link into the archive.
+   *
+   * The two views deliberately differ. Showing the identical list on both made
+   * the private page a duplicate of the public one, which is what this splits
+   * apart: management and amounts here, context and provenance there.
+   */
+  compact?: boolean;
+  title?: string;
 }) {
   /**
    * Read the stored preference lazily on first client render rather than in an
@@ -91,19 +103,15 @@ export default function HoldingsList({
     });
   }, []);
 
-  // The owner's choice wins. A viewer can hide amounts for themselves, never
-  // reveal ones the owner withheld.
-  const showAmounts = visible && !ownerHidden;
+  // A viewer can hide amounts on their own screen, but only where amounts are
+  // being shown in the first place.
+  const showAmounts = showBalances && visible;
 
   return (
     <section className="mt-12">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-medium text-obsidian-200">
-          Documented holdings, oldest first
-        </h2>
-        {ownerHidden ? (
-          <span className="shrink-0 text-xs text-obsidian-500">Balances hidden by the owner</span>
-        ) : (
+        <h2 className="text-sm font-medium text-obsidian-200">{title}</h2>
+        {!showBalances ? null : (
         <button
           type="button"
           onClick={toggle}
@@ -132,7 +140,7 @@ export default function HoldingsList({
           No documented holdings on this collection yet.
         </p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-3">
+        <ul className={`mt-4 flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
           {holdings.map((h) => {
             const era = h.eraId ? ERA_LABEL[h.eraId] ?? h.eraId : null;
             const isNft = h.tokenType === "erc721";
@@ -144,7 +152,9 @@ export default function HoldingsList({
               <li key={h.contractAddress}>
                 <Link
                   href={`/contract/${h.contractAddress}`}
-                  className="flex flex-col gap-2 rounded-xl border border-white/10 p-4 transition-colors hover:border-white/25"
+                  className={`flex flex-col rounded-xl border border-white/10 transition-colors hover:border-white/25 ${
+                    compact ? "gap-0 px-3 py-2" : "gap-2 p-4"
+                  }`}
                 >
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                     <span className="w-11 shrink-0 font-mono text-xs tabular-nums text-ether-400/90">
@@ -154,26 +164,34 @@ export default function HoldingsList({
                     {h.symbol ? (
                       <span className="font-mono text-[0.6875rem] text-obsidian-500">{h.symbol}</span>
                     ) : null}
-                    <span
-                      className={`ml-auto font-mono text-xs tabular-nums ${
-                        showAmounts ? "text-obsidian-300" : "select-none text-obsidian-600"
-                      }`}
-                    >
-                      {showAmounts ? amount : "••••"}
-                    </span>
+                    {showBalances ? (
+                      <span
+                        className={`ml-auto font-mono text-xs tabular-nums ${
+                          showAmounts ? "text-obsidian-300" : "select-none text-obsidian-600"
+                        }`}
+                      >
+                        {showAmounts ? amount : "••••"}
+                      </span>
+                    ) : null}
                   </div>
 
-                  {h.shortDescription ? (
-                    <p className="pl-14 text-xs leading-relaxed text-obsidian-400">
-                      {h.shortDescription}
-                    </p>
-                  ) : null}
+                  {compact ? null : (
+                    <>
+                      {h.shortDescription ? (
+                        <p className="pl-14 text-xs leading-relaxed text-obsidian-400">
+                          {h.shortDescription}
+                        </p>
+                      ) : null}
 
-                  <div className="flex flex-wrap items-center gap-2 pl-14 text-[0.625rem] uppercase tracking-wider text-obsidian-600">
-                    {era ? <span>{era}</span> : null}
-                    <span>{isNft ? "ERC-721" : "ERC-20"}</span>
-                    {h.viaWrapper ? <span className="text-ether-400/70">held as wrapper</span> : null}
-                  </div>
+                      <div className="flex flex-wrap items-center gap-2 pl-14 text-[0.625rem] uppercase tracking-wider text-obsidian-600">
+                        {era ? <span>{era}</span> : null}
+                        <span>{isNft ? "ERC-721" : "ERC-20"}</span>
+                        {h.viaWrapper ? (
+                          <span className="text-ether-400/70">held as wrapper</span>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </Link>
               </li>
             );

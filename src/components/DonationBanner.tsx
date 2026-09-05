@@ -33,7 +33,7 @@ export function DonationBanner() {
 
   return (
     <div className="w-full bg-ether-950/60 border-b border-ether-800/40 px-4 py-2.5">
-      <div className="max-w-7xl mx-auto flex items-center gap-3">
+      <div className="max-w-site mx-auto flex items-center gap-3">
         <Heart className="w-3.5 h-3.5 text-ether-400 shrink-0" />
         <p className="flex-1 text-xs text-obsidian-300 leading-relaxed">
           EthereumHistory is a free archive, maintained by volunteers.{" "}

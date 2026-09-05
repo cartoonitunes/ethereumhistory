@@ -124,7 +124,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
         animate={{ opacity: 1, y: 0 }}
         className="sticky top-0 z-50 glass border-b border-obsidian-800"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-2 h-16 min-w-0">
 
             {/* Logo */}
@@ -313,7 +313,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 transition={{ duration: 0.15 }}
                 className="md:hidden absolute top-full inset-x-0 z-40 bg-obsidian-950/95 backdrop-blur-lg border-b border-obsidian-800 shadow-xl"
               >
-                <nav className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-1">
+                <nav className="max-w-site mx-auto px-4 py-4 flex flex-col gap-1">
                   {navLinks.map(({ href, label }) => (
                     <Link
                       key={href}

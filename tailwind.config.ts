@@ -9,6 +9,19 @@ const config: Config = {
   darkMode: "class",
   theme: {
     extend: {
+      maxWidth: {
+        /**
+         * The site-wide content width, used by every page container.
+         *
+         * Defined here rather than repeated as max-w-7xl in thirty places, so
+         * the whole site can be re-proportioned from one line. 7xl is 1280px,
+         * which left roughly 320px of dead margin on each side of a 1920px
+         * monitor and squeezed the header badly enough that the nav had no room
+         * to breathe. 1600px fills a 1440px screen completely and still leaves
+         * a sane margin at 1920.
+         */
+        site: "1600px",
+      },
       typography: {
         DEFAULT: {
           css: {

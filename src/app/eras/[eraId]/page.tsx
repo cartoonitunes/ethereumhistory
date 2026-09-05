@@ -130,7 +130,7 @@ export default async function EraPage({ params, searchParams }: Props) {
       />
       <Header />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-obsidian-500 mb-6">
           <Link href="/" className="hover:text-obsidian-300 transition-colors">

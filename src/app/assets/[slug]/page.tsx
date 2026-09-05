@@ -104,7 +104,7 @@ export default async function PublicAssetsPage({
           </Link>
         </header>
 
-        <HoldingsList holdings={p.holdings} ownerHidden={p.balancesHidden} />
+        <HoldingsList holdings={p.holdings} />
 
         <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-500">
           {p.owner.verified

@@ -27,7 +27,7 @@ export function AnnouncementBanner() {
       className="relative z-50 w-full bg-ether-500/10 border-b border-ether-500/30 px-4 py-2.5 text-sm"
       role="banner"
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <div className="max-w-site mx-auto flex items-center justify-between gap-4">
         <p className="text-obsidian-200 leading-snug pr-6 flex items-start gap-2">
           <ScrollText className="w-4 h-4 mt-0.5 text-ether-400 shrink-0" aria-hidden="true" />
           <span>

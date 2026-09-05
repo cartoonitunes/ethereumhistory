@@ -61,7 +61,7 @@ export default function ThisWeekPage() {
 
       <div className="relative py-8 md:py-12 overflow-hidden">
         <div className="absolute inset-0 gradient-radial opacity-40" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back link */}
           <Link
             href="/"

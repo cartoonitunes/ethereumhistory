@@ -31,7 +31,7 @@ export default function CollectionsPageClient({ collections }: Props) {
       {/* Hero */}
       <section className="relative py-20 overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(98,110,241,0.08),transparent_60%)]" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -53,7 +53,7 @@ export default function CollectionsPageClient({ collections }: Props) {
       </section>
 
       {/* Grid */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+      <section className="max-w-site mx-auto px-4 sm:px-6 lg:px-8 pb-24">
         {collections.length === 0 ? (
           <div className="text-center py-24 text-obsidian-500">
             No collections yet.

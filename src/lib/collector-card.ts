@@ -971,8 +971,6 @@ export interface PortfolioHolding {
 
 export interface PublicPortfolio {
   slug: string;
-  /** Owner chose to hide balances from visitors. Enforced server side. */
-  balancesHidden: boolean;
   owner: { name: string; ensName: string | null; avatarUrl: string | null; verified: boolean };
   tier: Tier;
   headline: string;
@@ -998,7 +996,6 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
       shareSlug: collectorCards.shareSlug,
       cardDataJson: collectorCards.cardDataJson,
       historianId: collectorCards.historianId,
-      balancesHidden: collectorCards.balancesHidden,
     })
     .from(collectorCards)
     .where(eq(collectorCards.shareSlug, slug));
@@ -1069,16 +1066,15 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
     });
   }
 
-  // Stripped here rather than hidden in the UI. A balance the owner asked to
-  // keep private must not travel to the browser at all, or it is readable in
-  // the page source no matter what the interface shows.
-  if (card.balancesHidden) {
-    holdings = holdings.map((h) => ({ ...h, balance: "0" }));
-  }
+  // Balances are never served on the public page, for anyone, regardless of any
+  // setting. They are stripped here rather than hidden in the interface,
+  // because a value that reaches the browser is readable in the page source no
+  // matter what the interface chooses to display. The owner sees their own
+  // amounts on their private /assets page.
+  holdings = holdings.map((h) => ({ ...h, balance: "0" }));
 
   return {
     slug: card.shareSlug,
-    balancesHidden: card.balancesHidden,
     owner: {
       name: normalized.owner.name,
       ensName: normalized.owner.ensName,

@@ -410,7 +410,7 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
       <Header showHistorianLogin={!me} />
       <DonationBanner />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
+      <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
         {/* Back link */}
         <Link
           href="/"

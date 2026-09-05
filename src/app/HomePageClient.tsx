@@ -152,7 +152,7 @@ export default function HomePageClient({
         <div className="absolute inset-0 gradient-radial opacity-50" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(98,110,241,0.1),transparent_50%)]" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -230,7 +230,7 @@ export default function HomePageClient({
       {/* Contract of the Day */}
       {contractOfTheDay && (
         <section className="py-16 border-t border-obsidian-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -286,7 +286,7 @@ export default function HomePageClient({
 
       {/* Archived Contracts (browse-style section) */}
       <section className="py-20 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -362,7 +362,7 @@ export default function HomePageClient({
 
       {/* For agents */}
       <section id="for-agents" className="py-16 border-t border-obsidian-800 scroll-mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -406,7 +406,7 @@ export default function HomePageClient({
 
       {/* Network exploration */}
       <section className="py-16 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -429,7 +429,7 @@ export default function HomePageClient({
 
       {/* Play the game — EH Explorer */}
       <section className="py-16 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -477,7 +477,7 @@ export default function HomePageClient({
 
       {/* Documentation Progress + This Week */}
       <section className="py-16 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-2 gap-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -530,7 +530,7 @@ export default function HomePageClient({
 
       {/* Features */}
       <section className="py-16 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={<Search className="w-6 h-6" />}
@@ -578,7 +578,7 @@ export default function HomePageClient({
       {/* Top Editors */}
       {topEditors.length > 0 && (
         <section className="py-20 border-t border-obsidian-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -633,7 +633,7 @@ export default function HomePageClient({
       {/* Recent Activity Feed */}
       {recentEdits.length > 0 && (
         <section className="py-16 border-t border-obsidian-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -699,7 +699,7 @@ export default function HomePageClient({
       {/* Collections */}
       {collections.length > 0 && (
         <section className="py-16 border-t border-obsidian-800">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -768,7 +768,7 @@ export default function HomePageClient({
 
       {/* Join / Community CTA */}
       <section className="py-16 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -853,7 +853,7 @@ export default function HomePageClient({
 
       {/* Partners & Sponsors */}
       <section className="py-12 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -888,7 +888,7 @@ export default function HomePageClient({
 
       {/* Footer */}
       <footer className="py-12 border-t border-obsidian-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-ether-500 to-ether-700 flex items-center justify-center">

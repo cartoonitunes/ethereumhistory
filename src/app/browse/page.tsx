@@ -214,7 +214,7 @@ function BrowseContent() {
 
       <div className="relative py-8 md:py-12 overflow-hidden">
         <div className="absolute inset-0 gradient-radial opacity-40" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="relative max-w-site mx-auto px-4 sm:px-6 lg:px-8">
           <Link
             href="/"
             className="inline-flex items-center gap-2 text-sm text-obsidian-400 hover:text-ether-400 transition-colors mb-8"
@@ -652,7 +652,7 @@ export default function BrowsePage() {
     <Suspense fallback={
       <div className="min-h-screen">
         <Header />
-        <div className="max-w-7xl mx-auto px-4 py-12">
+        <div className="max-w-site mx-auto px-4 py-12">
           <div className="h-8 w-48 bg-obsidian-800 rounded animate-pulse mb-8" />
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
