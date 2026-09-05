@@ -12,10 +12,64 @@ import { Header } from "@/components/Header";
 import CollectorCardCta from "@/app/CollectorCardCta";
 import { allTiers } from "@/lib/collector-card";
 
+/**
+ * Same helper the other metadata-bearing pages declare locally. Kept local
+ * rather than shared because the three existing copies do not agree: the root
+ * layout omits the VERCEL_ENV production branch, so unifying them would change
+ * how the site resolves its own URL. That is a separate cleanup, not something
+ * to slip into a metadata change.
+ */
+function getMetadataBaseUrl(): URL {
+  const explicit =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.SITE_URL ||
+    (process.env.VERCEL_ENV === "production"
+      ? "https://www.ethereumhistory.com"
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "");
+  return new URL(explicit || "https://www.ethereumhistory.com");
+}
+
+const TITLE = "Collectors - Ethereum History";
+const DESCRIPTION =
+  "Check any wallet against the Ethereum History archive and see which documented early contracts it holds. No account needed.";
+
+/**
+ * The opengraph-image file beside this page supplies og:image and
+ * twitter:image, so neither is repeated here. Only the fields that differ from
+ * the root layout's defaults are set.
+ */
 export const metadata: Metadata = {
-  title: "Collectors - Ethereum History",
-  description:
-    "Check any wallet against the Ethereum History archive and see which documented early contracts it holds.",
+  metadataBase: getMetadataBaseUrl(),
+  title: TITLE,
+  description: DESCRIPTION,
+  keywords: [
+    "Ethereum",
+    "collector",
+    "early contracts",
+    "NFT history",
+    "token archive",
+    "wallet",
+  ],
+  alternates: {
+    canonical: new URL("/collectors", getMetadataBaseUrl()).toString(),
+  },
+  openGraph: {
+    title: "Do you hold a piece of Ethereum history?",
+    description: DESCRIPTION,
+    url: new URL("/collectors", getMetadataBaseUrl()).toString(),
+    type: "website",
+    locale: "en_US",
+    siteName: "Ethereum History",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Do you hold a piece of Ethereum history?",
+    description:
+      "Check any wallet against the Ethereum History archive and see which documented early contracts it holds.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function CollectorsPage() {
