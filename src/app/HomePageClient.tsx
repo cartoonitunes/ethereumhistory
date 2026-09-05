@@ -556,17 +556,22 @@ export default function HomePageClient({
           CTA. The archive and its search are what this site is for; the card is
           a side door into it, so it sits among the other secondary sections and
           is sized to match. */}
-      <section className="py-14 border-t border-obsidian-800">
+      <section id="collectors" className="py-16 border-t border-obsidian-800 scroll-mt-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-lg font-semibold text-obsidian-100">
-            Do you hold a piece of Ethereum history?
-          </h2>
-          <p className="mt-2 text-sm text-obsidian-400">
-            Check any wallet against the archive and see which documented contracts it holds.
+          <h2 className="text-3xl font-bold mb-4">Collectors</h2>
+          <p className="text-obsidian-400 max-w-2xl mx-auto">
+            Thousands of these contracts are still held today. Check any wallet against
+            the archive and see which documented pieces of Ethereum history it holds.
           </p>
-          <div className="mt-5">
+          <div className="mt-8">
             <CollectorCardCta />
           </div>
+          <Link
+            href="/collectors"
+            className="mt-5 inline-block text-sm text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
+          >
+            What collecting means here
+          </Link>
         </div>
       </section>
 

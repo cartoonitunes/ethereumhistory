@@ -125,7 +125,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
         className="sticky top-0 z-50 glass border-b border-obsidian-800"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between gap-2 h-16 min-w-0">
 
             {/* Logo */}
             <Link href="/" className="flex items-center gap-3 group shrink-0">
@@ -141,7 +141,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             </Link>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-4">
+            <nav className="hidden md:flex items-center gap-3 lg:gap-4 min-w-0 shrink">
               {navLinks.map(({ href, label }) => (
                 <Link
                   key={href}
@@ -239,19 +239,19 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             </button>
 
             {/* Desktop auth */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
               {loadingMe ? (
                 <div className="h-9 w-24 bg-obsidian-800/50 rounded-lg animate-pulse" />
               ) : me ? (
                 <>
                   {me.trusted && (
-                    <Link href="/historian/review" className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
+                    <Link href="/historian/review" className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
                       <ClipboardCheck className="w-4 h-4" />
                       Review
                     </Link>
                   )}
                   {me.trusted && (
-                    <Link href="/historian/invite" className="flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
+                    <Link href="/historian/invite" className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
                       <UserPlus className="w-4 h-4" />
                       Invite
                     </Link>
@@ -268,7 +268,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                         {me.name.charAt(0).toUpperCase()}
                       </div>
                     )}
-                    {me.name}
+                    <span className="max-w-[9rem] truncate">{me.name}</span>
                   </Link>
                 </>
               ) : (

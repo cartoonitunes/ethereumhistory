@@ -48,7 +48,19 @@ function formatBalance(balance: string, decimals: number | null): string {
   return frac ? `${grouped}.${frac.slice(0, 4)}` : grouped;
 }
 
-export default function HoldingsList({ holdings }: { holdings: HoldingItem[] }) {
+export default function HoldingsList({
+  holdings,
+  ownerHidden = false,
+}: {
+  holdings: HoldingItem[];
+  /**
+   * The owner hid balances for everyone. The amounts are not in this data at
+   * all, so there is no reveal to offer and the toggle is replaced by a note
+   * explaining why. The viewer preference below is only ever about a viewer's
+   * own screen.
+   */
+  ownerHidden?: boolean;
+}) {
   /**
    * Read the stored preference lazily on first client render rather than in an
    * effect. An effect would paint once with the default and then immediately
@@ -79,12 +91,19 @@ export default function HoldingsList({ holdings }: { holdings: HoldingItem[] }) 
     });
   }, []);
 
+  // The owner's choice wins. A viewer can hide amounts for themselves, never
+  // reveal ones the owner withheld.
+  const showAmounts = visible && !ownerHidden;
+
   return (
     <section className="mt-12">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-medium text-obsidian-200">
           Documented holdings, oldest first
         </h2>
+        {ownerHidden ? (
+          <span className="shrink-0 text-xs text-obsidian-500">Balances hidden by the owner</span>
+        ) : (
         <button
           type="button"
           onClick={toggle}
@@ -105,6 +124,7 @@ export default function HoldingsList({ holdings }: { holdings: HoldingItem[] }) 
           )}
           {visible ? "Hide balances" : "Show balances"}
         </button>
+        )}
       </div>
 
       {holdings.length === 0 ? (
@@ -136,10 +156,10 @@ export default function HoldingsList({ holdings }: { holdings: HoldingItem[] }) 
                     ) : null}
                     <span
                       className={`ml-auto font-mono text-xs tabular-nums ${
-                        visible ? "text-obsidian-300" : "select-none text-obsidian-600"
+                        showAmounts ? "text-obsidian-300" : "select-none text-obsidian-600"
                       }`}
                     >
-                      {visible ? amount : "••••"}
+                      {showAmounts ? amount : "••••"}
                     </span>
                   </div>
 

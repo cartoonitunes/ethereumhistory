@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import HoldingsList, { type HoldingItem } from "./[slug]/HoldingsList";
 
 interface Wallet {
   id: number;
@@ -59,6 +60,9 @@ export default function AssetsClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cardUrl, setCardUrl] = useState<string | null>(null);
+  const [holdings, setHoldings] = useState<HoldingItem[] | null>(null);
+  const [balancesHidden, setBalancesHidden] = useState(false);
+  const [hasCard, setHasCard] = useState(false);
 
   const load = useCallback(async () => {
     // cache: "no-store" belts-and-braces the server's no-store headers. Without
@@ -78,9 +82,30 @@ export default function AssetsClient() {
     setWallets(((data as { wallets: Wallet[] })?.wallets) ?? []);
   }, []);
 
+  /**
+   * Everything the page shows, in one request: holdings from the last scan and
+   * the existing card. Assets is a page in its own right, so it must show the
+   * collection on arrival rather than making someone press Scan or Build first.
+   */
+  const loadMine = useCallback(async () => {
+    const res = await fetch("/api/collector-card/me", { cache: "no-store" });
+    if (res.status === 401) return;
+    const { data } = await readJson(res);
+    const d = data as {
+      card: { shareSlug: string; balancesHidden: boolean } | null;
+      holdings: HoldingItem[];
+    } | null;
+    if (!d) return;
+    setHoldings(d.holdings ?? []);
+    setHasCard(!!d.card);
+    setBalancesHidden(!!d.card?.balancesHidden);
+    if (d.card) setCardUrl(`/card/${d.card.shareSlug}`);
+  }, []);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadMine();
+  }, [load, loadMine]);
 
   const addWallet = useCallback(
     async (e: React.FormEvent) => {
@@ -238,12 +263,12 @@ export default function AssetsClient() {
           );
         }
 
-        await load();
+        await Promise.all([load(), loadMine()]);
       } finally {
         setBusy(null);
       }
     },
-    [load]
+    [load, loadMine]
   );
 
   const remove = useCallback(
@@ -278,18 +303,40 @@ export default function AssetsClient() {
         return;
       }
       setCardUrl((data as { url: string }).url);
+      setHasCard(true);
       setNotice("Card ready.");
+      await loadMine();
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [loadMine]);
+
+  /** Owner level privacy: governs what visitors to the public page are served. */
+  const toggleBalancePrivacy = useCallback(async () => {
+    const next = !balancesHidden;
+    setBalancesHidden(next);
+    try {
+      const res = await fetch("/api/collector-card/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ balancesHidden: next }),
+      });
+      const { error: err } = await readJson(res);
+      if (err) {
+        setBalancesHidden(!next);
+        setError(err);
+      }
+    } catch {
+      setBalancesHidden(!next);
+    }
+  }, [balancesHidden]);
 
   const verifiedCount = (wallets ?? []).filter((w) => w.verifiedAt).length;
   const withHoldings = (wallets ?? []).filter((w) => w.holdingCount > 0).length;
   const allVerified = (wallets ?? []).length > 0 && verifiedCount === (wallets ?? []).length;
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-8">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-obsidian-100">Your assets</h1>
         <p className="text-sm leading-relaxed text-obsidian-400">
@@ -409,6 +456,14 @@ export default function AssetsClient() {
         )}
       </section>
 
+      {holdings && holdings.length > 0 ? (
+        <HoldingsList holdings={holdings} />
+      ) : holdings ? (
+        <p className="text-sm text-obsidian-500">
+          No documented holdings yet. Add a wallet above and scan it.
+        </p>
+      ) : null}
+
       <section className="flex flex-col gap-3 rounded-xl border border-white/10 p-4">
         <h2 className="text-sm font-medium text-obsidian-200">Collector card</h2>
         <p className="text-xs leading-relaxed text-obsidian-500">
@@ -429,6 +484,15 @@ export default function AssetsClient() {
           >
             {busy === "card" ? "Building" : "Build my card"}
           </button>
+          {hasCard ? (
+            <button
+              type="button"
+              onClick={toggleBalancePrivacy}
+              className="rounded-lg border border-white/15 px-3 py-2 text-xs text-obsidian-300 transition-colors hover:border-white/30"
+            >
+              {balancesHidden ? "Balances hidden from visitors" : "Balances visible to visitors"}
+            </button>
+          ) : null}
           {cardUrl ? (
             <>
               <a href={cardUrl} className="text-sm text-ether-400 underline-offset-4 hover:underline">

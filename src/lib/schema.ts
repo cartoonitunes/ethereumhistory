@@ -721,6 +721,11 @@ export const collectorCards = pgTable(
     shareSlug: text("share_slug").notNull(),
     cardDataJson: jsonb("card_data_json").notNull(),
     ogImageUrl: text("og_image_url"),
+    /**
+     * Owner's choice to hide balances from visitors on the public collection.
+     * Enforced server side, so hidden balances never reach the HTML.
+     */
+    balancesHidden: boolean("balances_hidden").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

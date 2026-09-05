@@ -63,7 +63,7 @@ export default async function PublicAssetsPage({
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
       <Header />
-      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:py-14">
+      <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:py-14">
         {/* Identity */}
         <header className="flex flex-col items-center gap-4 text-center">
           {p.owner.avatarUrl ? (
@@ -104,7 +104,7 @@ export default async function PublicAssetsPage({
           </Link>
         </header>
 
-        <HoldingsList holdings={p.holdings} />
+        <HoldingsList holdings={p.holdings} ownerHidden={p.balancesHidden} />
 
         <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-500">
           {p.owner.verified

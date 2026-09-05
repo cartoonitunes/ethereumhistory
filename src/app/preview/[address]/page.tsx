@@ -78,7 +78,7 @@ export default async function PreviewPage({
             right under it: what they own, why each one matters, and a way into
             the archive. This is the same list a saved collection page shows. */}
         {result.card.holdings.length > 0 ? (
-          <div className="w-full max-w-3xl">
+          <div className="w-full max-w-5xl">
             <HoldingsList
               holdings={result.card.holdings.map(
                 (h): HoldingItem => ({
