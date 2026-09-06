@@ -13,6 +13,7 @@ import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
+import { claimPreviewCards } from "@/lib/collector-card";
 import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
@@ -117,6 +118,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .insert(userWallets)
     .values({ historianId: me.id, address, label })
     .returning();
+
+  // If this address already had an anonymous preview on the leaderboard, it
+  // belongs to this account now. Claiming here as well as in the preview claim
+  // flow covers the wallet that was added by hand rather than carried through
+  // sign in, which is the case the claim cookie never sees.
+  await claimPreviewCards(me.id, [address]);
 
   // Deliberately no scan here. Scanning is explicit (POST .../scan) so adding a
   // wallet stays instant and cannot be used to drive provider calls for free.

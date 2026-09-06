@@ -36,6 +36,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { isValidAddress, normalizeAddress } from "@/lib/utils";
 import {
   buildCardData,
+  claimPreviewCards,
   generateShareSlug,
   persistScanToWallet,
   scanWallet,
@@ -148,6 +149,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let holdingsSaved = false;
   if (scan) holdingsSaved = await persistScanToWallet(walletId, scan);
 
+  // The address may already have an anonymous preview row and a place on the
+  // leaderboard. Claiming it keeps the row, so the record of when the address
+  // was first seen survives, and stops it being listed twice: once under the
+  // new account name and once as a bare address.
+  const claimedPreviews = await claimPreviewCards(me.id, [address]);
+
   // Build the card from whatever is now stored. If the scan failed the wallet
   // is still attached, and the user can scan from /assets, so a bad provider
   // day costs the card rather than the whole claim.
@@ -183,6 +190,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           alreadyAttached: !!already,
           holdingsSaved,
           holdingCount: scan?.holdings.length ?? 0,
+          claimedPreviews,
           degraded: scan?.degraded ?? true,
           shareSlug: slug,
         },

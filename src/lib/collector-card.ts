@@ -22,8 +22,15 @@
  */
 
 import { getDb } from "@/lib/db-client";
-import { collectorCards, contracts, historians, userWallets, walletHoldings } from "@/lib/schema";
-import { and, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
+import {
+  collectorCards,
+  contracts,
+  historians,
+  previewCards,
+  userWallets,
+  walletHoldings,
+} from "@/lib/schema";
+import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
@@ -1385,10 +1392,25 @@ export async function buildEphemeralCard(
   };
 }
 
+/** 0x1234...abcd, the form used wherever an address stands in for a name. */
+function shortAddress(a: string): string {
+  return `${a.slice(0, 6)}...${a.slice(-4)}`;
+}
+
 /** One row of the public leaderboard. */
 export interface LeaderboardEntry {
   rank: number;
+  /**
+   * Where the row came from. An account card links to its collection page; an
+   * anonymous preview links to /preview/[address], which is now permanent.
+   */
+  source: "account" | "preview";
+  /** True for account cards. Rendered as a small badge, and the reason to sign up. */
+  member: boolean;
+  /** Collection slug for account rows, or the address for preview rows. */
   slug: string;
+  /** Where the row links. Differs by source, so the caller does not branch. */
+  href: string;
   name: string;
   ensName: string | null;
   avatarUrl: string | null;
@@ -1455,8 +1477,10 @@ export function compareLeaderboard(
 
 export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
   const db = getDb();
+  const cap = Math.max(1, Math.min(100, limit));
 
-  const rows = await db
+  // Account cards.
+  const accountRows = await db
     .select({
       shareSlug: collectorCards.shareSlug,
       cardDataJson: collectorCards.cardDataJson,
@@ -1467,36 +1491,75 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
     .from(collectorCards)
     .leftJoin(historians, eq(historians.id, collectorCards.historianId));
 
-  const entries = rows
-    // A deactivated account should not be listed. The join is a left join so a
-    // card whose historian row is missing entirely still resolves rather than
-    // vanishing, and only an explicit false excludes.
+  const accounts = accountRows
     .filter((r) => r.historianActive !== false)
-    .map((r) => {
-      const card = normalizeCardData(r.cardDataJson);
-      return { card, historianName: r.historianName, historianAvatarUrl: r.historianAvatarUrl, slug: r.shareSlug };
-    })
-    // No empty cards. A card with nothing documented behind it is a zero score
-    // and tells a visitor nothing.
+    .map((r) => ({ card: normalizeCardData(r.cardDataJson), r }))
     .filter(({ card }) => card.stats.contractCount > 0 && card.holdings.length > 0)
-    .sort((a, b) => compareLeaderboard(a.card, b.card))
-    .slice(0, Math.max(1, Math.min(100, limit)));
+    .map(({ card, r }) => ({
+      card,
+      entry: {
+        source: "account" as const,
+        member: true,
+        slug: r.shareSlug,
+        href: `/assets/${r.shareSlug}`,
+        name: card.owner.name || r.historianName || "Collector",
+        ensName: card.owner.ensName,
+        avatarUrl: card.owner.avatarUrl ?? r.historianAvatarUrl ?? null,
+        verified: card.stats.allWalletsVerified,
+      },
+    }));
 
-  return entries.map(({ card, historianName, historianAvatarUrl, slug }, i) => ({
-    rank: i + 1,
-    slug,
-    // The card's own identity wins: it has already resolved EH profile image,
-    // then ENS avatar, then nothing, and it carries the ENS name. The historian
-    // row is the fallback for a card built before that resolution existed.
-    name: card.owner.name || historianName || "Collector",
-    ensName: card.owner.ensName,
-    avatarUrl: card.owner.avatarUrl ?? historianAvatarUrl ?? null,
-    tier: card.tier,
-    score: card.stats.score,
-    contractCount: card.stats.contractCount,
-    earliestYear: card.stats.earliestYear,
-    verified: card.stats.allWalletsVerified,
-  }));
+  // Anonymous previews. Unclaimed only: a claimed address is already
+  // represented by its owner's account row, and listing both would put the
+  // same person on the board twice, once named and once as a bare address.
+  const previewRows = await db
+    .select({
+      address: previewCards.address,
+      ensName: previewCards.ensName,
+      cardDataJson: previewCards.cardDataJson,
+    })
+    .from(previewCards)
+    .where(and(eq(previewCards.listed, true), isNull(previewCards.claimedByHistorianId)));
+
+  // A second dedupe pass, because claiming is not the only way an address ends
+  // up on an account. A wallet added by hand never had a preview claimed, so
+  // the addresses behind account cards are excluded directly.
+  const accountAddresses = new Set<string>();
+  for (const { card } of accounts) {
+    for (const w of card.wallets) accountAddresses.add(w.address.toLowerCase());
+  }
+
+  const previews = previewRows
+    .filter((r) => !accountAddresses.has(r.address.toLowerCase()))
+    .map((r) => ({ card: normalizeCardData(r.cardDataJson), r }))
+    .filter(({ card }) => card.stats.contractCount > 0 && card.holdings.length > 0)
+    .map(({ card, r }) => ({
+      card,
+      entry: {
+        source: "preview" as const,
+        member: false,
+        slug: r.address,
+        href: `/preview/${r.address}`,
+        name: r.ensName ?? card.owner.ensName ?? shortAddress(r.address),
+        ensName: r.ensName ?? card.owner.ensName ?? null,
+        avatarUrl: card.owner.avatarUrl ?? null,
+        // An anonymous preview can never be verified: verification requires a
+        // signature against an account.
+        verified: false,
+      },
+    }));
+
+  return [...accounts, ...previews]
+    .sort((a, b) => compareLeaderboard(a.card, b.card))
+    .slice(0, cap)
+    .map(({ card, entry }, i) => ({
+      rank: i + 1,
+      ...entry,
+      tier: card.tier,
+      score: card.stats.score,
+      contractCount: card.stats.contractCount,
+      earliestYear: card.stats.earliestYear,
+    }));
 }
 
 /**
@@ -1558,4 +1621,105 @@ export async function persistScanToWallet(
   }
 
   return true;
+}
+
+/**
+ * Write a freshly built preview to preview_cards, or update the row that is
+ * already there.
+ *
+ * One row per address on purpose. A popular address gets looked up repeatedly
+ * and each of those is a re-scan, not a new card, so first_scanned_at is
+ * preserved while everything else is replaced and scan_count climbs.
+ *
+ * Failures are swallowed. Persisting is a side effect of showing someone their
+ * card; if the write fails they should still see the card rather than an error
+ * about bookkeeping they did not ask for.
+ */
+export async function persistPreviewCard(address: string, card: CardData): Promise<void> {
+  try {
+    const db = getDb();
+    const now = new Date();
+    const row = {
+      address: address.toLowerCase(),
+      ensName: card.owner.ensName ?? null,
+      cardDataJson: card,
+      score: card.stats.score,
+      tierLabel: card.tier.label,
+      contractCount: card.stats.contractCount,
+      earliestYear: card.stats.earliestYear,
+      lastScannedAt: now,
+    };
+    await db
+      .insert(previewCards)
+      .values({ ...row, firstScannedAt: now, scanCount: 1 })
+      .onConflictDoUpdate({
+        target: previewCards.address,
+        set: { ...row, scanCount: sql`${previewCards.scanCount} + 1` },
+      });
+  } catch (err) {
+    console.error("[preview] persist failed:", err);
+  }
+}
+
+/**
+ * The stored preview for an address, if one has ever been built.
+ *
+ * This is what makes a preview URL permanent: the page reads here first and
+ * only scans when nothing comes back. The card is normalised on the way out for
+ * the same reason stored account cards are, so a scoring change reaches an old
+ * preview without anyone re-scanning it.
+ */
+export async function getPreviewCard(
+  address: string
+): Promise<{ card: CardData; lastScannedAt: Date; firstScannedAt: Date } | null> {
+  try {
+    const db = getDb();
+    const [row] = await db
+      .select({
+        cardDataJson: previewCards.cardDataJson,
+        lastScannedAt: previewCards.lastScannedAt,
+        firstScannedAt: previewCards.firstScannedAt,
+      })
+      .from(previewCards)
+      .where(eq(previewCards.address, address.toLowerCase()))
+      .limit(1);
+    if (!row) return null;
+    return {
+      card: normalizeCardData(row.cardDataJson),
+      lastScannedAt: row.lastScannedAt,
+      firstScannedAt: row.firstScannedAt,
+    };
+  } catch (err) {
+    console.error("[preview] read failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Attach every preview row for these addresses to an account.
+ *
+ * Called when someone signs up and their wallets are known. The rows are kept
+ * rather than deleted: first_scanned_at is a real fact about when that address
+ * first appeared, and it is the only place that fact is recorded. Marking them
+ * claimed is what stops the same person being listed twice, once as a name and
+ * once as a bare address.
+ */
+export async function claimPreviewCards(
+  historianId: number,
+  addresses: string[]
+): Promise<number> {
+  const list = addresses.map((a) => a.toLowerCase()).filter((a) => /^0x[0-9a-f]{40}$/.test(a));
+  if (list.length === 0) return 0;
+  try {
+    const db = getDb();
+    const updated = await db
+      .update(previewCards)
+      .set({ claimedByHistorianId: historianId, claimedAt: new Date() })
+      .where(and(inArray(previewCards.address, list), isNull(previewCards.claimedByHistorianId)))
+      .returning({ id: previewCards.id });
+    return updated.length;
+  } catch (err) {
+    console.error("[preview] claim failed:", err);
+    return 0;
+  }
 }

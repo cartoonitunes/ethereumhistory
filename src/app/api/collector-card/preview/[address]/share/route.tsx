@@ -1,13 +1,23 @@
 /**
  * GET /api/collector-card/preview/[address]/share
  *
- * The share image for an ephemeral preview card, at the same 1200x630 as a
- * saved card's. Recomputed rather than read from storage, and cached per
- * address so an unfurl does not trigger a fresh provider scan every time.
+ * The share image for a preview card, at the same 1200x630 as a saved card's.
+ *
+ * Reads the persisted row first, so an unfurl of a shared link costs a database
+ * read rather than a provider scan. Falls back to scanning only when the
+ * address has never been looked up, which is the case where somebody pasted the
+ * image URL before the page it belongs to.
  */
 
 import { ImageResponse } from "next/og";
-import { buildEphemeralCard, type CardData } from "@/lib/collector-card";
+import {
+  buildEphemeralCard,
+  getPreviewCard,
+  persistPreviewCard,
+  type CardData,
+} from "@/lib/collector-card";
+import { isDatabaseConfigured } from "@/lib/db-client";
+import { isValidAddress } from "@/lib/utils";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import { renderShareCard, SHARE_WIDTH, SHARE_HEIGHT } from "@/lib/share-card";
 
@@ -22,12 +32,21 @@ export async function GET(
   const key = decodeURIComponent(address).trim().toLowerCase();
   if (!key || key.length > 128) return new Response("Not found", { status: 404 });
 
-  const result = await cached(`card-preview:${key}`, CACHE_TTL.MEDIUM, () =>
-    buildEphemeralCard(key)
-  );
-  if ("error" in result) return new Response("Not found", { status: 404 });
+  let card: CardData | null = null;
 
-  const card: CardData = result.card;
+  if (isDatabaseConfigured() && isValidAddress(key)) {
+    const stored = await getPreviewCard(key);
+    if (stored) card = stored.card;
+  }
+
+  if (!card) {
+    const result = await cached(`card-preview:${key}`, CACHE_TTL.MEDIUM, () =>
+      buildEphemeralCard(key)
+    );
+    if ("error" in result) return new Response("Not found", { status: 404 });
+    await persistPreviewCard(result.address, result.card);
+    card = result.card;
+  }
   return new ImageResponse(renderShareCard(card), {
     width: SHARE_WIDTH,
     height: SHARE_HEIGHT,

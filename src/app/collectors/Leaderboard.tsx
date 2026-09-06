@@ -13,47 +13,8 @@
 import Link from "next/link";
 import type { LeaderboardEntry } from "@/lib/collector-card";
 
-/**
- * Collectors needed before the ranking is shown at all.
- *
- * A leaderboard is a claim that a field exists to be ranked. With one or two
- * names on it, and especially with the site's own operator at the top, it says
- * the opposite of what it is there to say. Below the threshold the section
- * still appears, as a stated goal rather than a ranking, which is honest and
- * gives a visitor a reason to be the one who fills it.
- */
-export const LEADERBOARD_MIN_ENTRIES = 5;
-
 export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   if (entries.length === 0) return null;
-
-  if (entries.length < LEADERBOARD_MIN_ENTRIES) {
-    const remaining = LEADERBOARD_MIN_ENTRIES - entries.length;
-    return (
-      <section className="mt-16">
-        <h2 className="text-xl font-semibold">Leaderboard</h2>
-        <div className="mt-4 flex flex-col items-center gap-3 rounded-xl border border-dashed border-white/15 px-5 py-8 text-center">
-          <span className="font-mono text-xs uppercase tracking-[0.13em] text-obsidian-400">
-            Locked
-          </span>
-          <p className="max-w-sm text-sm leading-relaxed text-obsidian-300">
-            The leaderboard unlocks when {LEADERBOARD_MIN_ENTRIES} collectors have built
-            a card.{" "}
-            {entries.length === 1
-              ? "One has so far."
-              : `${entries.length} have so far.`}{" "}
-            {remaining === 1 ? "One more" : `${remaining} more`} and the ranking goes live.
-          </p>
-          <Link
-            href="/assets"
-            className="rounded-lg bg-ether-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-ether-500"
-          >
-            Build your card
-          </Link>
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section className="mt-16">
@@ -64,15 +25,16 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
         </p>
       </div>
       <p className="mt-2 text-sm text-obsidian-400">
-        Everyone who has built a card, ranked by score. Scores are recomputed on every
-        view, so a rank moves when the archive grows or a collection does.
+        Every wallet checked against the archive, ranked by score, whether or not it
+        has an account behind it. Scores are recomputed on every view, so a rank moves
+        when the archive grows or a collection does.
       </p>
 
       <ol className="mt-6 flex flex-col gap-px overflow-hidden rounded-xl border border-white/10 bg-white/5">
         {entries.map((e) => (
           <li key={e.slug}>
             <Link
-              href={`/assets/${e.slug}`}
+              href={e.href}
               className="group flex items-center gap-3 bg-obsidian-950 px-3 py-3 transition-colors hover:bg-obsidian-900 sm:gap-4 sm:px-4"
             >
               <Rank rank={e.rank} />
@@ -84,6 +46,7 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
                     {e.name}
                   </span>
                   {e.verified ? <VerifiedMark /> : null}
+                  {e.member ? <MemberMark /> : null}
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs">
                   <span className={e.tier.color}>{e.tier.label}</span>
@@ -109,7 +72,8 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
       </ol>
 
       <p className="mt-3 text-center text-xs text-obsidian-400">
-        Built a card? You are on it. Scores update as the archive grows.
+        Checked a wallet? It is on here. Sign in to claim yours, put a name to it and
+        earn the member mark.
       </p>
     </section>
   );
@@ -156,6 +120,25 @@ function Avatar({ entry }: { entry: LeaderboardEntry }) {
   return (
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-xs font-medium text-obsidian-400 ring-1 ring-white/10">
       {initial}
+    </span>
+  );
+}
+
+/**
+ * Marks a row that belongs to an account rather than an anonymous lookup.
+ *
+ * Deliberately quiet and deliberately different from the verified shield: this
+ * says "has an account", not "proved ownership", and conflating the two would
+ * hand unearned credibility to anyone who merely signed up. It is the visible
+ * difference between being on the board and owning your entry.
+ */
+function MemberMark() {
+  return (
+    <span
+      title="Has an Ethereum History account"
+      className="shrink-0 rounded border border-white/15 px-1 py-px font-mono text-[0.6rem] uppercase tracking-wider text-obsidian-300"
+    >
+      Member
     </span>
   );
 }

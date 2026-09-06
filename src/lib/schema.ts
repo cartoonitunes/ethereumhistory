@@ -712,6 +712,49 @@ export const walletHoldings = pgTable(
 export type WalletHolding = typeof walletHoldings.$inferSelect;
 export type NewWalletHolding = typeof walletHoldings.$inferInsert;
 
+/**
+ * Preview cards: a persisted scan for an address with no account behind it.
+ *
+ * One row per address, updated in place on re-scan, which is what makes
+ * /preview/[address] a permanent URL rather than a fresh scan every view.
+ *
+ * Holdings are not a column. They are already inside card_data_json, and a
+ * second copy would be a second thing to keep in step. Score, tier, count and
+ * year are denormalised instead so the leaderboard can rank without opening the
+ * JSON.
+ */
+export const previewCards = pgTable(
+  "preview_cards",
+  {
+    id: serial("id").primaryKey(),
+    /** Lowercase. Unique, so a re-scan updates rather than appends. */
+    address: text("address").notNull(),
+    /** Cached at scan time so the leaderboard needs no resolver call per row. */
+    ensName: text("ens_name"),
+    cardDataJson: jsonb("card_data_json").notNull(),
+    score: integer("score").notNull().default(0),
+    tierLabel: text("tier_label"),
+    contractCount: integer("contract_count").notNull().default(0),
+    earliestYear: integer("earliest_year"),
+    firstScannedAt: timestamp("first_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+    lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Scans, not views. A stored preview is served without rescanning. */
+    scanCount: integer("scan_count").notNull().default(1),
+    /** Set once the address is attached to an account, which unlists the anonymous row. */
+    claimedByHistorianId: integer("claimed_by_historian_id"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    /**
+     * The switch for taking a row off the public ranking. Defaults to listed,
+     * which is the product decision; this exists so a removal request or a
+     * change of policy does not need a migration.
+     */
+    listed: boolean("listed").notNull().default(true),
+  },
+  (table) => ({
+    addressUnique: uniqueIndex("preview_cards_address_unique").on(table.address),
+  })
+);
+
 export const collectorCards = pgTable(
   "collector_cards",
   {
