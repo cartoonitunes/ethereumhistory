@@ -40,6 +40,17 @@ const RPC_TIMEOUT_MS = 15_000;
 /** Alchemy returns at most 100 NFT contracts per page; we cap total pages. */
 const MAX_NFT_PAGES = 10;
 
+/**
+ * What kind of token a holding is.
+ *
+ * "unknown" is a real answer rather than a gap. It is what the provider reports
+ * for contracts that predate or ignore the standards, which describes most of
+ * the collectibles this archive exists for, CryptoKitties among them. Recording
+ * that honestly beats guessing erc721 and being wrong about a pre-standard
+ * contract.
+ */
+export type TokenType = "erc20" | "erc721" | "erc1155" | "unknown";
+
 export interface DetectedHolding {
   contractAddress: string;
   tokenSymbol: string | null;
@@ -47,7 +58,7 @@ export interface DetectedHolding {
   /** Raw on chain integer as a decimal string. Never a JS number. */
   balance: string;
   tokenDecimals: number | null;
-  tokenType: "erc20" | "erc721";
+  tokenType: TokenType;
   /** Set when credited through the wrapper registry rather than held directly. */
   viaWrapper: string | null;
   /**
@@ -140,7 +151,7 @@ async function fetchErc20Balances(
 async function fetchNftContracts(
   url: string,
   address: string
-): Promise<{ contractAddress: string; balance: string; name: string | null; symbol: string | null }[]> {
+): Promise<{ contractAddress: string; balance: string; name: string | null; symbol: string | null; tokenType: TokenType }[]> {
   // Derive the NFT endpoint from the configured JSON-RPC URL so there is one
   // credential to manage. Shape: https://<net>.g.alchemy.com/v2/<key>
   const match = url.match(/^(https:\/\/[^/]+)\/v2\/([^/?#]+)/);
@@ -148,7 +159,7 @@ async function fetchNftContracts(
   const [, origin, key] = match;
   const base = `${origin}/nft/v3/${key}/getContractsForOwner`;
 
-  const out: { contractAddress: string; balance: string; name: string | null; symbol: string | null }[] = [];
+  const out: { contractAddress: string; balance: string; name: string | null; symbol: string | null; tokenType: TokenType }[] = [];
   let pageKey: string | undefined;
 
   for (let page = 0; page < MAX_NFT_PAGES; page += 1) {
@@ -175,7 +186,21 @@ async function fetchNftContracts(
 
     for (const c of json.contracts ?? []) {
       if (!c.address) continue;
-      if (c.tokenType && c.tokenType.toUpperCase() !== "ERC721") continue;
+
+      // Every kind is kept. This line used to be a filter that dropped
+      // anything the provider did not label ERC721, which across the wallets
+      // attached to accounts was discarding 159 of 348 contracts.
+      //
+      // The two it dropped are precisely the ones that matter here. UNKNOWN is
+      // what Alchemy reports for contracts that predate the standards, which is
+      // most of the early archive, and CryptoKitties comes back UNKNOWN.
+      // ERC1155 covers the Curio Cards and Peperium wrappers, one of which a
+      // historian holds 42 of. A filter written to mean "only NFTs" was in
+      // practice reading "only NFTs that arrived after 2018".
+      const raw = (c.tokenType ?? "").toUpperCase();
+      const tokenType: TokenType =
+        raw === "ERC721" ? "erc721" : raw === "ERC1155" ? "erc1155" : "unknown";
+
       const count = Number(c.totalBalance ?? c.numDistinctTokensOwned ?? 0);
       if (!Number.isFinite(count) || count <= 0) continue;
       out.push({
@@ -183,6 +208,7 @@ async function fetchNftContracts(
         balance: String(Math.trunc(count)),
         name: c.name ?? null,
         symbol: c.symbol ?? null,
+        tokenType,
       });
     }
 
@@ -236,7 +262,7 @@ async function fetchFirstTxDate(url: string, address: string): Promise<Date | nu
  * registry so a scan can recognise them, not so they can appear as history.
  */
 export async function crossReferenceAgainstArchive(
-  raw: { contractAddress: string; balance: string; tokenType: "erc20" | "erc721"; name?: string | null; symbol?: string | null }[]
+  raw: { contractAddress: string; balance: string; tokenType: TokenType; name?: string | null; symbol?: string | null }[]
 ): Promise<DetectedHolding[]> {
   if (raw.length === 0) return [];
   const db = getDb();
@@ -355,7 +381,7 @@ export async function scanWallet(address: string): Promise<ScanResult> {
   const raw: {
     contractAddress: string;
     balance: string;
-    tokenType: "erc20" | "erc721";
+    tokenType: TokenType;
     name?: string | null;
     symbol?: string | null;
   }[] = [];
@@ -367,7 +393,10 @@ export async function scanWallet(address: string): Promise<ScanResult> {
   }
 
   if (nfts.status === "fulfilled") {
-    for (const c of nfts.value) raw.push({ ...c, tokenType: "erc721" });
+    // Keep the kind the provider reported rather than stamping erc721 on
+    // everything, which is what made an ERC-1155 wrapper indistinguishable
+    // from a plain NFT in stored holdings.
+    for (const c of nfts.value) raw.push(c);
   } else {
     failures.push("NFT holdings");
   }

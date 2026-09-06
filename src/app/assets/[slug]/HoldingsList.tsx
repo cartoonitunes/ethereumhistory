@@ -143,7 +143,12 @@ export default function HoldingsList({
         <ul className={`mt-4 flex flex-col ${compact ? "gap-1.5" : "gap-3"}`}>
           {holdings.map((h) => {
             const era = h.eraId ? ERA_LABEL[h.eraId] ?? h.eraId : null;
-            const isNft = h.tokenType === "erc721";
+            // Anything that is not an ERC-20 is counted, not scaled by
+            // decimals. ERC-1155 and the pre-standard contracts the provider
+            // reports as unknown, CryptoKitties among them, are whole items
+            // just as ERC-721s are, and running them through the fungible
+            // formatter printed a bare number where "1 token" belongs.
+            const isNft = h.tokenType !== "erc20";
             const amount = isNft
               ? `${h.balance} ${Number(h.balance) === 1 ? "token" : "tokens"}`
               : `${formatBalance(h.balance, h.tokenDecimals)}${h.symbol ? ` ${h.symbol}` : ""}`;
