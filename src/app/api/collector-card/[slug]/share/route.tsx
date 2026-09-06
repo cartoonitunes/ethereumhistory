@@ -21,9 +21,9 @@
 
 import { ImageResponse } from "next/og";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
-import { collectorCards } from "@/lib/schema";
+import { collectorCards, historians } from "@/lib/schema";
 import { eq } from "drizzle-orm";
-import { normalizeCardData, type CardData } from "@/lib/collector-card";
+import { normalizeCardData, withAccountName, type CardData } from "@/lib/collector-card";
 import { renderShareCard, SHARE_WIDTH, SHARE_HEIGHT } from "@/lib/share-card";
 
 export const dynamic = "force-dynamic";
@@ -40,13 +40,20 @@ export async function GET(
 
   const db = getDb();
   const [row] = await db
-    .select({ cardDataJson: collectorCards.cardDataJson })
+    .select({
+      cardDataJson: collectorCards.cardDataJson,
+      historianName: historians.name,
+    })
     .from(collectorCards)
+    .leftJoin(historians, eq(historians.id, collectorCards.historianId))
     .where(eq(collectorCards.shareSlug, slug));
 
   if (!row) return new Response("Not found", { status: 404 });
 
-  const card: CardData = normalizeCardData(row.cardDataJson);
+  // The same account name correction the page applies. Without it the shared
+  // image keeps the ENS name that was frozen into the stored card, and the
+  // picture in the tweet disagrees with the page it links to.
+  const card: CardData = withAccountName(normalizeCardData(row.cardDataJson), row.historianName);
 
   return new ImageResponse(renderShareCard(card), {
     width: SHARE_WIDTH,

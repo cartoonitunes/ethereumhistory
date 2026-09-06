@@ -13,7 +13,7 @@ import { Header } from "@/components/Header";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards, historians } from "@/lib/schema";
 import { eq } from "drizzle-orm";
-import { normalizeCardData, withAccountName } from "@/lib/collector-card";
+import { cardImageVersion, normalizeCardData, withAccountName } from "@/lib/collector-card";
 import HolographicCard, { type CardPayload } from "./HolographicCard";
 
 export const dynamic = "force-dynamic";
@@ -22,13 +22,14 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.ethereumhistor
 
 const SLUG_PATTERN = /^[a-z0-9]{6,32}$/;
 
-async function loadCard(slug: string): Promise<CardPayload | null> {
+async function loadCard(slug: string): Promise<(CardPayload & { updatedAt: Date | null }) | null> {
   if (!isDatabaseConfigured() || !SLUG_PATTERN.test(slug)) return null;
   const db = getDb();
   const [row] = await db
     .select({
       cardDataJson: collectorCards.cardDataJson,
       historianName: historians.name,
+      updatedAt: collectorCards.updatedAt,
     })
     .from(collectorCards)
     .leftJoin(historians, eq(historians.id, collectorCards.historianId))
@@ -38,7 +39,7 @@ async function loadCard(slug: string): Promise<CardPayload | null> {
   // the account's current name so a card stored before the name priority fix
   // stops showing an ENS name where the username belongs.
   const card = withAccountName(normalizeCardData(row.cardDataJson), row.historianName);
-  return card as unknown as CardPayload;
+  return { ...(card as unknown as CardPayload), updatedAt: row.updatedAt ?? null };
 }
 
 export async function generateMetadata({
@@ -58,7 +59,9 @@ export async function generateMetadata({
   const description = `${count} historic ${count === 1 ? "contract" : "contracts"} held${
     card.stats.earliestYear ? `, the oldest deployed in ${card.stats.earliestYear}` : ""
   }.`;
-  const ogImage = `${SITE_URL}/api/collector-card/${slug}/og`;
+  // Versioned so a rebuilt card, or a change to what the image renders, gets a
+  // new URL. X will otherwise keep showing the first picture it ever fetched.
+  const ogImage = `${SITE_URL}/api/collector-card/${slug}/og?v=${cardImageVersion(card.updatedAt)}`;
 
   return {
     title,

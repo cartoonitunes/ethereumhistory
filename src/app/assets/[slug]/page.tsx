@@ -14,7 +14,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { isDatabaseConfigured } from "@/lib/db-client";
-import { getPublicPortfolio } from "@/lib/collector-card";
+import { cardImageVersion, getPublicPortfolio } from "@/lib/collector-card";
 import HoldingsList from "./HoldingsList";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +44,15 @@ export async function generateMetadata({
       title,
       description: p.headline,
       url: `${SITE_URL}/assets/${slug}`,
-      images: [{ url: `${SITE_URL}/api/collector-card/${slug}/og`, width: 1200, height: 630 }],
+      images: [
+        {
+          // Versioned, so a rebuild or a renderer change produces a URL X has
+          // not cached yet.
+          url: `${SITE_URL}/api/collector-card/${slug}/og?v=${cardImageVersion(p.updatedAt)}`,
+          width: 1200,
+          height: 630,
+        },
+      ],
     },
     twitter: { card: "summary_large_image", title, description: p.headline },
   };

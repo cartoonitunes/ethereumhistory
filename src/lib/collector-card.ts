@@ -1164,6 +1164,8 @@ export interface PortfolioHolding {
 
 export interface PublicPortfolio {
   slug: string;
+  /** Feeds the share image version, so a rebuild gets a fresh unfurl. */
+  updatedAt: string | null;
   owner: { name: string; ensName: string | null; avatarUrl: string | null; verified: boolean };
   tier: Tier;
   headline: string;
@@ -1190,6 +1192,7 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
       cardDataJson: collectorCards.cardDataJson,
       historianId: collectorCards.historianId,
       historianName: historians.name,
+      updatedAt: collectorCards.updatedAt,
     })
     .from(collectorCards)
     .leftJoin(historians, eq(historians.id, collectorCards.historianId))
@@ -1272,6 +1275,7 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
 
   return {
     slug: card.shareSlug,
+    updatedAt: card.updatedAt ? new Date(card.updatedAt).toISOString() : null,
     owner: {
       name: normalized.owner.name,
       ensName: normalized.owner.ensName,
@@ -1427,6 +1431,29 @@ function shortAddress(a: string): string {
  *
  * A no op when the account has no name, which leaves whatever the card stored.
  */
+/**
+ * Version token for a card's share image URL.
+ *
+ * X caches an unfurl image by URL and holds it for a long time, so an image
+ * endpoint whose URL never changes will keep serving the picture it had the
+ * first time anybody posted the link, however many times the card is rebuilt.
+ * Appending this makes the URL change whenever the picture should.
+ *
+ * Two parts, because two different things change the image. updatedAt covers
+ * the card's own content. IMAGE_RENDER_VERSION covers changes to the renderer
+ * or to what it reads, which move the picture without touching the row: the
+ * account name correction is exactly that case, since it is applied on read and
+ * never written back.
+ *
+ * Bump IMAGE_RENDER_VERSION whenever a change alters what the image shows.
+ */
+export const IMAGE_RENDER_VERSION = 2;
+
+export function cardImageVersion(updatedAt: Date | string | null | undefined): string {
+  const t = updatedAt instanceof Date ? updatedAt.getTime() : updatedAt ? Date.parse(updatedAt) : 0;
+  return `${Number.isFinite(t) ? t : 0}-${IMAGE_RENDER_VERSION}`;
+}
+
 export function withAccountName(card: CardData, accountName: string | null | undefined): CardData {
   const name = accountName?.trim();
   if (!name || card.owner.name === name) return card;
