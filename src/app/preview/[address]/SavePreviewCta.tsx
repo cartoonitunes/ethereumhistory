@@ -1,6 +1,12 @@
 /**
  * The banner that turns a preview into an account.
  *
+ * The copy used to say the card was stored nowhere. That stopped being true
+ * when previews began persisting: the row is saved, keyed by address, and
+ * listed on the public leaderboard. Telling someone their scan is not kept, on
+ * a page whose scan is kept and ranked, was both wrong and a worse pitch than
+ * the truth. What they are actually missing is their name on it.
+ *
  * Shown only to signed out visitors, and placed directly under the card rather
  * than at the foot of the page: by the time someone has scrolled past their own
  * holdings they have had the whole experience and the offer to keep it arrives
@@ -39,26 +45,22 @@ export default function SavePreviewCta({
       <div className="flex flex-col gap-4 p-5 sm:p-6">
         <div className="flex flex-col gap-2">
           <span className="font-mono text-[0.68rem] uppercase tracking-[0.13em] text-ether-300">
-            Not saved yet
+            Unclaimed
           </span>
           <h2 id="save-preview-heading" className="text-lg font-semibold text-obsidian-50 sm:text-xl">
-            Sign up to save your collection and card
+            Claim this card as yours
           </h2>
           <p className="text-sm leading-relaxed text-obsidian-300">
+            Your card is saved for now. Sign in to claim it, manage multiple wallets,
+            and appear as a named collector on the leaderboard.
             {holdingCount > 0 ? (
               <>
-                This card was generated on the spot and is stored nowhere. Close this
-                tab and the {holdingCount} {noun} below go with it. Save it to your
-                account and you keep a permanent collection page, a card you can share,
-                and the option to verify this wallet by signature for the badge.
+                {" "}
+                Claiming also lets you verify this wallet by signature for the badge,
+                and gives the {holdingCount} {noun} below a collection page of their
+                own.
               </>
-            ) : (
-              <>
-                This card was generated on the spot and is stored nowhere. Save it to
-                your account to keep this wallet attached, add more wallets, and get a
-                collection page that updates as the archive grows.
-              </>
-            )}
+            ) : null}
           </p>
         </div>
 

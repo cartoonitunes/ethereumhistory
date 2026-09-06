@@ -50,10 +50,10 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
 
       <ol className="mt-6 flex flex-col gap-px overflow-hidden rounded-xl border border-white/10 bg-white/5">
         {entries.map((e) => (
-          <li key={e.slug}>
+          <li key={e.slug} className="flex items-stretch bg-obsidian-950 transition-colors hover:bg-obsidian-900">
             <Link
               href={e.href}
-              className="group flex items-center gap-3 bg-obsidian-950 px-3 py-3 transition-colors hover:bg-obsidian-900 sm:gap-4 sm:px-4"
+              className="group flex min-w-0 flex-1 items-center gap-3 px-3 py-3 sm:gap-4 sm:px-4"
             >
               <Rank rank={e.rank} />
               <Avatar entry={e} />
@@ -84,13 +84,30 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
                 </div>
               </div>
             </Link>
+
+            {/* Anonymous rows only. A member's row is already theirs, and the
+                link has to sit outside the row link above rather than inside
+                it, since nesting one anchor in another is invalid. */}
+            {!e.member ? (
+              <Link
+                href={`/api/preview/claim?address=${encodeURIComponent(e.slug)}`}
+                prefetch={false}
+                title="Claim this spot if this wallet is yours"
+                className="hidden shrink-0 items-center pr-4 text-[11px] text-obsidian-500 transition-colors hover:text-ether-300 sm:flex"
+              >
+                Claim this spot
+              </Link>
+            ) : null}
           </li>
         ))}
       </ol>
 
-      <p className="mt-3 text-center text-xs text-obsidian-400">
-        Checked a wallet? It is on here. Sign in to claim yours, put a name to it and
-        earn the member mark.
+      {/* One line, not two. This replaces a footnote that made the same offer
+          in different words, and two stacked calls to action under a board that
+          already carries a claim link on every unnamed row is the point where
+          helpful turns into pushy. */}
+      <p className="mt-3 text-xs text-obsidian-400">
+        Signed-in collectors get a name, verified badge, and multiple wallets.
       </p>
     </section>
   );

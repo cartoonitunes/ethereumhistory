@@ -127,6 +127,9 @@ export default async function PreviewPage({
           shareUrl={shareUrl}
           slug={`preview/${encodeURIComponent(address)}`}
           previewMode
+          signInHref={
+            me ? undefined : `/api/preview/claim?address=${encodeURIComponent(address)}`
+          }
         />
 
         {!me ? (

@@ -206,11 +206,12 @@ export default async function CollectorsPage() {
         </Suspense>
 
         <section className="mt-16 rounded-xl border border-white/10 p-6 text-center">
-          <h2 className="text-lg font-semibold">Keep your card</h2>
+          <h2 className="text-lg font-semibold">Claim your card</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-obsidian-400">
-            A card generated from the box above is not saved anywhere. Sign in to keep it,
-            add more wallets, verify them by signature for the badge, and get a collection
-            page listing every holding with its story.
+            A card from the box above is saved and ranked above, listed by its address
+            rather than by anyone. Sign in to claim it under your name, add more wallets,
+            verify them by signature for the badge, and get a collection page listing
+            every holding with its story.
           </p>
           <Link
             href="/assets"

@@ -31,6 +31,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 export interface CardHolding {
   contractAddress: string;
@@ -120,12 +121,21 @@ export default function HolographicCard({
   slug,
   collectionUrl,
   previewMode = false,
+  signInHref,
 }: {
   card: CardPayload;
   shareUrl: string;
   slug: string;
   /** Public collection page, posted as the second tweet in the thread. */
   collectionUrl?: string;
+  /**
+   * Where an unclaimed card offers to sign in, shown under the share buttons.
+   * Passed only when there is nobody signed in and the card is not theirs yet,
+   * because the page knows that and this component does not. Absent means the
+   * line is not shown, which is the right default for a card someone already
+   * owns.
+   */
+  signInHref?: string;
   /**
    * Ephemeral card for an address with no account. There is no collection page
    * to link to, so the thread collapses to a single tweet rather than promising
@@ -523,6 +533,22 @@ export default function HolographicCard({
         {imageState === "unsupported" ? (
           <p className="text-xs text-obsidian-400">
             This browser cannot copy images. Use Download PNG instead.
+          </p>
+        ) : null}
+
+        {/* Directly under the buttons, because a downloaded PNG is a snapshot
+            and this is the moment that becomes relevant: the file just saved
+            will not change when the collection does. */}
+        {signInHref ? (
+          <p className="text-xs text-obsidian-400">
+            <Link
+              href={signInHref}
+              prefetch={false}
+              className="text-ether-300 underline-offset-4 transition-colors hover:text-ether-200 hover:underline"
+            >
+              Sign in
+            </Link>{" "}
+            to update your card when your collection grows.
           </p>
         ) : null}
       </div>
