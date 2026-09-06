@@ -12,7 +12,7 @@ import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { normalizeCardData } from "@/lib/collector-card";
+import { normalizeCardData, withAccountName } from "@/lib/collector-card";
 import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
@@ -111,7 +111,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         card: card
           ? {
               shareSlug: card.shareSlug,
-              data: normalizeCardData(card.cardDataJson),
+              // The signed in user is the account, so their current name wins
+              // over whatever the stored card froze in.
+              data: withAccountName(normalizeCardData(card.cardDataJson), me.name),
               updatedAt: card.updatedAt,
             }
           : null,

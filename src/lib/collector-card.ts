@@ -1002,8 +1002,22 @@ async function resolveIdentity(
       ? "ens"
       : "generated";
 
+  // The account name wins over ENS.
+  //
+  // This is a card belonging to a person who chose a name on this site. An ENS
+  // name is a property of one of their wallets, and preferring it meant the
+  // card announced whichever wallet happened to resolve first rather than the
+  // person, which is how a card ended up titled webtrue.eth for someone with a
+  // perfectly good username. ENS is still carried separately and rendered as
+  // the handle underneath, so nothing is lost by demoting it here.
+  //
+  // Falls through to a short address only when the account has no name at all,
+  // which the schema makes unlikely but an empty string would still produce.
+  const accountName = owner.name?.trim() || null;
+  const fallback = wallets[0] ? shortAddress(wallets[0].address) : "Collector";
+
   return {
-    name: ensName || owner.name,
+    name: accountName || ensName || fallback,
     ensName,
     avatarUrl,
     avatarSource,
@@ -1175,13 +1189,17 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
       shareSlug: collectorCards.shareSlug,
       cardDataJson: collectorCards.cardDataJson,
       historianId: collectorCards.historianId,
+      historianName: historians.name,
     })
     .from(collectorCards)
+    .leftJoin(historians, eq(historians.id, collectorCards.historianId))
     .where(eq(collectorCards.shareSlug, slug));
 
   if (!card) return null;
 
-  const normalized = normalizeCardData(card.cardDataJson);
+  // Same correction the card page applies: the account's current name outranks
+  // whatever was frozen into the stored document.
+  const normalized = withAccountName(normalizeCardData(card.cardDataJson), card.historianName);
 
   const wallets = await db
     .select({ id: userWallets.id })
@@ -1397,6 +1415,24 @@ function shortAddress(a: string): string {
   return `${a.slice(0, 6)}...${a.slice(-4)}`;
 }
 
+/**
+ * Apply the account's display name to a stored card.
+ *
+ * Cards persist owner.name, so every card built before the priority fix carries
+ * an ENS name where the username should be, and would keep carrying it until
+ * its owner happened to press Rebuild. Tier, headline and score are already
+ * recomputed on read for exactly this reason; the name is the same class of
+ * thing, so it self corrects wherever the reader knows which account the card
+ * belongs to.
+ *
+ * A no op when the account has no name, which leaves whatever the card stored.
+ */
+export function withAccountName(card: CardData, accountName: string | null | undefined): CardData {
+  const name = accountName?.trim();
+  if (!name || card.owner.name === name) return card;
+  return { ...card, owner: { ...card.owner, name } };
+}
+
 /** One row of the public leaderboard. */
 export interface LeaderboardEntry {
   rank: number;
@@ -1502,7 +1538,7 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
         member: true,
         slug: r.shareSlug,
         href: `/assets/${r.shareSlug}`,
-        name: card.owner.name || r.historianName || "Collector",
+        name: r.historianName?.trim() || card.owner.name || "Collector",
         ensName: card.owner.ensName,
         avatarUrl: card.owner.avatarUrl ?? r.historianAvatarUrl ?? null,
         verified: card.stats.allWalletsVerified,

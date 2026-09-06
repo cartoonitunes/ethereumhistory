@@ -11,9 +11,9 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
-import { collectorCards } from "@/lib/schema";
+import { collectorCards, historians } from "@/lib/schema";
 import { eq } from "drizzle-orm";
-import { normalizeCardData } from "@/lib/collector-card";
+import { normalizeCardData, withAccountName } from "@/lib/collector-card";
 import HolographicCard, { type CardPayload } from "./HolographicCard";
 
 export const dynamic = "force-dynamic";
@@ -26,11 +26,19 @@ async function loadCard(slug: string): Promise<CardPayload | null> {
   if (!isDatabaseConfigured() || !SLUG_PATTERN.test(slug)) return null;
   const db = getDb();
   const [row] = await db
-    .select({ cardDataJson: collectorCards.cardDataJson })
+    .select({
+      cardDataJson: collectorCards.cardDataJson,
+      historianName: historians.name,
+    })
     .from(collectorCards)
+    .leftJoin(historians, eq(historians.id, collectorCards.historianId))
     .where(eq(collectorCards.shareSlug, slug));
-  // Normalised, so a card stored before the redesign still renders.
-  return row ? (normalizeCardData(row.cardDataJson) as unknown as CardPayload) : null;
+  if (!row) return null;
+  // Normalised, so a card stored before the redesign still renders, then given
+  // the account's current name so a card stored before the name priority fix
+  // stops showing an ENS name where the username belongs.
+  const card = withAccountName(normalizeCardData(row.cardDataJson), row.historianName);
+  return card as unknown as CardPayload;
 }
 
 export async function generateMetadata({
