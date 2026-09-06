@@ -722,6 +722,19 @@ export type NewWalletHolding = typeof walletHoldings.$inferInsert;
  * second copy would be a second thing to keep in step. Score, tier, count and
  * year are denormalised instead so the leaderboard can rank without opening the
  * JSON.
+ *
+ * NEVER DELETE ROWS FROM THIS TABLE. User data is permanent.
+ *
+ * Not a convention: migration 088 enforces it with triggers, so a DELETE or a
+ * TRUNCATE against this table raises rather than succeeding quietly. Rows here
+ * were once destroyed by hand at a psql prompt during test cleanup, and the
+ * history that went with them, when an address was first ever scanned, is the
+ * one thing a rescan cannot rebuild. A rescan gives today's holdings under
+ * today's scoring, not the card somebody was shown and shared months ago.
+ *
+ * To take a card off the public leaderboard, set `listed` to false. That is
+ * what the column is for, and it keeps the record while removing the card from
+ * the site.
  */
 export const previewCards = pgTable(
   "preview_cards",

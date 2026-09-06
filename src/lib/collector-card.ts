@@ -2095,6 +2095,17 @@ export async function persistScanToWallet(
  * card; if the write fails they should still see the card rather than an error
  * about bookkeeping they did not ask for.
  */
+/**
+ * NEVER DELETE ROWS FROM preview_cards. User data is permanent.
+ *
+ * This is the only function that writes the table, and it writes by upsert for
+ * that reason: a rescan updates the row in place rather than replacing it, so
+ * first_scanned_at and scan_count survive. Migration 088 blocks DELETE and
+ * TRUNCATE at the database level, so a cleanup that reaches for either will
+ * fail loudly instead of taking history with it.
+ *
+ * If a card has to come off the leaderboard, set `listed` to false.
+ */
 export async function persistPreviewCard(address: string, card: CardData): Promise<void> {
   try {
     const db = getDb();
