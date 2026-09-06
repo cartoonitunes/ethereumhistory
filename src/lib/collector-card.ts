@@ -30,7 +30,7 @@ import {
   userWallets,
   walletHoldings,
 } from "@/lib/schema";
-import { and, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
 import { isCollectibleContract, tokenIdentity } from "@/lib/token-display";
 import { cached, CACHE_TTL } from "@/lib/cache";
@@ -1957,6 +1957,23 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
   // Anonymous previews. Unclaimed only: a claimed address is already
   // represented by its owner's account row, and listing both would put the
   // same person on the board twice, once named and once as a bare address.
+  //
+  // Bounded, because this table grows with every address anyone ever looks up
+  // and the page that reads it is no longer cached. Ordering by the stored
+  // score and taking a generous pool keeps a dynamic render cheap without
+  // changing who reaches the top.
+  //
+  // Taking a pool rather than exactly `cap` is what makes that safe. The stored
+  // score is a floor for the recomputed one: persistPreviewCard writes it
+  // through the same ratchet that normalizeCardData applies on read, and the
+  // ratchet only ever raises. A row can therefore climb between scans, as the
+  // wallet ages or the archive grows, so the pool has to be wide enough that a
+  // climber is still inside it. Eight times the cap, and never fewer than 200.
+  //
+  // Deliberately no `contract_count > 0` here, even though the ranking index
+  // carries it: a card with no collectibles but real historic activity belongs
+  // on the board, and that predicate is exactly what used to drop it.
+  const previewPool = Math.max(200, cap * 8);
   const previewRows = await db
     .select({
       address: previewCards.address,
@@ -1964,7 +1981,9 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
       cardDataJson: previewCards.cardDataJson,
     })
     .from(previewCards)
-    .where(and(eq(previewCards.listed, true), isNull(previewCards.claimedByHistorianId)));
+    .where(and(eq(previewCards.listed, true), isNull(previewCards.claimedByHistorianId)))
+    .orderBy(desc(previewCards.score), desc(previewCards.contractCount))
+    .limit(previewPool);
 
   // A second dedupe pass, because claiming is not the only way an address ends
   // up on an account. A wallet added by hand never had a preview claimed, so

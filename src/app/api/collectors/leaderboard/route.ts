@@ -38,7 +38,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       {
         status: 200,
         headers: {
-          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+          // Short, for the same reason the page is dynamic: a caller polling this
+          // endpoint after a scan is asking whether their row landed, and five
+          // minutes of edge cache answered no long after it had.
+          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60",
         },
       }
     );

@@ -7,6 +7,7 @@
  */
 
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import CollectorCardCta from "@/app/CollectorCardCta";
@@ -15,12 +16,22 @@ import { isDatabaseConfigured } from "@/lib/db-client";
 import Leaderboard from "./Leaderboard";
 
 /**
- * Revalidated rather than force-dynamic. This is a marketing page that was
- * fully static until the leaderboard arrived, and rankings do not need to be
- * to the second. Five minutes keeps it cheap for the common case, which is a
- * visitor who followed a shared link and will never see it change.
+ * Dynamic, because the leaderboard on this page is the answer to something the
+ * visitor just did.
+ *
+ * It was revalidated every five minutes on the reasoning that rankings do not
+ * need to be current to the second. That reasoning missed the actual journey:
+ * the lookup box is on this page, so the person most likely to reload it is the
+ * one who just scanned a wallet and came back to find it. Their row was already
+ * in the database and the page was serving a copy made minutes before they
+ * arrived, which reads as the feature being broken rather than as a cache.
+ *
+ * The cost is one query per view, and getLeaderboard now takes a bounded pool
+ * rather than every stored preview, so it stays cheap as the table grows. The
+ * rest of the page is static content that streams immediately, with only the
+ * leaderboard suspended behind the query.
  */
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 /** How many rows the page shows. The API accepts more for a future "show more". */
 const LEADERBOARD_SIZE = 25;
@@ -102,9 +113,32 @@ async function loadLeaderboard(): Promise<LeaderboardEntry[]> {
   }
 }
 
+/**
+ * Suspended so the query cannot hold up the rest of the page. Everything above
+ * and below it is static copy that should paint at once.
+ */
+async function LeaderboardSection() {
+  const leaderboard = await loadLeaderboard();
+  return <Leaderboard entries={leaderboard} />;
+}
+
+/** Reserves the leaderboard's space while the query runs, so nothing jumps. */
+function LeaderboardFallback() {
+  return (
+    <section className="mt-16" aria-hidden="true">
+      <div className="h-6 w-40 rounded bg-obsidian-800/50" />
+      <div className="mt-3 h-4 w-full max-w-xl rounded bg-obsidian-800/30" />
+      <ul className="mt-5 flex flex-col gap-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <li key={i} className="h-14 rounded-xl bg-obsidian-800/25" />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default async function CollectorsPage() {
   const tiers = allTiers();
-  const leaderboard = await loadLeaderboard();
 
   return (
     <div className="min-h-screen bg-obsidian-950 text-obsidian-100">
@@ -167,7 +201,9 @@ export default async function CollectorsPage() {
 
         {/* After Tiers on purpose: the rows are labelled with tier names, so the
             ladder has to be explained before the ranking that uses it. */}
-        <Leaderboard entries={leaderboard} />
+        <Suspense fallback={<LeaderboardFallback />}>
+          <LeaderboardSection />
+        </Suspense>
 
         <section className="mt-16 rounded-xl border border-white/10 p-6 text-center">
           <h2 className="text-lg font-semibold">Keep your card</h2>
