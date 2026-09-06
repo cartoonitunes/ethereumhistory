@@ -37,8 +37,31 @@ import { cached, CACHE_TTL } from "@/lib/cache";
 /** A scan should never hold a request open longer than this per call. */
 const RPC_TIMEOUT_MS = 15_000;
 
-/** Alchemy returns at most 100 NFT contracts per page; we cap total pages. */
-const MAX_NFT_PAGES = 10;
+/**
+ * Limits on NFT enumeration.
+ *
+ * Unlike ERC-20 balances, which are asked for by name against the documented
+ * set, there is no endpoint that takes a list of NFT contracts and returns
+ * which of them a wallet holds. So this half still has to enumerate, and
+ * enumeration has to be bounded.
+ *
+ * The old cap was 10 pages, or 1,000 contracts, and it was being hit by
+ * ordinary wallets rather than by outliers: 0x1db3439a holds 1,469 NFT
+ * contracts and vitalik.eth holds 2,465, so the second was losing 60 per cent
+ * of its collections silently. 60 pages covers both several times over.
+ *
+ * The page budget alone is not enough of a guard, because pages are fetched in
+ * sequence and a slow provider makes the wall clock the real limit, not the
+ * count. Measured at roughly 0.22s a page, so 6,000 contracts costs about 13
+ * seconds and the budget below is the backstop rather than the usual path.
+ *
+ * When either limit stops the walk the result is marked truncated, which flows
+ * into the scan's degraded flag. A partial answer that says it is partial can
+ * safely be shown; a partial answer that claims to be complete would let a
+ * rescan quietly delete holdings that were simply not reached.
+ */
+const MAX_NFT_PAGES = 60;
+const NFT_ENUMERATION_BUDGET_MS = 20_000;
 
 /**
  * What kind of token a holding is.
@@ -220,18 +243,27 @@ async function fetchErc20Balances(
 async function fetchNftContracts(
   url: string,
   address: string
-): Promise<{ contractAddress: string; balance: string; name: string | null; symbol: string | null; tokenType: TokenType }[]> {
+): Promise<{
+  contracts: { contractAddress: string; balance: string; name: string | null; symbol: string | null; tokenType: TokenType }[];
+  truncated: boolean;
+}> {
   // Derive the NFT endpoint from the configured JSON-RPC URL so there is one
   // credential to manage. Shape: https://<net>.g.alchemy.com/v2/<key>
   const match = url.match(/^(https:\/\/[^/]+)\/v2\/([^/?#]+)/);
-  if (!match) return [];
+  if (!match) return { contracts: [], truncated: false };
   const [, origin, key] = match;
   const base = `${origin}/nft/v3/${key}/getContractsForOwner`;
 
   const out: { contractAddress: string; balance: string; name: string | null; symbol: string | null; tokenType: TokenType }[] = [];
   let pageKey: string | undefined;
+  let truncated = false;
+  const deadline = Date.now() + NFT_ENUMERATION_BUDGET_MS;
 
   for (let page = 0; page < MAX_NFT_PAGES; page += 1) {
+    if (Date.now() > deadline) {
+      truncated = true;
+      break;
+    }
     const qs = new URLSearchParams({ owner: address, pageSize: "100" });
     if (pageKey) qs.set("pageKey", pageKey);
 
@@ -283,9 +315,11 @@ async function fetchNftContracts(
 
     pageKey = json.pageKey;
     if (!pageKey) break;
+    // Ran out of pages before running out of wallet.
+    if (page === MAX_NFT_PAGES - 1) truncated = true;
   }
 
-  return out;
+  return { contracts: out, truncated };
 }
 
 /**
@@ -461,11 +495,13 @@ export async function scanWallet(address: string): Promise<ScanResult> {
     failures.push("ERC-20 balances");
   }
 
+  let nftTruncated = false;
   if (nfts.status === "fulfilled") {
     // Keep the kind the provider reported rather than stamping erc721 on
     // everything, which is what made an ERC-1155 wrapper indistinguishable
     // from a plain NFT in stored holdings.
-    for (const c of nfts.value) raw.push(c);
+    for (const c of nfts.value.contracts) raw.push(c);
+    nftTruncated = nfts.value.truncated;
   } else {
     failures.push("NFT holdings");
   }
@@ -478,11 +514,23 @@ export async function scanWallet(address: string): Promise<ScanResult> {
   // delete real holdings.
   const holdings = raw.length > 0 ? await crossReferenceAgainstArchive(raw) : [];
 
+  // Truncation counts as degraded. It is not a failure, but it is an incomplete
+  // answer, and persistScanToWallet deletes holdings that a clean scan did not
+  // return. Without this flag a truncated scan would drop real holdings that
+  // were simply never reached.
+  const warnings: string[] = [];
+  if (failures.length > 0) warnings.push(`Could not read ${failures.join(", ")} from the provider.`);
+  if (nftTruncated) {
+    warnings.push(
+      "This wallet holds more NFT collections than one scan reads, so the result may be incomplete."
+    );
+  }
+
   return {
     holdings,
     firstTxDate,
-    degraded: failures.length > 0,
-    warning: failures.length > 0 ? `Could not read ${failures.join(", ")} from the provider.` : null,
+    degraded: failures.length > 0 || nftTruncated,
+    warning: warnings.length > 0 ? warnings.join(" ") : null,
   };
 }
 
@@ -1771,15 +1819,29 @@ export async function persistScanToWallet(
       });
   }
 
-  // Drop anything the wallet no longer holds. Only reached on a clean scan.
-  const keep = scan.holdings.map((h) => h.contractAddress);
-  await db
-    .delete(walletHoldings)
-    .where(
-      keep.length > 0
-        ? and(eq(walletHoldings.walletId, walletId), notInArray(walletHoldings.contractAddress, keep))
-        : eq(walletHoldings.walletId, walletId)
-    );
+  // Drop anything the wallet no longer holds, but only when the scan was
+  // complete.
+  //
+  // The guard at the top catches a scan that failed entirely. It does not catch
+  // a partial one, and partial is now a real outcome: NFT enumeration stops at
+  // a page cap or a time budget, and a wallet with thousands of collections can
+  // return a genuine but incomplete list. Pruning against that list would treat
+  // "not reached" as "no longer held" and delete real holdings, which the owner
+  // would see as their collection shrinking for no reason.
+  //
+  // So an incomplete scan adds and updates, and never removes. The stale rows
+  // it leaves behind are the cheaper mistake, and the next clean scan clears
+  // them.
+  if (!scan.degraded) {
+    const keep = scan.holdings.map((h) => h.contractAddress);
+    await db
+      .delete(walletHoldings)
+      .where(
+        keep.length > 0
+          ? and(eq(walletHoldings.walletId, walletId), notInArray(walletHoldings.contractAddress, keep))
+          : eq(walletHoldings.walletId, walletId)
+      );
+  }
 
   if (scan.firstTxDate) {
     await db
