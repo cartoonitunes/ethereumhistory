@@ -215,7 +215,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 href="https://discord.gg/3KV6dt2euF"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                className="hidden 2xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
                 aria-label="Discord"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -226,7 +226,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 href="https://github.com/cartoonitunes/ethereumhistory"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                className="hidden 2xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
                 aria-label="GitHub"
               >
                 <Github className="w-5 h-5" />
@@ -255,7 +255,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                     </Link>
                   )}
                   {me.trusted && (
-                    <Link href="/historian/invite" className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
+                    <Link href="/historian/invite" className="hidden 2xl:flex items-center gap-2 px-3 py-2 rounded-lg border border-obsidian-800 bg-obsidian-900/40 hover:bg-obsidian-800 text-obsidian-300 hover:text-obsidian-100 text-sm font-medium transition-colors">
                       <UserPlus className="w-4 h-4" />
                       Invite
                     </Link>
