@@ -16,6 +16,7 @@ import { Header } from "@/components/Header";
 import { isDatabaseConfigured } from "@/lib/db-client";
 import { cardImageVersion, getPublicPortfolio } from "@/lib/collector-card";
 import HoldingsList from "./HoldingsList";
+import ActivityList from "./ActivityList";
 
 export const dynamic = "force-dynamic";
 
@@ -112,7 +113,16 @@ export default async function PublicAssetsPage({
           </Link>
         </header>
 
-        <HoldingsList holdings={p.holdings} />
+        <HoldingsList holdings={p.holdings} title="Collectibles, oldest first" />
+        <ActivityList
+          items={p.activity.map((h) => ({
+            contractAddress: h.contractAddress,
+            name: h.name,
+            symbol: h.symbol,
+            deployedYear: h.deployedYear,
+            shortDescription: h.shortDescription,
+          }))}
+        />
 
         <p className="mt-10 text-center text-xs leading-relaxed text-obsidian-400">
           {p.owner.verified

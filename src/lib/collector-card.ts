@@ -32,7 +32,7 @@ import {
 } from "@/lib/schema";
 import { and, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
-import { tokenIdentity } from "@/lib/token-display";
+import { isCollectibleContract, tokenIdentity } from "@/lib/token-display";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
 /** A scan should never hold a request open longer than this per call. */
@@ -99,6 +99,16 @@ export interface DetectedHolding {
   deploymentBlock: number | null;
   /** Why this contract matters, from the EH record. */
   shortDescription: string | null;
+  /**
+   * Collectible, or merely participated in.
+   *
+   * Decided here rather than later because this is the last place the raw
+   * on-chain name and the curated contract name both exist. By the time a
+   * holding reaches a renderer its name has been cleaned, and a wallet proxy
+   * whose bytes32 garbage was replaced by "WalletProxy", or by a shortened
+   * address, would read as a perfectly good token to any test applied then.
+   */
+  collectible: boolean;
 }
 
 export interface ScanResult {
@@ -449,6 +459,12 @@ export async function crossReferenceAgainstArchive(
 
     merged.set(c.target, {
       contractAddress: c.target,
+      collectible: isCollectibleContract({
+        tokenName: meta.tokenName ?? c.raw.name ?? null,
+        tokenSymbol: meta.tokenSymbol ?? c.raw.symbol ?? null,
+        contractName: meta.etherscanContractName,
+        hasDescription: (meta.shortDescription ?? "").trim().length > 0,
+      }),
       tokenName: identity.name,
       tokenSymbol: identity.symbol,
       balance: c.raw.balance,
@@ -888,7 +904,14 @@ export function buildCardHeadline(contractCount: number, earliestYear: number | 
 /** Shape persisted in collector_cards.card_data_json and rendered by /card/[slug]. */
 export interface CardData {
   /** 2 since the redesign. Readers should tolerate 1 rows still in the table. */
-  version: 2;
+  /**
+   * 2  scored on every documented holding, including wallets and multi-sigs.
+   * 3  scored on collectibles only, with infrastructure moved to `activity`.
+   *
+   * Read on the way back in, so a card built under 2 keeps the score it was
+   * given. See normalizeCardData.
+   */
+  version: number;
   owner: {
     /** ENS name when we have one, otherwise the historian's display name. */
     name: string;
@@ -919,7 +942,15 @@ export interface CardData {
     deploymentBlock: number | null;
     /** Present on ephemeral previews; absent on older stored cards. */
     shortDescription?: string | null;
+    /** Absent on cards built before version 3. */
+    collectible?: boolean;
   }[];
+  /**
+   * Historic contracts the wallet took part in rather than collected: wallet
+   * proxies, multi-sigs, DAOs. Shown, never scored, never counted in stats.
+   * Absent on cards built before version 3.
+   */
+  activity?: CardData["holdings"];
   stats: {
     contractCount: number;
     walletCount: number;
@@ -989,7 +1020,7 @@ export async function buildCardData(
 
   if (wallets.length === 0) {
     return {
-      version: 2,
+      version: CARD_SCORING_VERSION,
       owner: { ...identity, verified: false },
       tier: tierForScore(0),
       headline: buildCardHeadline(0, null),
@@ -1014,6 +1045,7 @@ export async function buildCardData(
       deploymentTimestamp: contracts.deploymentTimestamp,
       deploymentBlock: contracts.deploymentBlock,
       isDocumented: contracts.isDocumented,
+      etherscanContractName: contracts.etherscanContractName,
       significance: contracts.historicalSignificance,
       shortDescription: contracts.shortDescription,
     })
@@ -1024,6 +1056,8 @@ export async function buildCardData(
   type Enriched = CardData["holdings"][number] & {
     significance: string | null;
     shortDescription: string | null;
+    /** Carried only to classify collectible against activity, never rendered. */
+    contractName: string | null;
   };
   const merged = new Map<string, Enriched>();
   for (const r of rows) {
@@ -1051,6 +1085,7 @@ export async function buildCardData(
       deploymentBlock: r.deploymentBlock,
       significance: r.significance,
       shortDescription: r.shortDescription,
+      contractName: r.etherscanContractName ?? null,
     });
   }
 
@@ -1061,41 +1096,51 @@ export async function buildCardData(
     return (a.tokenName ?? "").localeCompare(b.tokenName ?? "");
   });
 
+  // Split before scoring. A wallet full of 2015 multi-sigs is a participant in
+  // Ethereum's history, which the activity section says, but not a collector of
+  // artefacts, which is what the score claims to measure.
+  const { collectibles, activity } = splitHoldings(enriched);
+
   const eraCounts: Record<string, number> = {};
-  for (const h of enriched) {
+  for (const h of collectibles) {
     const key = h.eraId ?? "unknown";
     eraCounts[key] = (eraCounts[key] ?? 0) + 1;
   }
 
   const verifiedCount = wallets.filter((w) => w.verifiedAt !== null).length;
-  const years = enriched.map((h) => h.deployedYear).filter((y): y is number => y !== null);
+  const years = collectibles.map((h) => h.deployedYear).filter((y): y is number => y !== null);
   const firstTxDates = wallets.map((w) => w.firstTxDate).filter((d): d is Date => d instanceof Date);
   // Earliest across every wallet on the account, so adding a wallet can only
   // pull this date backwards and the age component can only rise.
   const onChainSince =
     firstTxDates.length > 0 ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))) : null;
-  const scoring = computeCollectorScore(enriched, onChainSince);
+  const scoring = computeCollectorScore(collectibles, onChainSince);
+
+  const strip = (h: Enriched) => {
+    const { significance, shortDescription, contractName, ...rest } = h;
+    void significance;
+    void shortDescription;
+    void contractName;
+    return rest;
+  };
 
   return {
-    version: 2,
+    version: CARD_SCORING_VERSION,
     owner: { ...identity, verified: verifiedCount > 0 && verifiedCount === wallets.length },
     tier: tierForScore(scoring.score),
-    headline: buildCardHeadline(enriched.length, years.length > 0 ? Math.min(...years) : null),
+    headline: buildCardHeadline(collectibles.length, years.length > 0 ? Math.min(...years) : null),
     wallets: wallets.map((w) => ({
       address: w.address,
       label: w.label,
       firstTxDate: w.firstTxDate ? new Date(w.firstTxDate).toISOString() : null,
       verified: w.verifiedAt !== null,
     })),
-    // Kept in the payload for the API and any future view. The card itself no
-    // longer renders a flat list of these.
-    holdings: enriched.map(({ significance, shortDescription, ...h }) => {
-      void significance;
-      void shortDescription;
-      return h;
-    }),
+    // Collectibles only. Wallet proxies, multi-sigs and DAOs live in activity
+    // below, shown but never scored or counted.
+    holdings: collectibles.map(strip),
+    activity: activity.map(strip),
     stats: {
-      contractCount: enriched.length,
+      contractCount: collectibles.length,
       walletCount: wallets.length,
       verifiedWalletCount: verifiedCount,
       allWalletsVerified: verifiedCount > 0 && verifiedCount === wallets.length,
@@ -1215,7 +1260,19 @@ export function normalizeCardData(raw: unknown): CardData {
   const c = (raw ?? {}) as Partial<CardData> & Record<string, unknown>;
   const stats = (c.stats ?? {}) as Partial<CardData["stats"]>;
   const owner = (c.owner ?? {}) as Partial<CardData["owner"]>;
-  const holdings = Array.isArray(c.holdings) ? (c.holdings as CardData["holdings"]) : [];
+  const storedHoldings = Array.isArray(c.holdings) ? (c.holdings as CardData["holdings"]) : [];
+  const storedActivity = Array.isArray(c.activity) ? (c.activity as CardData["holdings"]) : [];
+
+  // A card built before version 3 has everything in `holdings`, including the
+  // wallet proxies and multi-sigs, so it is split on the way out. One built at
+  // 3 or later arrives already split and is left as it is.
+  const storedVersion = typeof c.version === "number" ? c.version : 2;
+  const split =
+    storedVersion >= CARD_SCORING_VERSION
+      ? { collectibles: storedHoldings, activity: storedActivity }
+      : splitHoldings(storedHoldings);
+  const holdings = split.collectibles;
+  const activity = split.activity;
   const wallets = Array.isArray(c.wallets) ? (c.wallets as CardData["wallets"]) : [];
 
   // Derived from the wallet rows rather than trusted from stats, so a card
@@ -1236,19 +1293,33 @@ export function normalizeCardData(raw: unknown): CardData {
   // no way to know they must rebuild. Stored holdings carry deploymentBlock, so
   // this is exact. Falls back to the stored value only when they do not.
   const recomputed = computeCollectorScore(holdings, onChainSince);
+
+  // Scores are normally recomputed on read so a formula fix reaches cards that
+  // already exist. This one change is exempt, on purpose.
+  //
+  // Moving wallets and multi-sigs out of the score only ever lowers it, and
+  // lowering a number somebody has already shared, without them doing anything,
+  // is a worse outcome than the number being generous. So a card built before
+  // version 3 keeps the score it was given, and adopts the new basis the next
+  // time its owner rebuilds or rescans. Everything else about it, including the
+  // holding count, reflects the split immediately.
+  const storedScore = typeof stats.score === "number" ? stats.score : null;
   const score =
-    recomputed.scoredCount > 0
-      ? recomputed.score
-      : typeof stats.score === "number"
-        ? stats.score
-        : 0;
+    storedVersion < CARD_SCORING_VERSION && storedScore !== null
+      ? storedScore
+      : recomputed.scoredCount > 0
+        ? recomputed.score
+        : (storedScore ?? 0);
 
   const walletCount = stats.walletCount ?? wallets.length;
   const verifiedWalletCount =
     stats.verifiedWalletCount ?? wallets.filter((w) => w.verified).length;
 
   return {
-    version: 2,
+    // Report what the stored card actually is, not a constant. A normalised
+    // copy that claimed version 3 would tell the next reader its score was
+    // already computed on collectibles, which is exactly what it is not.
+    version: storedVersion,
     owner: {
       name: owner.name ?? "Collector",
       ensName: owner.ensName ?? null,
@@ -1282,8 +1353,11 @@ export function normalizeCardData(raw: unknown): CardData {
     ),
     wallets,
     holdings,
+    activity,
     stats: {
-      contractCount: stats.contractCount ?? holdings.length,
+      // Collectibles only. Activity is shown but never counted, so the number
+      // on the card and the number on the leaderboard mean one thing.
+      contractCount: holdings.length,
       walletCount,
       verifiedWalletCount,
       allWalletsVerified:
@@ -1304,6 +1378,8 @@ export function normalizeCardData(raw: unknown): CardData {
 /** A single holding as shown on the public portfolio page. */
 export interface PortfolioHolding {
   contractAddress: string;
+  /** False for wallets, multi-sigs and DAOs. Absent means treat as collectible. */
+  collectible?: boolean;
   name: string;
   symbol: string | null;
   /** Raw integer string. Format with tokenDecimals at render time. */
@@ -1321,6 +1397,8 @@ export interface PortfolioHolding {
 
 export interface PublicPortfolio {
   slug: string;
+  /** Contracts taken part in rather than collected. Shown, never scored. */
+  activity: PortfolioHolding[];
   /** Feeds the share image version, so a rebuild gets a fresh unfurl. */
   updatedAt: string | null;
   owner: { name: string; ensName: string | null; avatarUrl: string | null; verified: boolean };
@@ -1409,6 +1487,14 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
       });
       merged.set(r.contractAddress, {
         contractAddress: r.contractAddress,
+        // Decided from the raw values, before the name cleanup above rewrites a
+        // proxy's bytes32 noise into something that looks like a token.
+        collectible: isCollectibleContract({
+          tokenName: r.tokenName,
+          tokenSymbol: r.tokenSymbol,
+          contractName: r.etherscanContractName,
+          hasDescription: (r.shortDescription ?? "").trim().length > 0,
+        }),
         name: identity.name,
         symbol: identity.symbol,
         balance: r.balance,
@@ -1439,8 +1525,12 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
   // amounts on their private /assets page.
   holdings = holdings.map((h) => ({ ...h, balance: "0" }));
 
+  const collectibles = holdings.filter((h) => h.collectible !== false);
+  const activity = holdings.filter((h) => h.collectible === false);
+
   return {
     slug: card.shareSlug,
+    activity,
     updatedAt: card.updatedAt ? new Date(card.updatedAt).toISOString() : null,
     owner: {
       name: normalized.owner.name,
@@ -1451,7 +1541,7 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
     tier: normalized.tier,
     headline: normalized.headline,
     stats: normalized.stats,
-    holdings,
+    holdings: collectibles,
   };
 }
 
@@ -1531,11 +1621,14 @@ export async function buildEphemeralCard(
     deployedYear: h.deployedYear,
     deploymentBlock: h.deploymentBlock,
     shortDescription: h.shortDescription,
+    collectible: h.collectible,
   }));
 
   const onChainSince = scan.firstTxDate;
-  const scoring = computeCollectorScore(holdings, onChainSince);
-  const years = holdings.map((h) => h.deployedYear).filter((y): y is number => y !== null);
+  // Same split as a saved card, so a preview and the card it becomes agree.
+  const { collectibles, activity } = splitHoldings(holdings);
+  const scoring = computeCollectorScore(collectibles, onChainSince);
+  const years = collectibles.map((h) => h.deployedYear).filter((y): y is number => y !== null);
   const earliestYear = years.length > 0 ? Math.min(...years) : null;
   const eraCounts: Record<string, number> = {};
   for (const h of holdings) {
@@ -1546,7 +1639,7 @@ export async function buildEphemeralCard(
   return {
     address,
     card: {
-      version: 2,
+      version: CARD_SCORING_VERSION,
       owner: {
         name: ensName ?? `${address.slice(0, 6)}…${address.slice(-4)}`,
         ensName,
@@ -1556,7 +1649,7 @@ export async function buildEphemeralCard(
         verified: false,
       },
       tier: tierForScore(scoring.score),
-      headline: buildCardHeadline(holdings.length, earliestYear),
+      headline: buildCardHeadline(collectibles.length, earliestYear),
       wallets: [
         {
           address,
@@ -1565,13 +1658,10 @@ export async function buildEphemeralCard(
           verified: false,
         },
       ],
-      holdings: holdings.sort((a, b) => {
-        const ab = a.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
-        const bb = b.deploymentBlock ?? Number.MAX_SAFE_INTEGER;
-        return ab - bb;
-      }),
+      holdings: [...collectibles].sort(byDeployment),
+      activity: [...activity].sort(byDeployment),
       stats: {
-        contractCount: holdings.length,
+        contractCount: collectibles.length,
         walletCount: 1,
         verifiedWalletCount: 0,
         allWalletsVerified: false,
@@ -1631,6 +1721,49 @@ export function withAccountName(card: CardData, accountName: string | null | und
   const name = accountName?.trim();
   if (!name || card.owner.name === name) return card;
   return { ...card, owner: { ...card.owner, name } };
+}
+
+/** Oldest first, the order every holdings list uses. */
+function byDeployment(a: { deploymentBlock: number | null }, b: { deploymentBlock: number | null }) {
+  return (a.deploymentBlock ?? Number.MAX_SAFE_INTEGER) - (b.deploymentBlock ?? Number.MAX_SAFE_INTEGER);
+}
+
+/** The card format that scores collectibles only. */
+export const CARD_SCORING_VERSION = 3;
+
+/**
+ * Split a set of holdings into what was collected and what was merely used.
+ *
+ * Kept here so the builder, the normaliser and every renderer agree, since a
+ * disagreement would show as a holding counted on one page and not the next.
+ */
+export function splitHoldings<
+  T extends {
+    tokenName: string | null;
+    tokenSymbol: string | null;
+    contractName?: string | null;
+    collectible?: boolean;
+    shortDescription?: string | null;
+  },
+>(holdings: T[]): { collectibles: T[]; activity: T[] } {
+  const collectibles: T[] = [];
+  const activity: T[] = [];
+  for (const h of holdings) {
+    // An explicit verdict wins. It was decided against the raw on-chain values
+    // and nothing available here is as good. The heuristic is for cards stored
+    // before the verdict existed, whose names are still the raw ones anyway.
+    const verdict =
+      typeof h.collectible === "boolean"
+        ? h.collectible
+        : isCollectibleContract({
+            tokenName: h.tokenName,
+            tokenSymbol: h.tokenSymbol,
+            contractName: h.contractName ?? null,
+            hasDescription: (h.shortDescription ?? "").trim().length > 0,
+          });
+    (verdict ? collectibles : activity).push(h);
+  }
+  return { collectibles, activity };
 }
 
 /** One row of the public leaderboard. */

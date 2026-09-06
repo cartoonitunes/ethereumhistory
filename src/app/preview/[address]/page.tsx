@@ -22,6 +22,7 @@ import { tokenIdentity } from "@/lib/token-display";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import HolographicCard, { type CardPayload } from "@/app/card/[slug]/HolographicCard";
 import HoldingsList, { type HoldingItem } from "@/app/assets/[slug]/HoldingsList";
+import ActivityList from "@/app/assets/[slug]/ActivityList";
 import SavePreviewCta from "./SavePreviewCta";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 
@@ -140,6 +141,7 @@ export default async function PreviewPage({
         {result.card.holdings.length > 0 ? (
           <div className="w-full max-w-5xl">
             <HoldingsList
+              title="Collectibles, oldest first"
               holdings={result.card.holdings.map(
                 (h): HoldingItem => ({
                   contractAddress: h.contractAddress,
@@ -164,6 +166,28 @@ export default async function PreviewPage({
                   shortDescription: h.shortDescription ?? null,
                 })
               )}
+            />
+          </div>
+        ) : null}
+
+        {result.card.activity && result.card.activity.length > 0 ? (
+          <div className="w-full max-w-5xl">
+            <ActivityList
+              items={result.card.activity.map((h) => ({
+                contractAddress: h.contractAddress,
+                name: tokenIdentity({
+                  tokenName: h.tokenName,
+                  tokenSymbol: h.tokenSymbol,
+                  address: h.contractAddress,
+                }).name,
+                symbol: tokenIdentity({
+                  tokenName: h.tokenName,
+                  tokenSymbol: h.tokenSymbol,
+                  address: h.contractAddress,
+                }).symbol,
+                deployedYear: h.deployedYear,
+                shortDescription: h.shortDescription ?? null,
+              }))}
             />
           </div>
         ) : null}
