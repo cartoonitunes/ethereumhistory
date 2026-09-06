@@ -13,6 +13,7 @@ import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { normalizeCardData, withAccountName } from "@/lib/collector-card";
+import { tokenIdentity } from "@/lib/token-display";
 import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
@@ -83,8 +84,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
       merged.set(r.contractAddress, {
         contractAddress: r.contractAddress,
-        name: r.tokenName ?? r.etherscanContractName ?? r.contractAddress.slice(0, 10),
-        symbol: r.tokenSymbol,
+        // Same cleanup the public collection applies, so the owner's private
+        // view and the page they share never disagree about a name.
+        name: tokenIdentity({
+          tokenName: r.tokenName,
+          tokenSymbol: r.tokenSymbol,
+          contractName: r.etherscanContractName,
+          address: r.contractAddress,
+        }).name,
+        symbol: tokenIdentity({
+          tokenName: r.tokenName,
+          tokenSymbol: r.tokenSymbol,
+          contractName: r.etherscanContractName,
+          address: r.contractAddress,
+        }).symbol,
         balance: r.balance,
         tokenDecimals: r.tokenDecimals,
         tokenType: r.tokenType,

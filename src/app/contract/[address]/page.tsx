@@ -9,6 +9,7 @@ import {
   getWrappersForContractFromDb,
 } from "@/lib/db/contracts";
 import { isValidAddress, formatAddress } from "@/lib/utils";
+import { tokenIdentity } from "@/lib/token-display";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
 import { isTursoConfigured } from "@/lib/turso";
@@ -44,14 +45,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const metadataBase = getMetadataBaseUrl();
   const contract = await getContractWithTokenMetadata(address.toLowerCase());
-  const tokenName = contract?.tokenName || null;
-  const tokenSymbol = contract?.tokenSymbol || null;
+  // Pre-ERC-20 contracts can answer name() with bytes32 garbage, and some are
+  // not tokens at all, so the raw values are filtered before they become the
+  // page title and the social card. This one rendered as "yÞ (ØA)" in the tab,
+  // the h1 and every unfurl of its link.
+  const identity = tokenIdentity({
+    tokenName: contract?.tokenName ?? null,
+    tokenSymbol: contract?.tokenSymbol ?? null,
+    contractName: contract?.etherscanContractName ?? null,
+    address: address.toLowerCase(),
+  });
+  const tokenName = identity.name;
+  const tokenSymbol = identity.symbol;
 
-  const titlePrefix = tokenName
-    ? `${tokenName}${tokenSymbol ? ` (${tokenSymbol})` : ""}`
-    : contract?.etherscanContractName
-    ? contract.etherscanContractName
-    : `Contract ${formatAddress(address)}`;
+  const titlePrefix = `${tokenName}${tokenSymbol ? ` (${tokenSymbol})` : ""}`;
 
   const title = `${titlePrefix} - Ethereum History`;
 

@@ -3,6 +3,7 @@
  */
 
 import { eq, and, asc, desc, inArray, isNotNull, ne, sql, lt, or } from "drizzle-orm";
+import { isTrustedTokenPair, tokenIdentity } from "@/lib/token-display";
 import * as schema from "../schema";
 import crypto from "crypto";
 import type {
@@ -503,6 +504,7 @@ export async function getRelatedContractsFromDb(
     address: schema.contracts.address,
     etherscanContractName: schema.contracts.etherscanContractName,
     tokenName: schema.contracts.tokenName,
+    tokenSymbol: schema.contracts.tokenSymbol,
     ensName: schema.contracts.ensName,
     eraId: schema.contracts.eraId,
     deploymentTimestamp: schema.contracts.deploymentTimestamp,
@@ -517,6 +519,7 @@ export async function getRelatedContractsFromDb(
       address: string;
       etherscanContractName: string | null;
       tokenName: string | null;
+      tokenSymbol: string | null;
       ensName: string | null;
       eraId: string | null;
       deploymentTimestamp: Date | null;
@@ -529,7 +532,14 @@ export async function getRelatedContractsFromDb(
       seen.add(r.address);
       out.push({
         address: r.address,
-        name: r.tokenName || r.etherscanContractName || r.ensName || null,
+        // The token name only counts when the chain gave a usable one. These
+        // cards sit on every contract page, so a 2015 proxy's bytes32 artefact
+        // was showing up as the title of a related contract.
+        name:
+          (isTrustedTokenPair(r.tokenName, r.tokenSymbol) ? r.tokenName : null) ||
+          r.etherscanContractName ||
+          r.ensName ||
+          null,
         eraId: r.eraId,
         deploymentTimestamp: r.deploymentTimestamp?.toISOString() ?? null,
         shortDescription: r.shortDescription,
@@ -835,10 +845,19 @@ export async function getWrappedContractFromDb(
 
   if (!row) return null;
 
+  const identity = tokenIdentity({
+    tokenName: row.tokenName,
+    tokenSymbol: row.tokenSymbol,
+    contractName: row.etherscanContractName,
+    address: row.address,
+  });
+
   return {
     address: row.address,
-    name: row.etherscanContractName ?? row.tokenName ?? null,
-    tokenSymbol: row.tokenSymbol ?? null,
+    // Curated name first here, since a wrapper's contract name is the useful
+    // label, then the cleaned token name rather than the raw one.
+    name: row.etherscanContractName ?? identity.name,
+    tokenSymbol: identity.symbol,
     deployedYear: row.deploymentTimestamp ? new Date(row.deploymentTimestamp).getUTCFullYear() : null,
   };
 }
@@ -858,10 +877,18 @@ export async function getWrappersForContractFromDb(address: string): Promise<
     .from(schema.contracts)
     .where(eq(schema.contracts.wrapperOf, address.toLowerCase()));
 
-  return rows.map((r) => ({
-    address: r.address,
-    name: r.etherscanContractName ?? r.tokenName ?? null,
-    tokenSymbol: r.tokenSymbol ?? null,
-    deployedYear: r.deploymentTimestamp ? new Date(r.deploymentTimestamp).getUTCFullYear() : null,
-  }));
+  return rows.map((r) => {
+    const identity = tokenIdentity({
+      tokenName: r.tokenName,
+      tokenSymbol: r.tokenSymbol,
+      contractName: r.etherscanContractName,
+      address: r.address,
+    });
+    return {
+      address: r.address,
+      name: r.etherscanContractName ?? identity.name,
+      tokenSymbol: identity.symbol,
+      deployedYear: r.deploymentTimestamp ? new Date(r.deploymentTimestamp).getUTCFullYear() : null,
+    };
+  });
 }

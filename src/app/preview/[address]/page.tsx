@@ -18,6 +18,7 @@ import {
 } from "@/lib/collector-card";
 import { isDatabaseConfigured } from "@/lib/db-client";
 import { isValidAddress } from "@/lib/utils";
+import { tokenIdentity } from "@/lib/token-display";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import HolographicCard, { type CardPayload } from "@/app/card/[slug]/HolographicCard";
 import HoldingsList, { type HoldingItem } from "@/app/assets/[slug]/HoldingsList";
@@ -142,8 +143,18 @@ export default async function PreviewPage({
               holdings={result.card.holdings.map(
                 (h): HoldingItem => ({
                   contractAddress: h.contractAddress,
-                  name: h.tokenName ?? h.contractAddress.slice(0, 10),
-                  symbol: h.tokenSymbol,
+                  // Stored preview cards can carry names written before the
+                  // bytes32 cleanup, so the test is applied on render too.
+                  name: tokenIdentity({
+                    tokenName: h.tokenName,
+                    tokenSymbol: h.tokenSymbol,
+                    address: h.contractAddress,
+                  }).name,
+                  symbol: tokenIdentity({
+                    tokenName: h.tokenName,
+                    tokenSymbol: h.tokenSymbol,
+                    address: h.contractAddress,
+                  }).symbol,
                   balance: h.balance,
                   tokenDecimals: h.tokenDecimals,
                   tokenType: h.tokenType,

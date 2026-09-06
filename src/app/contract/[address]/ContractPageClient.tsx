@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isTrustedTokenPair, shortenAddress } from "@/lib/token-display";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -374,7 +375,16 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
   } = data!;
 
   const frontierEntry = getFrontierRegistrarEntry(address);
-  const displayName = frontierEntry?.name || contract.tokenName || contract.ensName || contract.etherscanContractName || null;
+  // Same fallback order as before, with one gate added: a 2015 wallet proxy
+  // answers name() with bytes32 garbage, and taking it at face value rendered
+  // this page's heading as mojibake.
+  const tokenNameTrusted = isTrustedTokenPair(contract.tokenName, contract.tokenSymbol);
+  const displayName =
+    frontierEntry?.name ||
+    (tokenNameTrusted ? contract.tokenName : null) ||
+    contract.ensName ||
+    contract.etherscanContractName ||
+    shortenAddress(contract.address);
   const title = displayName || `Contract ${formatAddress(address, 12)}`;
   const shortDescriptionText = contract.shortDescription?.trim();
 
@@ -459,7 +469,7 @@ export function ContractPageClient({ address, data, error, relatedContracts = []
                 )}
                 <h1 className="text-2xl font-bold">
                   {title}
-                  {displayName && contract.tokenSymbol ? (
+                  {displayName && tokenNameTrusted && contract.tokenSymbol ? (
                     <span className="ml-2 text-base font-medium text-obsidian-400">
                       ({contract.tokenSymbol})
                     </span>
@@ -2105,8 +2115,14 @@ function OverviewTab({
   onUploadClick?: () => void;
 }) {
   // Token info is sourced from DB (and optionally filled server-side from RPC)
-  const tokenName = contract.tokenName;
-  const tokenSymbol = contract.tokenSymbol;
+  const tokenName = isTrustedTokenPair(contract.tokenName, contract.tokenSymbol)
+    ? contract.tokenName
+    : null;
+  // Suppressed when the pair is untrustworthy, so a bytes32 artefact does not
+  // get presented as this contract's ticker.
+  const tokenSymbol = isTrustedTokenPair(contract.tokenName, contract.tokenSymbol)
+    ? contract.tokenSymbol
+    : null;
   const tokenDecimals = contract.tokenDecimals;
   const tokenSupply = contract.tokenTotalSupply;
   const hasTokenInfo = tokenName || tokenSymbol || tokenDecimals !== null || tokenSupply || contract.tokenLogo;

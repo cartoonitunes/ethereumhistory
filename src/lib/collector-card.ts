@@ -32,6 +32,7 @@ import {
 } from "@/lib/schema";
 import { and, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
+import { tokenIdentity } from "@/lib/token-display";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
 /** A scan should never hold a request open longer than this per call. */
@@ -436,10 +437,20 @@ export async function crossReferenceAgainstArchive(
       continue;
     }
 
+    // The stored name is only used when it is usable. A pre-ERC-20 contract
+    // can answer name() with bytes32 garbage, and the previous fallback only
+    // triggered on null, so the garbage was written straight through.
+    const identity = tokenIdentity({
+      tokenName: meta.tokenName ?? c.raw.name ?? null,
+      tokenSymbol: meta.tokenSymbol ?? c.raw.symbol ?? null,
+      contractName: meta.etherscanContractName,
+      address: c.target,
+    });
+
     merged.set(c.target, {
       contractAddress: c.target,
-      tokenName: meta.tokenName ?? meta.etherscanContractName ?? c.raw.name ?? null,
-      tokenSymbol: meta.tokenSymbol ?? c.raw.symbol ?? null,
+      tokenName: identity.name,
+      tokenSymbol: identity.symbol,
       balance: c.raw.balance,
       tokenDecimals: meta.tokenDecimals,
       tokenType: c.raw.tokenType,
@@ -1387,10 +1398,19 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
         if (!r.viaWrapper) existing.viaWrapper = null;
         continue;
       }
+      // Read straight from wallet_holdings, which may hold garbage written by
+      // an older scan, so the same test is applied on the way out rather than
+      // waiting for every wallet to be rescanned.
+      const identity = tokenIdentity({
+        tokenName: r.tokenName,
+        tokenSymbol: r.tokenSymbol,
+        contractName: r.etherscanContractName,
+        address: r.contractAddress,
+      });
       merged.set(r.contractAddress, {
         contractAddress: r.contractAddress,
-        name: r.tokenName ?? r.etherscanContractName ?? r.contractAddress.slice(0, 10),
-        symbol: r.tokenSymbol,
+        name: identity.name,
+        symbol: identity.symbol,
         balance: r.balance,
         tokenDecimals: r.tokenDecimals,
         tokenType: r.tokenType,
