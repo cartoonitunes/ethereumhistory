@@ -24,6 +24,7 @@ import HolographicCard, { type CardPayload } from "@/app/card/[slug]/Holographic
 import HoldingsList, { type HoldingItem } from "@/app/assets/[slug]/HoldingsList";
 import ActivityList from "@/app/assets/[slug]/ActivityList";
 import SavePreviewCta from "./SavePreviewCta";
+import CollectorScoreCta from "@/components/CollectorScoreCta";
 import { getHistorianMeFromCookies } from "@/lib/historian-auth";
 
 export const dynamic = "force-dynamic";
@@ -223,6 +224,11 @@ export default async function PreviewPage({
             </Link>
           </div>
         ) : null}
+
+        {/* Foot of the page, well below SavePreviewCta, which sits under the
+            card and asks a different question. This one is for the visitor who
+            arrived on somebody else's shared link. */}
+        <CollectorScoreCta className="mt-4" />
       </main>
     </div>
   );

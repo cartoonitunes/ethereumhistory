@@ -97,9 +97,13 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
 
   const shouldShowLogin = showHistorianLogin && !loadingMe && !me;
 
+  // Collectors sits in the public nav rather than behind the account area: the
+  // scan works for any address with nobody signed in, so hiding it from signed
+  // out visitors hid it from everyone it is actually for.
   const navLinks = [
     { href: "/browse", label: "Browse" },
     { href: "/collections", label: "Collections" },
+    { href: "/collectors", label: "Collectors" },
     { href: "/proofs", label: "Proofs" },
     { href: "/network", label: "Network" },
   ];
@@ -141,7 +145,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             </Link>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-3 lg:gap-4 min-w-0 shrink">
+            <nav className="hidden lg:flex items-center gap-3 xl:gap-4 min-w-0 shrink">
               {navLinks.map(({ href, label }) => (
                 <Link
                   key={href}
@@ -211,7 +215,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 href="https://discord.gg/3KV6dt2euF"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                className="hidden xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
                 aria-label="Discord"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -222,7 +226,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 href="https://github.com/cartoonitunes/ethereumhistory"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+                className="hidden xl:block p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
                 aria-label="GitHub"
               >
                 <Github className="w-5 h-5" />
@@ -232,14 +236,14 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             {/* Search icon — desktop */}
             <button
               onClick={() => setSearchOpen(true)}
-              className="hidden md:flex p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
+              className="hidden lg:flex p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
               aria-label="Search"
             >
               <Search className="w-5 h-5" />
             </button>
 
             {/* Desktop auth */}
-            <div className="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
+            <div className="hidden lg:flex items-center gap-2 xl:gap-3 shrink-0">
               {loadingMe ? (
                 <div className="h-9 w-24 bg-obsidian-800/50 rounded-lg animate-pulse" />
               ) : me ? (
@@ -282,7 +286,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
             </div>
 
             {/* Mobile: search + hamburger */}
-            <div className="md:hidden flex items-center gap-1">
+            <div className="lg:hidden flex items-center gap-1">
               <button
                 onClick={() => setSearchOpen(true)}
                 className="p-2 rounded-lg text-obsidian-400 hover:text-obsidian-100 hover:bg-obsidian-800/50 transition-colors"
@@ -311,7 +315,7 @@ export function Header({ showHistorianLogin = false, historianMe: propHistorianM
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.15 }}
-                className="md:hidden absolute top-full inset-x-0 z-40 bg-obsidian-950/95 backdrop-blur-lg border-b border-obsidian-800 shadow-xl"
+                className="lg:hidden absolute top-full inset-x-0 z-40 bg-obsidian-950/95 backdrop-blur-lg border-b border-obsidian-800 shadow-xl"
               >
                 <nav className="max-w-site mx-auto px-4 py-4 flex flex-col gap-1">
                   {navLinks.map(({ href, label }) => (

@@ -17,6 +17,7 @@ import { isDatabaseConfigured } from "@/lib/db-client";
 import { cardImageVersion, getPublicPortfolio } from "@/lib/collector-card";
 import HoldingsList from "./HoldingsList";
 import ActivityList from "./ActivityList";
+import CollectorScoreCta from "@/components/CollectorScoreCta";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +131,10 @@ export default async function PublicAssetsPage({
             : "The wallets behind this collection have not been verified by signature, so these holdings are a claim rather than a proof."}{" "}
           Balances were read from the chain and matched against the Ethereum History archive.
         </p>
+
+        <div className="mt-12 flex justify-center">
+          <CollectorScoreCta />
+        </div>
       </main>
     </div>
   );
