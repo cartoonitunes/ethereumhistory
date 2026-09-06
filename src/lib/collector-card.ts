@@ -1817,6 +1817,26 @@ export function splitHoldings<
   return { collectibles, activity };
 }
 
+/**
+ * Whether a card has anything worth listing on the leaderboard.
+ *
+ * Deliberately broader than "has collectibles". Splitting holdings into
+ * collectibles and activity made the old test, a non zero contract count, mean
+ * something narrower than it did when it was written, and a card stored before
+ * the split whose holdings all turned out to be wallet proxies silently
+ * vanished from the board. It had not changed and nobody had asked for it to
+ * go: the meaning of the filter moved underneath it.
+ *
+ * A wallet holding two 2015 multi sigs and nothing else is not an empty card.
+ * It has a real presence in the archive, which is what earns a row here. What
+ * it does not have is a collection, which is why the score stays at what its
+ * collectibles alone are worth and the row says so rather than showing a bare
+ * zero.
+ */
+function hasArchivePresence(card: CardData): boolean {
+  return card.holdings.length > 0 || (card.activity?.length ?? 0) > 0;
+}
+
 /** One row of the public leaderboard. */
 export interface LeaderboardEntry {
   rank: number;
@@ -1837,6 +1857,11 @@ export interface LeaderboardEntry {
   tier: Tier;
   score: number;
   contractCount: number;
+  /**
+   * Historic contracts taken part in rather than collected. Carried so a row
+   * with no collectibles can say what it does have instead of reading as zero.
+   */
+  activityCount: number;
   earliestYear: number | null;
   /** Every wallet behind the card proved by signature. */
   verified: boolean;
@@ -1914,7 +1939,7 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
   const accounts = accountRows
     .filter((r) => r.historianActive !== false)
     .map((r) => ({ card: normalizeCardData(r.cardDataJson), r }))
-    .filter(({ card }) => card.stats.contractCount > 0 && card.holdings.length > 0)
+    .filter(({ card }) => hasArchivePresence(card))
     .map(({ card, r }) => ({
       card,
       entry: {
@@ -1952,7 +1977,7 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
   const previews = previewRows
     .filter((r) => !accountAddresses.has(r.address.toLowerCase()))
     .map((r) => ({ card: normalizeCardData(r.cardDataJson), r }))
-    .filter(({ card }) => card.stats.contractCount > 0 && card.holdings.length > 0)
+    .filter(({ card }) => hasArchivePresence(card))
     .map(({ card, r }) => ({
       card,
       entry: {
@@ -1978,6 +2003,7 @@ export async function getLeaderboard(limit = 25): Promise<LeaderboardEntry[]> {
       tier: card.tier,
       score: card.stats.score,
       contractCount: card.stats.contractCount,
+      activityCount: card.activity?.length ?? 0,
       earliestYear: card.stats.earliestYear,
     }));
 }

@@ -13,6 +13,24 @@
 import Link from "next/link";
 import type { LeaderboardEntry } from "@/lib/collector-card";
 
+/**
+ * The line under a collector's name.
+ *
+ * Normally a count of what they hold. A wallet can rank here on historic
+ * activity alone, though, having taken part in multi sigs and DAOs without
+ * collecting anything, and for those the collectible count is zero. Printing
+ * "0 contracts" under a listed row reads as a fault rather than as a fact, so
+ * the row says what it does have instead.
+ */
+function summarise(e: LeaderboardEntry): string {
+  const year = e.earliestYear ? `, from ${e.earliestYear}` : "";
+  if (e.contractCount > 0) {
+    return `${e.contractCount} ${e.contractCount === 1 ? "contract" : "contracts"}${year}`;
+  }
+  const n = e.activityCount;
+  return `${n} historic ${n === 1 ? "contract" : "contracts"}${year}`;
+}
+
 export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }) {
   if (entries.length === 0) return null;
 
@@ -52,8 +70,7 @@ export default function Leaderboard({ entries }: { entries: LeaderboardEntry[] }
                   <span className={e.tier.color}>{e.tier.label}</span>
                   <span className="hidden text-obsidian-400 sm:inline">/</span>
                   <span className="hidden text-obsidian-400 sm:inline">
-                    {e.contractCount} {e.contractCount === 1 ? "contract" : "contracts"}
-                    {e.earliestYear ? `, from ${e.earliestYear}` : ""}
+                    {summarise(e)}
                   </span>
                 </div>
               </div>
