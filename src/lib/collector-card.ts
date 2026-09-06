@@ -30,7 +30,7 @@ import {
   userWallets,
   walletHoldings,
 } from "@/lib/schema";
-import { and, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { getEnsAddress, getEnsAvatar, getEnsName } from "@/lib/ens";
 import { cached, CACHE_TTL } from "@/lib/cache";
 
@@ -104,40 +104,109 @@ async function jsonRpc<T>(url: string, body: unknown): Promise<T | null> {
 }
 
 /**
- * ERC-20 balances via alchemy_getTokenBalances.
+ * Addresses of every documented contract that could plausibly be an ERC-20.
  *
- * "erc20" asks the provider for every token it has seen this address hold,
- * rather than requiring a candidate list up front. Zero balances come back too
- * and are dropped here: a wallet that once held a token but sold it should not
- * appear on a collector card.
+ * Cached because it is the same list for every scan and it changes only when a
+ * historian documents a new token. About 2,200 rows today.
+ */
+async function documentedTokenAddresses(): Promise<string[]> {
+  return cached("documented-token-addresses", CACHE_TTL.LONG, async () => {
+    const db = getDb();
+    const rows = await db
+      .select({ address: contracts.address })
+      .from(contracts)
+      .where(
+        and(
+          eq(contracts.isDocumented, true),
+          or(
+            isNotNull(contracts.tokenName),
+            isNotNull(contracts.tokenSymbol),
+            isNotNull(contracts.wrapperOf)
+          )
+        )
+      );
+    return rows.map((r) => r.address);
+  });
+}
+
+/** alchemy_getTokenBalances takes at most 100 explicit contracts per call. */
+const BALANCE_BATCH = 100;
+/**
+ * Batches in flight at once.
+ *
+ * Run one after another the 22 batches took 32 seconds, which is not a page
+ * load. Run all at once the provider rate limits and the scan fails. Six is
+ * comfortably inside the limit and brings it under five seconds.
+ */
+const BALANCE_CONCURRENCY = 6;
+
+/**
+ * ERC-20 balances, asked for by name rather than enumerated.
+ *
+ * The obvious implementation, and the one this replaces, asks the provider what
+ * a wallet holds and keeps whatever comes back. That call is paginated at about
+ * 100 contracts a page and the old code read the first page only, so a wallet
+ * holding more than a hundred tokens was scanned almost entirely at random.
+ *
+ * It is not a rare case. vitalik.eth holds 10,422 ERC-20 contracts across 105
+ * pages. Its Wrapped MistCoin sits on page 54 and its Wrapped Unicorn Meat on
+ * page 92, so neither could ever appear however many times the wallet was
+ * rescanned. Simply paginating would fix the correctness and cost 105 sequential
+ * provider calls for that one wallet, with no ceiling for a bigger one.
+ *
+ * So the question is inverted. Instead of asking what the wallet holds and
+ * discarding the 99 per cent that is not in the archive, it asks the balance of
+ * the roughly 2,200 documented tokens, a hundred at a time. That is about 22
+ * calls for any wallet whatsoever, and it cannot miss a documented token
+ * regardless of how much else the wallet is carrying.
  */
 async function fetchErc20Balances(
   url: string,
   address: string
 ): Promise<{ contractAddress: string; balance: string }[]> {
-  const result = await jsonRpc<{
-    tokenBalances?: { contractAddress: string; tokenBalance: string | null }[];
-  }>(url, {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "alchemy_getTokenBalances",
-    params: [address, "erc20"],
-  });
+  const documented = await documentedTokenAddresses();
+  if (documented.length === 0) return [];
+
+  const batches: string[][] = [];
+  for (let i = 0; i < documented.length; i += BALANCE_BATCH) {
+    batches.push(documented.slice(i, i + BALANCE_BATCH));
+  }
 
   const out: { contractAddress: string; balance: string }[] = [];
-  for (const t of result?.tokenBalances ?? []) {
-    if (!t.contractAddress || !t.tokenBalance) continue;
-    // Alchemy returns a 0x-prefixed hex quantity. BigInt keeps full uint256
-    // precision; Number would round anything past 2^53.
-    let balance: bigint;
-    try {
-      balance = BigInt(t.tokenBalance);
-    } catch {
-      continue;
+
+  for (let i = 0; i < batches.length; i += BALANCE_CONCURRENCY) {
+    const wave = batches.slice(i, i + BALANCE_CONCURRENCY);
+    const results = await Promise.all(
+      wave.map((batch) =>
+        jsonRpc<{ tokenBalances?: { contractAddress: string; tokenBalance: string | null }[] }>(url, {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "alchemy_getTokenBalances",
+          params: [address, batch],
+        }).catch(() => null)
+      )
+    );
+
+    for (const result of results) {
+      for (const t of result?.tokenBalances ?? []) {
+        if (!t.contractAddress || !t.tokenBalance) continue;
+        // Alchemy returns a 0x-prefixed hex quantity. BigInt keeps full uint256
+        // precision; Number would round anything past 2^53.
+        let balance: bigint;
+        try {
+          balance = BigInt(t.tokenBalance);
+        } catch {
+          continue;
+        }
+        // Zero balances come back for every address asked about, which with an
+        // explicit list is most of them. A wallet that once held a token but
+        // sold it should not appear on a collector card.
+        if (balance === BigInt(0)) continue;
+        out.push({ contractAddress: t.contractAddress.toLowerCase(), balance: balance.toString() });
+      }
     }
-    if (balance === BigInt(0)) continue;
-    out.push({ contractAddress: t.contractAddress.toLowerCase(), balance: balance.toString() });
   }
+
   return out;
 }
 
@@ -1331,7 +1400,8 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
  * calls this is rate limited and the result is cached.
  */
 export async function buildEphemeralCard(
-  input: string
+  input: string,
+  force = false
 ): Promise<{ card: CardData; address: string } | { error: string }> {
   const raw = input.trim();
   if (!raw) return { error: "Enter a wallet address or ENS name." };
@@ -1353,7 +1423,13 @@ export async function buildEphemeralCard(
   // a preview and then signs in to keep it is scanned once rather than twice.
   // The cache is per instance and in memory, so this is an optimisation and
   // never a guarantee: a miss simply scans again.
-  const scan = await cached(`wallet-scan:${address}`, CACHE_TTL.MEDIUM, () => scanWallet(address));
+  //
+  // force skips it, which is what a refresh has to do. Holdings change, and a
+  // cached answer is exactly what a person pressing refresh is trying to get
+  // past.
+  const scan = force
+    ? await scanWallet(address)
+    : await cached(`wallet-scan:${address}`, CACHE_TTL.MEDIUM, () => scanWallet(address));
   if (scan.degraded && scan.holdings.length === 0) {
     return { error: scan.warning ?? "Could not reach the token provider. Try again shortly." };
   }

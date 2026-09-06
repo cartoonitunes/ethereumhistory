@@ -46,11 +46,14 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.ethereumhistor
  * change, so the page says when it last looked rather than pretending the
  * number is live.
  */
-const load = cache(async function load(address: string) {
+const load = cache(async function load(address: string, force = false) {
   const key = decodeURIComponent(address).trim().toLowerCase();
   if (!key || key.length > 128) return null;
 
-  if (isDatabaseConfigured() && isValidAddress(key)) {
+  // A refresh skips the stored row. Without this a persisted preview is
+  // permanent in the unhelpful sense too: holdings change, and there would be
+  // no way to ever see the new ones.
+  if (!force && isDatabaseConfigured() && isValidAddress(key)) {
     const stored = await getPreviewCard(key);
     if (stored) {
       return { address: key, card: stored.card, lastScannedAt: stored.lastScannedAt, fresh: false };
@@ -59,9 +62,9 @@ const load = cache(async function load(address: string) {
 
   // Nothing stored, so scan. The in memory cache still absorbs the burst of a
   // link going round before the row is written.
-  const result = await cached(`card-preview:${key}`, CACHE_TTL.MEDIUM, () =>
-    buildEphemeralCard(key)
-  );
+  const result = force
+    ? await buildEphemeralCard(key, true)
+    : await cached(`card-preview:${key}`, CACHE_TTL.MEDIUM, () => buildEphemeralCard(key));
   if ("error" in result) return null;
 
   await persistPreviewCard(result.address, result.card);
@@ -96,11 +99,14 @@ export async function generateMetadata({
 
 export default async function PreviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ address: string }>;
+  searchParams: Promise<{ refresh?: string }>;
 }) {
   const { address } = await params;
-  const result = await load(address);
+  const { refresh } = await searchParams;
+  const result = await load(address, refresh === "1");
   if (!result) notFound();
 
   // Signed in visitors already have somewhere to keep this, so the banner
@@ -158,7 +164,14 @@ export default async function PreviewPage({
             month: "short",
             year: "numeric",
           })}
-          .
+          .{" "}
+          <Link
+            href={`/preview/${encodeURIComponent(address)}?refresh=1`}
+            prefetch={false}
+            className="text-ether-300 underline-offset-4 hover:underline"
+          >
+            Check again
+          </Link>
         </p>
 
         {me ? (
