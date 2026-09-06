@@ -1479,6 +1479,13 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
         deploymentTimestamp: contracts.deploymentTimestamp,
         shortDescription: contracts.shortDescription,
         etherscanContractName: contracts.etherscanContractName,
+        // The archive's own values. wallet_holdings carries names the
+        // readability fix has already cleaned, and classifying on those hands a
+        // proxy back a plausible token name, or a shortened address, either of
+        // which reads as trustworthy. The raw bytes32 noise is the only thing
+        // that identifies it.
+        archiveTokenName: contracts.tokenName,
+        archiveTokenSymbol: contracts.tokenSymbol,
         isDocumented: contracts.isDocumented,
       })
       .from(walletHoldings)
@@ -1509,8 +1516,8 @@ export async function getPublicPortfolio(slug: string): Promise<PublicPortfolio 
         // Decided from the raw values, before the name cleanup above rewrites a
         // proxy's bytes32 noise into something that looks like a token.
         collectible: isCollectibleContract({
-          tokenName: r.tokenName,
-          tokenSymbol: r.tokenSymbol,
+          tokenName: r.archiveTokenName,
+          tokenSymbol: r.archiveTokenSymbol,
           contractName: r.etherscanContractName,
           hasDescription: (r.shortDescription ?? "").trim().length > 0,
         }),
