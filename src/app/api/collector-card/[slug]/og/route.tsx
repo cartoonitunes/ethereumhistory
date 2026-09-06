@@ -12,6 +12,7 @@
  */
 
 import { ImageResponse } from "next/og";
+import { renderShareCard, SHARE_WIDTH, SHARE_HEIGHT } from "@/lib/share-card";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards, historians } from "@/lib/schema";
 import { eq } from "drizzle-orm";
@@ -87,155 +88,18 @@ export async function GET(
   const stats = card.stats;
   const avatar = card.owner?.avatarUrl ?? null;
 
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          background: INK,
-          color: PAPER,
-          fontFamily: "sans-serif",
-          position: "relative",
-        }}
-      >
-        {/* Ambient glow behind the portrait, the same energy as the live card. */}
-        <div
-          style={{
-            position: "absolute",
-            left: 96,
-            top: 120,
-            width: 420,
-            height: 420,
-            display: "flex",
-            borderRadius: 999,
-            background:
-              "radial-gradient(circle, rgba(98,110,241,0.42) 0%, rgba(98,110,241,0) 70%)",
-          }}
-        />
-
-        {/* Portrait */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 470,
-            height: "100%",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 268,
-              height: 268,
-              borderRadius: 999,
-              background: "linear-gradient(140deg, #a4b8fc, #626ef1 45%, #b23dff)",
-            }}
-          >
-            {avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={avatar}
-                alt=""
-                width={256}
-                height={256}
-                style={{ width: 256, height: 256, borderRadius: 999, objectFit: "cover" }}
-              />
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 256,
-                  height: 256,
-                  borderRadius: 999,
-                  background: "#12121a",
-                  fontSize: 96,
-                  color: ACCENT,
-                }}
-              >
-                {(card.owner?.name ?? "?").slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Text column */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            flex: 1,
-            paddingRight: 72,
-            gap: 6,
-          }}
-        >
-          <div style={{ display: "flex", fontSize: 19, letterSpacing: 7, color: ACCENT }}>
-            ETHEREUM HISTORY
-          </div>
-
-          <div style={{ display: "flex", fontSize: 52, fontWeight: 700, lineHeight: 1.1 }}>
-            {card.owner?.name ?? "Collector"}
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 6 }}>
-            <span style={{ fontSize: 38, fontWeight: 700, color: "#c9bdff" }}>
-              {card.tier?.label ?? "Collector"}
-            </span>
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                padding: "4px 14px",
-                borderRadius: 8,
-                background: "rgba(98,110,241,0.22)",
-                color: ACCENT,
-                fontSize: 24,
-              }}
-            >
-              {stats.score}
-            </span>
-          </div>
-
-          {/* One line about the person, then the numbers. No holdings list:
-              the card is about who they are, the assets page is the portfolio. */}
-          <div style={{ display: "flex", fontSize: 24, color: MUTED, marginTop: 12 }}>
-            {card.headline}
-          </div>
-
-          <div style={{ display: "flex", gap: 44, marginTop: 26 }}>
-            <Stat label="HOLDINGS" value={String(stats.contractCount)} />
-            <Stat label="EARLIEST" value={stats.earliestYear ? String(stats.earliestYear) : "n/a"} />
-            <Stat
-              label="ONCHAIN"
-              value={
-                stats.walletAgeYears !== null && stats.walletAgeYears !== undefined
-                  ? `${stats.walletAgeYears}y`
-                  : "n/a"
-              }
-            />
-            {stats.allWalletsVerified ? <Stat label="STATUS" value="Verified" accent /> : null}
-          </div>
-
-          <div style={{ display: "flex", marginTop: 20, fontSize: 18, color: "#5a5a68" }}>
-            ethereumhistory.com
-          </div>
-        </div>
-      </div>
-    ),
-    {
-      width: WIDTH,
-      height: HEIGHT,
-      headers: {
-        // Cards change only when regenerated, so let the scrapers cache.
-        "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      },
-    }
-  );
+  // One renderer for both routes.
+  //
+  // This used to draw its own landscape composition, which meant the unfurl and
+  // the downloadable image were two different pictures of the same card, and
+  // neither looked like the card on screen. Sharing renderShareCard makes the
+  // og image, the download and the page agree, and leaves one place to change
+  // when the card changes.
+  return new ImageResponse(renderShareCard(card), {
+    width: SHARE_WIDTH,
+    height: SHARE_HEIGHT,
+    headers: {
+      "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+    },
+  });
 }

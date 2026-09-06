@@ -1447,7 +1447,7 @@ function shortAddress(a: string): string {
  *
  * Bump IMAGE_RENDER_VERSION whenever a change alters what the image shows.
  */
-export const IMAGE_RENDER_VERSION = 2;
+export const IMAGE_RENDER_VERSION = 3;
 
 export function cardImageVersion(updatedAt: Date | string | null | undefined): string {
   const t = updatedAt instanceof Date ? updatedAt.getTime() : updatedAt ? Date.parse(updatedAt) : 0;
