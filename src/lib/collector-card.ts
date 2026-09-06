@@ -1046,6 +1046,11 @@ export async function buildCardData(
       deploymentBlock: contracts.deploymentBlock,
       isDocumented: contracts.isDocumented,
       etherscanContractName: contracts.etherscanContractName,
+      // The archive's own values, not the cleaned copies in wallet_holdings.
+      // Classification has to see the raw bytes32 noise to recognise a proxy;
+      // the stored name has already been rewritten to something readable.
+      archiveTokenName: contracts.tokenName,
+      archiveTokenSymbol: contracts.tokenSymbol,
       significance: contracts.historicalSignificance,
       shortDescription: contracts.shortDescription,
     })
@@ -1058,6 +1063,7 @@ export async function buildCardData(
     shortDescription: string | null;
     /** Carried only to classify collectible against activity, never rendered. */
     contractName: string | null;
+    collectible: boolean;
   };
   const merged = new Map<string, Enriched>();
   for (const r of rows) {
@@ -1086,6 +1092,12 @@ export async function buildCardData(
       significance: r.significance,
       shortDescription: r.shortDescription,
       contractName: r.etherscanContractName ?? null,
+      collectible: isCollectibleContract({
+        tokenName: r.archiveTokenName,
+        tokenSymbol: r.archiveTokenSymbol,
+        contractName: r.etherscanContractName,
+        hasDescription: (r.shortDescription ?? "").trim().length > 0,
+      }),
     });
   }
 
@@ -1116,6 +1128,20 @@ export async function buildCardData(
     firstTxDates.length > 0 ? new Date(Math.min(...firstTxDates.map((d) => d.getTime()))) : null;
   const scoring = computeCollectorScore(collectibles, onChainSince);
 
+  // The score already on this account's card is the floor. A rebuild is the
+  // moment the reclassification would otherwise be written in permanently, so
+  // the ratchet has to apply here and not only when a card is read.
+  const [priorCard] = await db
+    .select({ cardDataJson: collectorCards.cardDataJson })
+    .from(collectorCards)
+    .where(eq(collectorCards.historianId, historianId))
+    .limit(1);
+  const priorScore =
+    priorCard && typeof priorCard.cardDataJson === "object" && priorCard.cardDataJson !== null
+      ? ((priorCard.cardDataJson as { stats?: { score?: unknown } }).stats?.score as number | undefined)
+      : undefined;
+  const finalScore = ratchetScore(scoring.score, typeof priorScore === "number" ? priorScore : null);
+
   const strip = (h: Enriched) => {
     const { significance, shortDescription, contractName, ...rest } = h;
     void significance;
@@ -1127,7 +1153,9 @@ export async function buildCardData(
   return {
     version: CARD_SCORING_VERSION,
     owner: { ...identity, verified: verifiedCount > 0 && verifiedCount === wallets.length },
-    tier: tierForScore(scoring.score),
+    // Tier follows the score that is actually kept, or a card could show a
+    // ratcheted number under the band it no longer qualifies for.
+    tier: tierForScore(finalScore),
     headline: buildCardHeadline(collectibles.length, years.length > 0 ? Math.min(...years) : null),
     wallets: wallets.map((w) => ({
       address: w.address,
@@ -1148,7 +1176,7 @@ export async function buildCardData(
       onChainSince: onChainSince ? onChainSince.toISOString() : null,
       walletAgeYears: wholeWalletAgeYears(onChainSince),
       eraCounts,
-      score: scoring.score,
+      score: finalScore,
       averageBlock: scoring.averageBlock,
     },
     generatedAt: new Date().toISOString(),
@@ -1294,22 +1322,13 @@ export function normalizeCardData(raw: unknown): CardData {
   // this is exact. Falls back to the stored value only when they do not.
   const recomputed = computeCollectorScore(holdings, onChainSince);
 
-  // Scores are normally recomputed on read so a formula fix reaches cards that
-  // already exist. This one change is exempt, on purpose.
-  //
-  // Moving wallets and multi-sigs out of the score only ever lowers it, and
-  // lowering a number somebody has already shared, without them doing anything,
-  // is a worse outcome than the number being generous. So a card built before
-  // version 3 keeps the score it was given, and adopts the new basis the next
-  // time its owner rebuilds or rescans. Everything else about it, including the
-  // holding count, reflects the split immediately.
+  // Recomputed, then ratcheted against whatever the card already carried, so a
+  // read can raise a score but never lower it.
   const storedScore = typeof stats.score === "number" ? stats.score : null;
   const score =
-    storedVersion < CARD_SCORING_VERSION && storedScore !== null
-      ? storedScore
-      : recomputed.scoredCount > 0
-        ? recomputed.score
-        : (storedScore ?? 0);
+    recomputed.scoredCount > 0
+      ? ratchetScore(recomputed.score, storedScore)
+      : (storedScore ?? 0);
 
   const walletCount = stats.walletCount ?? wallets.length;
   const verifiedWalletCount =
@@ -1728,6 +1747,31 @@ function byDeployment(a: { deploymentBlock: number | null }, b: { deploymentBloc
   return (a.deploymentBlock ?? Number.MAX_SAFE_INTEGER) - (b.deploymentBlock ?? Number.MAX_SAFE_INTEGER);
 }
 
+/**
+ * A score never goes down.
+ *
+ * Moving wallets and multi-sigs out of the score can only lower it, and lowering
+ * a number somebody has already earned and shared, without them doing anything,
+ * penalises them for a change they did not ask for. So a freshly computed score
+ * is only adopted when it is at least as high as the one already on record.
+ *
+ * Applied at every point a score is written, not only on read, because a rebuild
+ * or a rescan writes a new card and would otherwise bake the lower number in.
+ *
+ * WHAT THIS COSTS, STATED PLAINLY
+ * -------------------------------
+ * The ratchet does not know why a score fell. It holds the old number when the
+ * cause is this reclassification, which is the intent, and equally when the
+ * cause is somebody selling their collection. A score is therefore a high water
+ * mark rather than a current reading. That is the deliberate trade: the
+ * alternative penalises existing holders today to keep the number honest about
+ * a case that has not happened yet.
+ */
+export function ratchetScore(fresh: number, stored: number | null | undefined): number {
+  if (typeof stored !== "number" || !Number.isFinite(stored)) return fresh;
+  return Math.max(fresh, stored);
+}
+
 /** The card format that scores collectibles only. */
 export const CARD_SCORING_VERSION = 3;
 
@@ -2022,6 +2066,24 @@ export async function persistPreviewCard(address: string, card: CardData): Promi
   try {
     const db = getDb();
     const now = new Date();
+
+    // Same ratchet the account cards get. A rescan is the other moment a lower
+    // score would be written in, and a preview is ranked publicly too, so the
+    // guarantee has to hold for an address with no account behind it.
+    const [prior] = await db
+      .select({ score: previewCards.score })
+      .from(previewCards)
+      .where(eq(previewCards.address, address.toLowerCase()))
+      .limit(1);
+    const finalScore = ratchetScore(card.stats.score, prior?.score ?? null);
+    if (finalScore !== card.stats.score) {
+      card = {
+        ...card,
+        tier: tierForScore(finalScore),
+        stats: { ...card.stats, score: finalScore },
+      };
+    }
+
     const row = {
       address: address.toLowerCase(),
       ensName: card.owner.ensName ?? null,
