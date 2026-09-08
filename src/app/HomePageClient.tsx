@@ -360,47 +360,23 @@ export default function HomePageClient({
         </div>
       </section>
 
-      {/* For agents */}
-      <section id="for-agents" className="py-16 border-t border-obsidian-800 scroll-mt-20">
-        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="rounded-2xl border border-obsidian-700 bg-obsidian-900/40 p-8 md:p-10"
+      {/* Collectors */}
+      <section id="collectors" className="py-16 border-t border-obsidian-800 scroll-mt-20">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl font-bold mb-4">Collectors</h2>
+          <p className="text-obsidian-400 max-w-2xl mx-auto">
+            Thousands of these contracts are still held today. Check any wallet against
+            the archive and see which documented pieces of Ethereum history it holds.
+          </p>
+          <div className="mt-8">
+            <CollectorCardCta />
+          </div>
+          <Link
+            href="/collectors"
+            className="mt-5 inline-block text-sm text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
           >
-            <h2 className="text-2xl font-bold mb-2">For agents</h2>
-            <p className="text-obsidian-400 mb-4 max-w-2xl">
-              MCP integration. REST API. Agent skills. Let your bot query historical contract data.
-            </p>
-            <pre className="bg-obsidian-900/80 border border-obsidian-700 rounded-lg px-4 py-2.5 text-sm font-mono text-obsidian-300 mb-5 overflow-x-auto">
-              npx skills add cartoonitunes/ethereum-history-skills
-            </pre>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <Link
-                href="/api-docs"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-ether-600 hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30"
-              >
-                <BookOpen className="w-4 h-4" />
-                API Docs
-              </Link>
-              <Link
-                href="/mcp-setup"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
-              >
-                <Plug className="w-4 h-4" />
-                MCP Setup
-              </Link>
-              <a
-                href="https://github.com/cartoonitunes/ethereum-history-skills"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
-              >
-                Agent Skills
-              </a>
-            </div>
-          </motion.div>
+            What collecting means here
+          </Link>
         </div>
       </section>
 
@@ -548,30 +524,6 @@ export default function HomePageClient({
               description="Every contract is placed in its historical context with era information."
             />
           </div>
-        </div>
-      </section>
-
-      {/* Collector card.
-          Deliberately a small section well down the page rather than a hero
-          CTA. The archive and its search are what this site is for; the card is
-          a side door into it, so it sits among the other secondary sections and
-          is sized to match. */}
-      <section id="collectors" className="py-16 border-t border-obsidian-800 scroll-mt-20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold mb-4">Collectors</h2>
-          <p className="text-obsidian-400 max-w-2xl mx-auto">
-            Thousands of these contracts are still held today. Check any wallet against
-            the archive and see which documented pieces of Ethereum history it holds.
-          </p>
-          <div className="mt-8">
-            <CollectorCardCta />
-          </div>
-          <Link
-            href="/collectors"
-            className="mt-5 inline-block text-sm text-ether-400 underline-offset-4 transition-colors hover:text-ether-300 hover:underline"
-          >
-            What collecting means here
-          </Link>
         </div>
       </section>
 
@@ -880,6 +832,50 @@ export default function HomePageClient({
                 <span className="text-sm font-semibold text-obsidian-300 group-hover:text-obsidian-100 transition-colors tracking-tight">
                   Sourcify
                 </span>
+              </a>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* For agents */}
+      <section id="for-agents" className="py-16 border-t border-obsidian-800 scroll-mt-20">
+        <div className="max-w-site mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-obsidian-700 bg-obsidian-900/40 p-8 md:p-10"
+          >
+            <h2 className="text-2xl font-bold mb-2">For agents</h2>
+            <p className="text-obsidian-400 mb-4 max-w-2xl">
+              MCP integration. REST API. Agent skills. Let your bot query historical contract data.
+            </p>
+            <pre className="bg-obsidian-900/80 border border-obsidian-700 rounded-lg px-4 py-2.5 text-sm font-mono text-obsidian-300 mb-5 overflow-x-auto">
+              npx skills add cartoonitunes/ethereum-history-skills
+            </pre>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <Link
+                href="/api-docs"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-ether-600 hover:bg-ether-500 text-white font-medium text-sm transition-colors border border-ether-500/30"
+              >
+                <BookOpen className="w-4 h-4" />
+                API Docs
+              </Link>
+              <Link
+                href="/mcp-setup"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
+              >
+                <Plug className="w-4 h-4" />
+                MCP Setup
+              </Link>
+              <a
+                href="https://github.com/cartoonitunes/ethereum-history-skills"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-obsidian-600 bg-obsidian-800/50 hover:bg-obsidian-700/80 text-obsidian-200 hover:text-obsidian-100 font-medium text-sm transition-colors"
+              >
+                Agent Skills
               </a>
             </div>
           </motion.div>
