@@ -52,8 +52,17 @@ export async function generateMetadata(): Promise<Metadata> {
   let description =
     "Track how much of Ethereum's earliest contract record has been documented by historians and recovered by compiler archaeology, broken down by era and by year.";
 
+  // Hard timeout so a slow contract_stats_cache read (see migration 070)
+  // can't blow Next's 60s static-generation cap during builds. The fallback
+  // title/description below is used on timeout; the next ISR revalidate
+  // picks up the fresh numbers once the batched cron has caught up.
   try {
-    const { summary } = await getCoverageStats();
+    const summary = await Promise.race([
+      getCoverageStats().then((s) => s.summary),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("coverage stats fetch timed out")), 20_000)
+      ),
+    ]);
     const pct = summary.documentedPct;
     const documented = summary.documented.toLocaleString("en-US");
     const uncovered = summary.uncovered.toLocaleString("en-US");
