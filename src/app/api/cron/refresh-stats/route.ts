@@ -1,16 +1,15 @@
 /**
  * POST /api/cron/refresh-stats
  *
- * Refreshes `contract_stats_cache` scope-by-scope, each in its own
+ * Refreshes the Neon `contract_stats_cache` scope-by-scope, each in its own
  * transaction, so a Vercel cron timeout can't roll back the whole refresh.
  * Scopes are processed cheapest first (overall, per-era, then per-year);
  * anything not completed within the request budget is skipped and picked
  * up on the next hourly tick.
  *
- * Also refreshes the Turso-side full-index totals (see refreshTursoIndexTotals)
- * so request handlers don't have to scan the 12M-row contract_index on every
- * page load. Runs last: if the Neon refresh dominated the budget, the Turso
- * totals are simply skipped and retried next tick.
+ * Neon-only: the Turso index totals refresh moved to
+ * /api/cron/refresh-turso-totals in its own cron slot. Stacking them in one
+ * function stacked their timeouts and blew the 300s ceiling on cold start.
  *
  * Backed by the per-scope Postgres functions in migration 070
  * (refresh_contract_stats_overall / _era / _year_single). The old
@@ -24,7 +23,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
-import { refreshTursoIndexTotals } from "@/lib/progress-stats";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -110,22 +108,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Turso index totals: runs last since it's the longest single step (~1-2 min).
-  // Skipped if the Neon scopes exhausted the budget; the next cron tick
-  // reorders naturally because the completed Neon scopes are cheap on rerun.
-  let tursoError: string | null = null;
-  let tursoSkipped = false;
-  if (Date.now() >= deadline) {
-    tursoSkipped = true;
-  } else {
-    try {
-      await refreshTursoIndexTotals();
-    } catch (err) {
-      tursoError = err instanceof Error ? err.message : String(err);
-      console.error("[cron/refresh-stats] Turso index totals refresh failed:", err);
-    }
-  }
-
   let rows: unknown[] = [];
   try {
     const rowsRaw = await db.execute<{ scope: string; total: number; documented: number; updated_at: string }>(
@@ -141,8 +123,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       elapsedMs: Date.now() - started,
       budgetMs: BUDGET_MS,
       scopes: results,
-      tursoError,
-      tursoSkipped,
       rows,
     },
     error: null,

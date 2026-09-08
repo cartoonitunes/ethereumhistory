@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/refresh-stats",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/refresh-turso-totals",
+      "schedule": "30 * * * *"
     }
   ]
 }
