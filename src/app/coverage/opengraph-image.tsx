@@ -30,8 +30,17 @@ export default async function OGImage() {
   let total = 0;
   let ok = false;
 
+  // Hard timeout so a slow contract_stats_cache read (see the batched
+  // refresh in migration 070) can't blow the 60s static-generation cap
+  // during builds. On timeout we fall through to the generic fallback
+  // card; the ISR revalidate then re-tries with fresh numbers.
   try {
-    const { summary } = await getCoverageStats();
+    const summary = await Promise.race([
+      getCoverageStats().then((s) => s.summary),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("coverage stats fetch timed out")), 20_000)
+      ),
+    ]);
     pct = summary.documentedPct;
     documented = summary.documented;
     uncovered = summary.uncovered;
