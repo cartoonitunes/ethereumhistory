@@ -22,25 +22,45 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const [target] = await db
       .select({
         runtimeBytecodeHash: contracts.runtimeBytecodeHash,
+        deployedBytecodeHash: contracts.deployedBytecodeHash,
         canonicalAddress: contracts.canonicalAddress,
       })
       .from(contracts)
       .where(eq(contracts.address, normalizedAddress))
       .limit(1);
 
-    const hash = target?.runtimeBytecodeHash;
+    // Prefer runtime hash (post-constructor bytecode, most reliable across compilers).
+    // Fall back to deployed hash so historical contracts backfilled without a
+    // runtime hash still surface siblings (e.g. Poloniex deposit forwarders,
+    // where runtime_bytecode_hash was never populated on the original row).
+    const hash = target?.runtimeBytecodeHash ?? target?.deployedBytecodeHash ?? null;
     if (!hash) {
       return NextResponse.json({ hash: null, count: 0, contracts: [] });
     }
 
     const canonical = target?.canonicalAddress || normalizedAddress;
 
-    const siblingFilter = and(
-      eq(contracts.canonicalAddress, canonical),
-      ne(contracts.address, normalizedAddress)
-    );
+    // Sibling grouping: if this contract is part of a verified sibling cluster,
+    // trigger 066 will have populated canonical_address on every member, so the
+    // canonical join is fast (canonical_address is indexed). If the cluster is
+    // NOT verified but a deployed_bytecode_hash exists on both sides, fall back
+    // to matching directly on that hash — also indexed (migration 039).
+    const canonicalPathAvailable =
+      target?.canonicalAddress != null || target?.runtimeBytecodeHash != null;
 
-    const groupFilter = sql`${contracts.address} = ${canonical} OR ${contracts.canonicalAddress} = ${canonical}`;
+    const siblingFilter = canonicalPathAvailable
+      ? and(
+          eq(contracts.canonicalAddress, canonical),
+          ne(contracts.address, normalizedAddress)
+        )
+      : and(
+          eq(contracts.deployedBytecodeHash, hash),
+          ne(contracts.address, normalizedAddress)
+        );
+
+    const groupFilter = canonicalPathAvailable
+      ? sql`${contracts.address} = ${canonical} OR ${contracts.canonicalAddress} = ${canonical}`
+      : eq(contracts.deployedBytecodeHash, hash);
 
     const [{ totalCount }] = await db
       .select({ totalCount: sql<number>`count(*)::int` })
