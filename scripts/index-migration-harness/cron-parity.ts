@@ -33,11 +33,19 @@ async function main() {
   const ps = await import("@/lib/progress-stats");
   await ps.refreshTursoIndexTotals();
 
-  const rows = (await db.execute<{ scope: string; total: number }>(
-    sql`SELECT scope, total FROM contract_stats_cache ORDER BY scope`
-  )) as unknown as { scope: string; total: number }[] | { rows: { scope: string; total: number }[] };
+  const rows = (await db.execute<{ scope: string; total: number; documented: number }>(
+    sql`SELECT scope, total, documented FROM contract_stats_cache ORDER BY scope`
+  )) as unknown as
+    | { scope: string; total: number; documented: number }[]
+    | { rows: { scope: string; total: number; documented: number }[] };
   const list = Array.isArray(rows) ? rows : rows.rows;
   const byScope = new Map(list.map((r) => [r.scope, Number(r.total)]));
+  const docByScope = new Map(
+    (list as unknown as { scope: string; documented: number }[]).map((r) => [
+      r.scope,
+      Number(r.documented),
+    ])
+  );
 
   ok("cron wrote index:overall", byScope.has("index:overall"), [...byScope.keys()].filter(k=>k.startsWith("index:")));
   ok("index:overall = sample row count", byScope.get("index:overall") === 40157, byScope.get("index:overall"));
@@ -77,13 +85,23 @@ async function main() {
   const progress = await ps.getProgressStats();
   ok("progress denominator is index:overall, not the Neon base scope",
      progress.overall.total === 40157, progress.overall);
-  ok("progress documented still comes from the Neon base scope",
-     progress.overall.documented === 980744, progress.overall);
+  ok("progress documented comes from index:overall, not the editorial 980744",
+     progress.overall.documented === docByScope.get("index:overall"),
+     [progress.overall.documented, docByScope.get("index:overall")]);
+  ok("cron wrote a non-zero documented onto index:overall",
+     (docByScope.get("index:overall") ?? 0) > 0, docByScope.get("index:overall"));
   ok("progress era:frontier total is the index value, not Neon's 12753",
      progress.byEra.frontier.total === byScope.get("index:era:frontier"),
      [progress.byEra.frontier.total, byScope.get("index:era:frontier")]);
-  ok("progress era:frontier documented still editorial (7820)",
-     progress.byEra.frontier.documented === 7820, progress.byEra.frontier);
+  ok("progress era:frontier documented is the index value, not editorial 7820",
+     progress.byEra.frontier.documented === docByScope.get("index:era:frontier"),
+     [progress.byEra.frontier.documented, docByScope.get("index:era:frontier")]);
+  // turso:* rows carry documented = 0 because that path has no flag to read.
+  // A zero must never displace the editorial count sitting in the base scope.
+  ok("a zero documented from a full-index prefix never displaces the base scope",
+     progress.byEra.tangerine.documented !== 0 ||
+       (docByScope.get("index:era:tangerine") ?? 0) > 0,
+     progress.byEra.tangerine);
   // year:2019 is written by no full-index refresh; without getIndexTotals'
   // base-scope tier this bucket would render 0% instead of its real total.
   ok("progress year:2019 falls back to the base scope total (36)",

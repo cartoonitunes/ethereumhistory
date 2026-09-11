@@ -21,31 +21,34 @@
  * (~20-40 rows, indexed) and never touches Turso. The scan happens at most once
  * per hour globally instead of once per cold request.
  *
- * WHICH DENOMINATOR
- * -----------------
- * DELIBERATELY MIXED, as of the Neon index cutover. The denominator is the
- * FULL INDEX (`getIndexTotals`, ~12.05M rows); the numerator is the EDITORIAL
- * layer (Neon `contracts`, ~1.37M ingested rows, of which ~980k documented).
- * The widget therefore answers "how much of every contract ever deployed have
- * we documented", and publishes ~8%, not the ~72% it showed while both halves
- * came from `contracts`.
+ * WHICH CORPUS
+ * ------------
+ * BOTH halves come from the full index (`getIndexTotals`). The denominator is
+ * its ~12.05M rows; the numerator is the index's own `is_documented` flag,
+ * which marks ~5.94M of them (sibling propagation + Sourcify) against the
+ * ~980k the editorial `contracts` table knows about. The widget publishes ~49%.
  *
- * This is a reversal, and the history matters because the same shape was once
- * a bug. This module used to PREFER `turso:*` for the denominator and fall back
- * to Neon only until "the first Turso refresh lands", which made the headline
- * metric depend on whether an unrelated cron had finished: the published number
- * dropped from ~70% to ~8% the moment a refresh succeeded, with no code change
- * and no data loss. The objection then was not that ~8% is wrong — it is the
- * honest full-index figure — but that the number moved on its own, silently,
- * as a side effect of cron timing.
+ * The history is worth keeping, because two earlier shapes were both wrong in
+ * ways that looked right:
  *
- * What makes the mix safe to publish now is that the denominator no longer
- * depends on a race: `index:*` is populated and `getIndexTotals` resolves
- * through a fixed tier order (active source, then the other, then base scopes),
- * so the figure is stable across cron runs and across a flag rollback. If the
- * intent ever reverts to an editorial-only ratio, take BOTH halves from the
- * base scopes again — never leave the two halves drawn from different corpora
- * by accident. See `totalFor` in getProgressStats.
+ *  1. Editorial numerator over an index denominator (~980k / ~12.05M = ~8%).
+ *     Two different universes divided by each other. This was originally a BUG
+ *     — the denominator preferred `turso:*` and fell back to Neon, so the
+ *     published figure dropped from ~70% to ~8% the moment an unrelated cron
+ *     finished — and was later re-adopted deliberately, in the window before
+ *     the index's own documentation flag was wired through to this widget.
+ *  2. Editorial over editorial (~980k / ~1.37M = ~72%). Internally consistent,
+ *     but it silently scoped the published claim to the slice already ingested.
+ *
+ * Both halves now come from one corpus AND that corpus is the whole index, so
+ * the figure is consistent and complete at once. The rule to preserve: the
+ * numerator and the denominator must be drawn from the SAME source. If either
+ * is ever repointed, repoint the other in the same change.
+ *
+ * getIndexTotals resolves both through a fixed tier order (active source, then
+ * the other, then the editorial base scopes), so the figure does not depend on
+ * cron timing and survives a flag rollback. Documented additionally refuses to
+ * let a zero displace a lower tier — see the note on `mergeDoc`.
  */
 
 import { getDb } from "@/lib/db-client";
@@ -112,7 +115,15 @@ export async function refreshTursoIndexTotals(): Promise<void> {
   // overall count is the sum of every group, and the per-era / per-year totals
   // are the two marginals. NULL era/year still form groups, so the sum is a
   // true COUNT(*) and not a filtered subtotal.
-  type GridRow = { era: string | null; year: number | null; total: number | bigint };
+  type GridRow = {
+    era: string | null;
+    year: number | null;
+    total: number | bigint;
+    // Only the Neon index carries a documentation flag. The Turso path leaves
+    // this undefined and every documented count below stays 0, exactly as it
+    // was before the index gained one — see the upsert guard.
+    documented?: number | bigint;
+  };
 
   let grid: GridRow[];
   if (source === "neon") {
@@ -134,18 +145,24 @@ export async function refreshTursoIndexTotals(): Promise<void> {
   }
 
   let overall = 0;
+  let overallDocumented = 0;
   // Collapse verbose Turso era names into app era IDs (summing any collisions).
   const eraTotals = new Map<string, number>();
   const yearTotals = new Map<number, number>();
+  const eraDocumented = new Map<string, number>();
+  const yearDocumented = new Map<number, number>();
 
   for (const r of grid) {
     const count = Number(r.total);
+    const documentedCount = Number(r.documented ?? 0);
     overall += count;
+    overallDocumented += documentedCount;
 
     if (r.era != null) {
       const appEra = TURSO_ERA_TO_APP[r.era] ?? r.era;
       if ((ERA_IDS as readonly string[]).includes(appEra)) {
         eraTotals.set(appEra, (eraTotals.get(appEra) ?? 0) + count);
+        eraDocumented.set(appEra, (eraDocumented.get(appEra) ?? 0) + documentedCount);
       }
     }
 
@@ -153,14 +170,23 @@ export async function refreshTursoIndexTotals(): Promise<void> {
       const y = Number(r.year);
       if ((YEARS as readonly number[]).includes(y)) {
         yearTotals.set(y, (yearTotals.get(y) ?? 0) + count);
+        yearDocumented.set(y, (yearDocumented.get(y) ?? 0) + documentedCount);
       }
     }
   }
 
-  const upserts: { scope: string; total: number }[] = [
-    { scope: `${prefix}overall`, total: overall },
-    ...ERA_IDS.map((id) => ({ scope: `${prefix}era:${id}`, total: eraTotals.get(id) ?? 0 })),
-    ...YEARS.map((y) => ({ scope: `${prefix}year:${y}`, total: yearTotals.get(y) ?? 0 })),
+  const upserts: { scope: string; total: number; documented: number }[] = [
+    { scope: `${prefix}overall`, total: overall, documented: overallDocumented },
+    ...ERA_IDS.map((id) => ({
+      scope: `${prefix}era:${id}`,
+      total: eraTotals.get(id) ?? 0,
+      documented: eraDocumented.get(id) ?? 0,
+    })),
+    ...YEARS.map((y) => ({
+      scope: `${prefix}year:${y}`,
+      total: yearTotals.get(y) ?? 0,
+      documented: yearDocumented.get(y) ?? 0,
+    })),
   ];
 
   // Skip writing rows we couldn't compute (e.g. a partial Turso failure) so we
@@ -168,13 +194,15 @@ export async function refreshTursoIndexTotals(): Promise<void> {
   // including `turso:overall`, which used to be exempt — that exemption meant a
   // Turso hiccup could persist a 0 denominator and render "950,826 of 0 (0%)",
   // the exact failure the guard exists to prevent.
-  for (const { scope, total } of upserts) {
+  for (const { scope, total, documented } of upserts) {
     if (total <= 0) continue;
     await db.execute(sql`
       INSERT INTO contract_stats_cache (scope, total, documented, updated_at)
-      VALUES (${scope}, ${total}, 0, now())
+      VALUES (${scope}, ${total}, ${documented}, now())
       ON CONFLICT (scope) DO UPDATE
-        SET total = EXCLUDED.total, updated_at = EXCLUDED.updated_at
+        SET total = EXCLUDED.total,
+            documented = EXCLUDED.documented,
+            updated_at = EXCLUDED.updated_at
     `);
   }
 }
@@ -202,13 +230,16 @@ export async function getIndexTotals(): Promise<{
   overall: number;
   byEra: Map<string, number>;
   byYear: Map<number, number>;
+  documentedOverall: number;
+  documentedByEra: Map<string, number>;
+  documentedByYear: Map<number, number>;
 }> {
   const activePrefix = indexScopePrefix();
   const otherPrefix = activePrefix === "turso:" ? "index:" : "turso:";
 
   // The cache key carries the prefix: a warm instance that computed these under
   // the previous flag value must not keep serving them after a flip.
-  return cached(`stats:index-totals:v2:${activePrefix}`, CACHE_TTL.LONG, async () => {
+  return cached(`stats:index-totals:v3:${activePrefix}`, CACHE_TTL.LONG, async () => {
     const db = getDb();
     const raw = await db.execute<CacheRow>(
       sql`SELECT scope, total, documented FROM contract_stats_cache`
@@ -219,6 +250,9 @@ export async function getIndexTotals(): Promise<{
     const eraTiers = [new Map<string, number>(), new Map<string, number>(), new Map<string, number>()];
     const yearTiers = [new Map<number, number>(), new Map<number, number>(), new Map<number, number>()];
     const overallTiers = [0, 0, 0];
+    const eraDocTiers = [new Map<string, number>(), new Map<string, number>(), new Map<string, number>()];
+    const yearDocTiers = [new Map<number, number>(), new Map<number, number>(), new Map<number, number>()];
+    const overallDocTiers = [0, 0, 0];
 
     for (const r of toRows<CacheRow>(raw)) {
       let tier: number;
@@ -234,9 +268,11 @@ export async function getIndexTotals(): Promise<{
         base = r.scope;
       }
       const total = Number(r.total);
+      const documented = Number(r.documented);
 
       if (base === "overall") {
         overallTiers[tier] = total;
+        overallDocTiers[tier] = documented;
       } else if (base.startsWith("era:")) {
         const rawEra = base.slice("era:".length).replace(/_/g, "-");
         // Legacy spellings ("spurious_dragon") share a bucket with the
@@ -244,9 +280,14 @@ export async function getIndexTotals(): Promise<{
         const id = TURSO_ERA_TO_APP[rawEra] ?? rawEra;
         const map = eraTiers[tier];
         map.set(id, (map.get(id) ?? 0) + total);
+        const docMap = eraDocTiers[tier];
+        docMap.set(id, (docMap.get(id) ?? 0) + documented);
       } else if (base.startsWith("year:")) {
         const y = Number(base.slice("year:".length));
-        if (Number.isFinite(y)) yearTiers[tier].set(y, total);
+        if (Number.isFinite(y)) {
+          yearTiers[tier].set(y, total);
+          yearDocTiers[tier].set(y, documented);
+        }
       }
     }
 
@@ -257,10 +298,31 @@ export async function getIndexTotals(): Promise<{
     const byYear = new Map<number, number>(yearTiers[0]);
     for (const tier of [1, 2]) for (const [k, v] of yearTiers[tier]) byYear.set(k, v);
 
+    // Documented resolves through the same tier order with ONE extra rule: a
+    // zero never displaces a lower tier. Unlike a total, a 0 here is almost
+    // always a placeholder rather than a measurement — the Turso path has no
+    // documentation flag to read and writes 0 for every scope, and an era the
+    // index does not carry at all (tangerine, whose rows are stored under
+    // era ids the index never uses — finding E4) would otherwise report 0
+    // documented against a non-zero total. Falling through to the editorial
+    // count is the honest answer in both cases.
+    const mergeDoc = <K>(tiers: Map<K, number>[]): Map<K, number> => {
+      const out = new Map<K, number>(tiers[0]);
+      for (const tier of [1, 2]) {
+        for (const [k, v] of tiers[tier]) if (v > 0) out.set(k, v);
+      }
+      return out;
+    };
+    const documentedByEra = mergeDoc(eraDocTiers);
+    const documentedByYear = mergeDoc(yearDocTiers);
+
     return {
       overall: overallTiers[2] || overallTiers[1] || overallTiers[0],
       byEra,
       byYear,
+      documentedOverall: overallDocTiers[2] || overallDocTiers[1] || overallDocTiers[0],
+      documentedByEra,
+      documentedByYear,
     };
   });
 }
@@ -275,16 +337,20 @@ export async function getIndexTotals(): Promise<{
  * warm instance don't even touch Neon.
  */
 export async function getProgressStats(): Promise<ProgressStats> {
-  // v10: denominator switched from the Neon base scopes to the full index via
-  // getIndexTotals; numerator still the base scopes. Every bump here is
-  // required — warm instances hold the previous entry for up to an hour, so a
-  // change that only touches the computation would keep serving the old number
-  // after deploy. v10 is what makes the cutover visible at all.
-  return cached<ProgressStats>("stats:progress:v10", CACHE_TTL.LONG, async () => {
+  // v11: BOTH halves now come from getIndexTotals. The denominator is the
+  // full-index total; the numerator is the index's own `is_documented` flag,
+  // which counts ~5.94M of the 12.05M rows against the editorial table's
+  // ~980k. Every bump here is required — warm instances hold the previous
+  // entry for up to an hour, so a change that only touches the computation
+  // would keep serving the old ratio after deploy.
+  return cached<ProgressStats>("stats:progress:v11", CACHE_TTL.LONG, async () => {
     const db = getDb();
 
-    const [cacheRowsRaw, historianCountResult, totalEditsResult, indexTotals] = await Promise.all([
-      db.execute<CacheRow>(sql`SELECT scope, total, documented FROM contract_stats_cache`),
+    // contract_stats_cache is no longer read directly here: getIndexTotals
+    // already reads that table and resolves every scope through its tier
+    // order, editorial base scopes included, so a second pass would only risk
+    // the two disagreeing.
+    const [historianCountResult, totalEditsResult, indexTotals] = await Promise.all([
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.historians)
@@ -293,18 +359,6 @@ export async function getProgressStats(): Promise<ProgressStats> {
       getIndexTotals(),
     ]);
 
-    const rows = toRows<CacheRow>(cacheRowsRaw);
-    const documented = new Map<string, number>(); // base scope -> documented
-    for (const r of rows) {
-      // Only the NUMERATOR is read here, and only the editorial layer can
-      // supply it: `turso:*` and `index:*` rows carry documented = 0 by
-      // construction (refreshTursoIndexTotals writes totals and a literal 0),
-      // so letting either prefix through would zero the documented counts
-      // rather than enlarge them. The denominator comes from getIndexTotals.
-      if (r.scope.startsWith("turso:") || r.scope.startsWith("index:")) continue;
-      documented.set(r.scope, Number(r.documented));
-    }
-
     // A zero (or a missing row) counts as ABSENT rather than as a real
     // denominator: `??` only bridges null and undefined, so a 0 that reached the
     // table would previously have been served as a genuine total and rendered
@@ -312,10 +366,9 @@ export async function getProgressStats(): Promise<ProgressStats> {
     // refreshTursoIndexTotals), but a denominator is exactly the wrong place to
     // trust that.
     //
-    // getIndexTotals already falls back to the base scope for any era or year
-    // no full-index refresh writes (constantinople, year:2019+), so a bucket
-    // the index does not carry still renders its editorial total instead of
-    // collapsing to 0%.
+    // getIndexTotals falls back to the base scope for any era or year no
+    // full-index refresh writes (constantinople, year:2019+), for both halves,
+    // so such a bucket renders its editorial pair rather than collapsing to 0%.
     const asDenominator = (value: number | undefined): number =>
       typeof value === "number" && value > 0 ? value : 0;
 
@@ -323,7 +376,7 @@ export async function getProgressStats(): Promise<ProgressStats> {
     for (const id of ERA_IDS) {
       byEra[id] = {
         total: asDenominator(indexTotals.byEra.get(id)),
-        documented: documented.get(`era:${id}`) ?? 0,
+        documented: indexTotals.documentedByEra.get(id) ?? 0,
       };
     }
 
@@ -331,14 +384,14 @@ export async function getProgressStats(): Promise<ProgressStats> {
     for (const y of YEARS) {
       byYear[String(y)] = {
         total: asDenominator(indexTotals.byYear.get(y)),
-        documented: documented.get(`year:${y}`) ?? 0,
+        documented: indexTotals.documentedByYear.get(y) ?? 0,
       };
     }
 
     return {
       overall: {
         total: asDenominator(indexTotals.overall),
-        documented: documented.get("overall") ?? 0,
+        documented: indexTotals.documentedOverall,
       },
       byEra,
       byYear,

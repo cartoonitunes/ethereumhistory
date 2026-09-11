@@ -1,15 +1,26 @@
 /**
  * POST /api/cron/refresh-stats
  *
- * Refreshes the Neon `contract_stats_cache` scope-by-scope, each in its own
+ * Refreshes the Neon `contract_stats_cache` base scopes, each in its own
  * transaction, so a Vercel cron timeout can't roll back the whole refresh.
- * Scopes are processed cheapest first (overall, per-era, then per-year);
- * anything not completed within the request budget is skipped and picked
- * up on the next hourly tick.
  *
- * Neon-only: the Turso index totals refresh moved to
- * /api/cron/refresh-turso-totals in its own cron slot. Stacking them in one
- * function stacked their timeouts and blew the 300s ceiling on cold start.
+ * ONE GROUP PER TICK
+ * ------------------
+ * The three groups cost roughly 200s (overall), 204s (era) and 96s (all
+ * years together) against this project's Neon compute. Any two of them exceed
+ * the 300s function ceiling, so the previous "cheapest first, stop when the
+ * budget runs out" loop could never finish: it spent ~200s on `overall`, found
+ * ~75s of budget left, started `era` anyway — the deadline is only checked
+ * BETWEEN scopes, and nothing can interrupt a query already running — and was
+ * killed mid-scan. `era` and every year scope went stale for days while
+ * `overall` alone kept refreshing.
+ *
+ * So each invocation now runs exactly one group: whichever is stalest by its
+ * oldest `updated_at`. With the hourly schedule every group refreshes about
+ * every three hours, and no invocation can stack two heavy scans.
+ *
+ * Neon-only: the full-index scan lives in /api/cron/refresh-turso-totals,
+ * which is a separate cron slot (and far cheaper — one grouped pass, ~15s).
  *
  * Backed by the per-scope Postgres functions in migration 070
  * (refresh_contract_stats_overall / _era / _year_single). The old
@@ -27,11 +38,6 @@ import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-// The Turso leg of this job scans the full 12M-row contract_index. Under the
-// platform default the function was killed mid-scan on almost every run, so the
-// `turso:*` totals only landed once every day or so. The scan is now a single
-// pass (see refreshTursoIndexTotals) which brings it to ~1-2 min; this gives
-// it the full ceiling so it has room to finish even on a slow replica.
 export const maxDuration = 300;
 
 // Overall request budget. Leaves ~25s margin under maxDuration for response
@@ -41,6 +47,15 @@ const BUDGET_MS = Number(process.env.REFRESH_STATS_BUDGET_MS ?? 275_000);
 // Static year list matches /api/stats/progress. Cheap to update as new
 // years are added; the underlying function is a no-op for years with no rows.
 const YEARS = [2015, 2016, 2017, 2018, 2019, 2020];
+
+type GroupName = "overall" | "era" | "years";
+
+/** The base scopes each group owns, used to measure how stale it is. */
+const GROUP_SCOPES: Record<GroupName, string[]> = {
+  overall: ["overall"],
+  era: ["era:frontier", "era:homestead", "era:dao", "era:tangerine", "era:spurious", "era:byzantium"],
+  years: YEARS.map((y) => `year:${y}`),
+};
 
 async function isAuthorized(req: NextRequest): Promise<boolean> {
   const cronSecret = process.env.CRON_SECRET;
@@ -56,6 +71,36 @@ type ScopeResult =
   | { scope: string; status: "ok"; elapsedMs: number }
   | { scope: string; status: "error"; elapsedMs: number; error: string }
   | { scope: string; status: "skipped"; reason: "budget-exhausted" };
+
+/**
+ * Pick the group with the oldest `updated_at` among the scopes it owns.
+ *
+ * A scope that has never been written has no row at all, which must count as
+ * maximally stale — otherwise a group that has never run would never be
+ * chosen, which is the one case rotation most needs to cover.
+ */
+async function stalestGroup(db: ReturnType<typeof getDb>): Promise<GroupName> {
+  const raw = await db.execute<{ scope: string; updated_at: string }>(
+    sql`SELECT scope, updated_at FROM contract_stats_cache`
+  );
+  const rows = (Array.isArray(raw) ? raw : ((raw as { rows?: unknown[] }).rows ?? [])) as {
+    scope: string;
+    updated_at: string;
+  }[];
+  const seen = new Map(rows.map((r) => [r.scope, new Date(r.updated_at).getTime()]));
+
+  let stalest: GroupName = "overall";
+  let oldest = Infinity;
+  for (const group of Object.keys(GROUP_SCOPES) as GroupName[]) {
+    const times = GROUP_SCOPES[group].map((s) => seen.get(s) ?? 0);
+    const groupOldest = Math.min(...times);
+    if (groupOldest < oldest) {
+      oldest = groupOldest;
+      stalest = group;
+    }
+  }
+  return stalest;
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!(await isAuthorized(req))) {
@@ -77,18 +122,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const deadline = started + BUDGET_MS;
   const results: ScopeResult[] = [];
 
-  // Cheapest scopes first: if the year branch times out, overall + era are
-  // already committed and visible to the cache.
-  const scopes: Array<{ name: string; run: () => Promise<unknown> }> = [
-    { name: "overall", run: () => db.execute(sql`SELECT refresh_contract_stats_overall()`) },
-    { name: "era",     run: () => db.execute(sql`SELECT refresh_contract_stats_era()`) },
-    ...YEARS.map((y) => ({
-      name: `year:${y}`,
-      run: () => db.execute(sql`SELECT refresh_contract_stats_year_single(${y})`),
-    })),
-  ];
+  // Allow a specific group to be forced, for backfills and for testing the
+  // rotation without waiting for it to come round.
+  const requested = new URL(req.url).searchParams.get("group");
+  const group: GroupName =
+    requested === "overall" || requested === "era" || requested === "years"
+      ? requested
+      : await stalestGroup(db);
+
+  const scopes: Array<{ name: string; run: () => Promise<unknown> }> =
+    group === "overall"
+      ? [{ name: "overall", run: () => db.execute(sql`SELECT refresh_contract_stats_overall()`) }]
+      : group === "era"
+        ? [{ name: "era", run: () => db.execute(sql`SELECT refresh_contract_stats_era()`) }]
+        : YEARS.map((y) => ({
+            name: `year:${y}`,
+            run: () => db.execute(sql`SELECT refresh_contract_stats_year_single(${y})`),
+          }));
 
   for (const s of scopes) {
+    // Only meaningful for the years group, which is several statements; the
+    // single-statement groups can't be interrupted once started, which is
+    // exactly why they get a tick to themselves.
     if (Date.now() >= deadline) {
       results.push({ scope: s.name, status: "skipped", reason: "budget-exhausted" });
       continue;
@@ -122,6 +177,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     data: {
       elapsedMs: Date.now() - started,
       budgetMs: BUDGET_MS,
+      // Which group this tick picked, so a stuck rotation is visible from the
+      // response rather than only from updated_at drift.
+      group,
       scopes: results,
       rows,
     },

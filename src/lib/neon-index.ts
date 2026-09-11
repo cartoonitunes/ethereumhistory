@@ -348,6 +348,12 @@ export interface IndexGridRow {
   era: string | null;
   year: number | null;
   total: number;
+  /**
+   * Rows with `is_documented = 1` in this group. The index carries its own
+   * documentation flag (sibling propagation + Sourcify), which covers far more
+   * of the 12M rows than the editorial `contracts` table does.
+   */
+  documented: number;
 }
 
 /**
@@ -358,8 +364,13 @@ export interface IndexGridRow {
  */
 export async function getIndexGrid(): Promise<IndexGridRow[]> {
   const db = getDb();
+  // The documented count rides along in the SAME pass. A second query would
+  // double the scan of a 12M-row table for a filter Postgres can evaluate while
+  // it is already counting the group.
   const raw = await db.execute(sql`
-    SELECT era, year, COUNT(*)::bigint AS total
+    SELECT era, year,
+           COUNT(*)::bigint AS total,
+           COUNT(*) FILTER (WHERE is_documented = 1)::bigint AS documented
     FROM neon_contract_index
     GROUP BY era, year
   `);
@@ -367,6 +378,7 @@ export async function getIndexGrid(): Promise<IndexGridRow[]> {
     era: row.era === null || row.era === undefined ? null : String(row.era),
     year: row.year === null || row.year === undefined ? null : Number(row.year),
     total: Number(row.total ?? 0),
+    documented: Number(row.documented ?? 0),
   }));
 }
 
