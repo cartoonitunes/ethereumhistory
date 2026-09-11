@@ -3,12 +3,15 @@
  *
  * GET /api/deployer/[address]?page=1&limit=50&era=frontier&sort=block_asc
  *
- * Returns all contracts deployed by a given address from the Turso contract index.
+ * Returns all contracts deployed by a given address from the contract index —
+ * Turso, or Neon's neon_contract_index when INDEX_SOURCE=neon.
  * Supports pagination and era/sort filters.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { turso } from "@/lib/turso";
+import { isNeonIndex } from "@/lib/index-source";
+import { countDeployerContracts, listDeployerContracts } from "@/lib/neon-index";
 import { isValidAddress } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +52,8 @@ export async function GET(
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT), 10)));
   const offset = (page - 1) * limit;
 
+  // SQL fragments below are the Turso branch's; the Neon branch builds its own
+  // parameterized equivalents in lib/neon-index from the same parsed values.
   const conditions: string[] = ["deployer = ?"];
   const args: (string | number)[] = [deployer];
 
@@ -66,19 +71,32 @@ export async function GET(
     "block_number ASC";
 
   try {
-    const [countResult, rowsResult] = await Promise.all([
-      turso.execute({ sql: `SELECT COUNT(*) as total FROM contract_index ${whereClause}`, args }),
-      turso.execute({
-        sql: `SELECT address, block_number, timestamp, bytecode_hash, code_size, era, year, is_internal, gas_used
+    let total: number;
+    let rows: TursoDeployerRow[];
+
+    if (isNeonIndex()) {
+      const filters = { deployer, era, sort, limit, offset };
+      const [neonTotal, neonRows] = await Promise.all([
+        countDeployerContracts(filters),
+        listDeployerContracts(filters),
+      ]);
+      total = neonTotal;
+      rows = neonRows as unknown as TursoDeployerRow[];
+    } else {
+      const [countResult, rowsResult] = await Promise.all([
+        turso.execute({ sql: `SELECT COUNT(*) as total FROM contract_index ${whereClause}`, args }),
+        turso.execute({
+          sql: `SELECT address, block_number, timestamp, bytecode_hash, code_size, era, year, is_internal, gas_used
               FROM contract_index ${whereClause}
               ORDER BY ${orderExpr}
               LIMIT ? OFFSET ?`,
-        args: [...args, limit, offset],
-      }),
-    ]);
+          args: [...args, limit, offset],
+        }),
+      ]);
+      total = Number(countResult.rows[0]?.total ?? 0);
+      rows = rowsResult.rows as unknown as TursoDeployerRow[];
+    }
 
-    const total = Number(countResult.rows[0]?.total ?? 0);
-    const rows = rowsResult.rows as unknown as TursoDeployerRow[];
     const totalPages = Math.ceil(total / limit);
 
     const contracts = rows.map((r) => ({

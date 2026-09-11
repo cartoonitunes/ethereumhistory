@@ -42,6 +42,8 @@
 
 import { getDb } from "@/lib/db-client";
 import { isTursoConfigured, turso } from "@/lib/turso";
+import { getIndexSource, indexScopePrefix } from "@/lib/index-source";
+import { getIndexGrid } from "@/lib/neon-index";
 import * as schema from "@/lib/schema";
 import { sql, eq } from "drizzle-orm";
 import { cached, CACHE_TTL } from "@/lib/cache";
@@ -71,19 +73,28 @@ function toRows<T>(raw: unknown): T[] {
 }
 
 /**
- * Recompute the full-index totals from Turso and persist them into Neon's
- * `contract_stats_cache` under `turso:overall`, `turso:era:<id>`,
- * `turso:year:<yyyy>` scopes. Expensive (full-table scan) — call ONLY from the
- * scheduled cron, never from a request handler. No-op if Turso isn't configured.
+ * Recompute the full-index totals from whichever backend `INDEX_SOURCE`
+ * selects, and persist them into Neon's `contract_stats_cache`. Expensive
+ * (full-table scan) — call ONLY from the scheduled cron, never from a request
+ * handler. In turso mode it is a no-op if Turso isn't configured.
+ *
+ * SCOPE NAMING follows the flag: `turso:*` in turso mode, `index:*` in neon
+ * mode (see lib/index-source). Writes and reads therefore flip together, and
+ * rolling the flag back finds the `turso:*` rows still sitting there — this
+ * function only ever upserts, it never deletes.
  *
  * These scopes do NOT feed the progress widget's denominator (see
  * getProgressStats) — a failure here can no longer move that published number.
  * They DO back /coverage via getIndexTotals, which degrades to the smaller Neon
  * totals when a scope is missing, so keeping this job finishing still matters.
+ *
+ * The name is kept for its callers' sake; it is now source-agnostic.
  */
 export async function refreshTursoIndexTotals(): Promise<void> {
-  if (!isTursoConfigured()) return;
+  const source = getIndexSource();
+  if (source === "turso" && !isTursoConfigured()) return;
   const db = getDb();
+  const prefix = indexScopePrefix(source);
 
   // ONE full scan, not three. The previous version issued COUNT(*), GROUP BY
   // era and GROUP BY year as three concurrent queries — three passes over 12M
@@ -93,21 +104,25 @@ export async function refreshTursoIndexTotals(): Promise<void> {
   // overall count is the sum of every group, and the per-era / per-year totals
   // are the two marginals. NULL era/year still form groups, so the sum is a
   // true COUNT(*) and not a filtered subtotal.
-  const gridRes = await turso.execute(
-    `SELECT era, year, COUNT(*) AS total FROM contract_index GROUP BY era, year`
-  );
+  type GridRow = { era: string | null; year: number | null; total: number | bigint };
 
-  const grid = gridRes.rows as unknown as {
-    era: string | null;
-    year: number | null;
-    total: number | bigint;
-  }[];
+  let grid: GridRow[];
+  if (source === "neon") {
+    grid = await getIndexGrid();
+  } else {
+    const gridRes = await turso.execute(
+      `SELECT era, year, COUNT(*) AS total FROM contract_index GROUP BY era, year`
+    );
+    grid = gridRes.rows as unknown as GridRow[];
+  }
 
   // An empty grid means the scan returned nothing — a locked/unavailable
-  // replica, not a genuinely empty index. Bail out rather than persisting
-  // zeroes over good cached values.
+  // replica or an unloaded table, not a genuinely empty index. Bail out rather
+  // than persisting zeroes over good cached values.
   if (grid.length === 0) {
-    throw new Error("Turso contract_index returned no rows; refusing to cache zeroed totals");
+    throw new Error(
+      `${source} contract index returned no rows; refusing to cache zeroed totals`
+    );
   }
 
   let overall = 0;
@@ -135,9 +150,9 @@ export async function refreshTursoIndexTotals(): Promise<void> {
   }
 
   const upserts: { scope: string; total: number }[] = [
-    { scope: "turso:overall", total: overall },
-    ...ERA_IDS.map((id) => ({ scope: `turso:era:${id}`, total: eraTotals.get(id) ?? 0 })),
-    ...YEARS.map((y) => ({ scope: `turso:year:${y}`, total: yearTotals.get(y) ?? 0 })),
+    { scope: `${prefix}overall`, total: overall },
+    ...ERA_IDS.map((id) => ({ scope: `${prefix}era:${id}`, total: eraTotals.get(id) ?? 0 })),
+    ...YEARS.map((y) => ({ scope: `${prefix}year:${y}`, total: yearTotals.get(y) ?? 0 })),
   ];
 
   // Skip writing rows we couldn't compute (e.g. a partial Turso failure) so we
@@ -159,12 +174,18 @@ export async function refreshTursoIndexTotals(): Promise<void> {
 /**
  * Full-index totals per era and per year, read from `contract_stats_cache`.
  *
- * Prefers the `turso:*` scopes (true contract_index totals, written by the
- * cron) and falls back to the Neon base-scope total for any scope Turso has
- * not been sampled for. That fallback is what keeps these surfaces rendering
- * while Turso reads are blocked — /api/coverage used to scan the 12M-row
- * contract_index on every request instead, which both burned the read quota
- * and 500'd the whole dashboard the moment the quota ran out.
+ * Prefers the ACTIVE index source's scopes (true full-index totals, written by
+ * the cron — `turso:*` in turso mode, `index:*` in neon mode), then the other
+ * source's scopes, then the Neon base-scope total for any scope neither source
+ * has been sampled for. That last fallback is what keeps these surfaces
+ * rendering while Turso reads are blocked — /api/coverage used to scan the
+ * 12M-row contract_index on every request instead, which both burned the read
+ * quota and 500'd the whole dashboard the moment the quota ran out.
+ *
+ * The cross-source fallback is what makes the cutover seamless in both
+ * directions: flipping to neon before the first neon refresh has landed still
+ * renders the `turso:*` numbers rather than collapsing to the much smaller Neon
+ * base totals, and flipping back finds `turso:*` untouched.
  *
  * Unlike getProgressStats, this is NOT restricted to the ERA_IDS / YEARS
  * whitelists: the coverage dashboard renders every era and year present.
@@ -174,46 +195,65 @@ export async function getIndexTotals(): Promise<{
   byEra: Map<string, number>;
   byYear: Map<number, number>;
 }> {
-  return cached("stats:index-totals:v1", CACHE_TTL.LONG, async () => {
+  const activePrefix = indexScopePrefix();
+  const otherPrefix = activePrefix === "turso:" ? "index:" : "turso:";
+
+  // The cache key carries the prefix: a warm instance that computed these under
+  // the previous flag value must not keep serving them after a flip.
+  return cached(`stats:index-totals:v2:${activePrefix}`, CACHE_TTL.LONG, async () => {
     const db = getDb();
     const raw = await db.execute<CacheRow>(
       sql`SELECT scope, total, documented FROM contract_stats_cache`
     );
 
-    const neonEra = new Map<string, number>();
-    const neonYear = new Map<number, number>();
-    const tursoEra = new Map<string, number>();
-    const tursoYear = new Map<number, number>();
-    let neonOverall = 0;
-    let tursoOverall = 0;
+    // Three tiers, least to most preferred: Neon base scopes, the inactive
+    // index source, the active index source.
+    const eraTiers = [new Map<string, number>(), new Map<string, number>(), new Map<string, number>()];
+    const yearTiers = [new Map<number, number>(), new Map<number, number>(), new Map<number, number>()];
+    const overallTiers = [0, 0, 0];
 
     for (const r of toRows<CacheRow>(raw)) {
-      const isTurso = r.scope.startsWith("turso:");
-      const base = isTurso ? r.scope.slice("turso:".length) : r.scope;
+      let tier: number;
+      let base: string;
+      if (r.scope.startsWith(activePrefix)) {
+        tier = 2;
+        base = r.scope.slice(activePrefix.length);
+      } else if (r.scope.startsWith(otherPrefix)) {
+        tier = 1;
+        base = r.scope.slice(otherPrefix.length);
+      } else {
+        tier = 0;
+        base = r.scope;
+      }
       const total = Number(r.total);
 
       if (base === "overall") {
-        if (isTurso) tursoOverall = total;
-        else neonOverall = total;
+        overallTiers[tier] = total;
       } else if (base.startsWith("era:")) {
-        const raw = base.slice("era:".length);
+        const rawEra = base.slice("era:".length).replace(/_/g, "-");
         // Legacy spellings ("spurious_dragon") share a bucket with the
         // canonical id, so sum rather than overwrite.
-        const id = TURSO_ERA_TO_APP[raw.replace(/_/g, "-")] ?? raw.replace(/_/g, "-");
-        const map = isTurso ? tursoEra : neonEra;
+        const id = TURSO_ERA_TO_APP[rawEra] ?? rawEra;
+        const map = eraTiers[tier];
         map.set(id, (map.get(id) ?? 0) + total);
       } else if (base.startsWith("year:")) {
         const y = Number(base.slice("year:".length));
-        if (Number.isFinite(y)) (isTurso ? tursoYear : neonYear).set(y, total);
+        if (Number.isFinite(y)) yearTiers[tier].set(y, total);
       }
     }
 
-    const byEra = new Map<string, number>(neonEra);
-    for (const [k, v] of tursoEra) byEra.set(k, v);
-    const byYear = new Map<number, number>(neonYear);
-    for (const [k, v] of tursoYear) byYear.set(k, v);
+    // Higher tiers overwrite lower ones per key, so a scope only the base has
+    // (e.g. year:2019, which no full-index refresh writes) still shows up.
+    const byEra = new Map<string, number>(eraTiers[0]);
+    for (const tier of [1, 2]) for (const [k, v] of eraTiers[tier]) byEra.set(k, v);
+    const byYear = new Map<number, number>(yearTiers[0]);
+    for (const tier of [1, 2]) for (const [k, v] of yearTiers[tier]) byYear.set(k, v);
 
-    return { overall: tursoOverall || neonOverall, byEra, byYear };
+    return {
+      overall: overallTiers[2] || overallTiers[1] || overallTiers[0],
+      byEra,
+      byYear,
+    };
   });
 }
 
@@ -228,10 +268,11 @@ export async function getIndexTotals(): Promise<{
  * warm instance don't even touch Neon.
  */
 export async function getProgressStats(): Promise<ProgressStats> {
-  // v8: denominator pinned to Neon; zero treated as absent. The bump is
-  // required — warm instances still hold v7 entries computed against the Turso
-  // denominator, which would keep serving ~8% for up to an hour after deploy.
-  return cached<ProgressStats>("stats:progress:v8", CACHE_TTL.LONG, async () => {
+  // v9: denominator pinned to Neon; zero treated as absent; `index:*` scopes
+  // excluded alongside `turso:*`. Every bump here is required — warm instances
+  // hold the previous entry for up to an hour, so a fix that only changes the
+  // computation would keep serving the old number after deploy.
+  return cached<ProgressStats>("stats:progress:v9", CACHE_TTL.LONG, async () => {
     const db = getDb();
 
     const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
@@ -247,10 +288,14 @@ export async function getProgressStats(): Promise<ProgressStats> {
     const documented = new Map<string, number>(); // base scope -> documented
     const neonTotal = new Map<string, number>(); // base scope -> Neon total
     for (const r of rows) {
-      // `turso:*` rows are full-index totals from a different corpus. They are
-      // read by the cron's own reporting, never here — skip them so they cannot
-      // reach the denominator by accident.
-      if (r.scope.startsWith("turso:")) continue;
+      // `turso:*` and `index:*` rows are full-index totals from a different
+      // corpus (12M rows vs Neon's ~1.4M). They are read by /coverage and by
+      // the cron's own reporting, never here — skip BOTH prefixes so neither
+      // can reach the denominator by accident. Missing `index:` here would let
+      // `index:overall` land in `neonTotal` under the bare scope name after the
+      // cutover and drop the published figure from ~70% to ~8%, which is the
+      // exact regression the module header describes.
+      if (r.scope.startsWith("turso:") || r.scope.startsWith("index:")) continue;
       documented.set(r.scope, Number(r.documented));
       neonTotal.set(r.scope, Number(r.total));
     }

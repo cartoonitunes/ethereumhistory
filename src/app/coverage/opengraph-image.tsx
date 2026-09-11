@@ -7,8 +7,23 @@ import { ImageResponse } from "next/og";
 import { getCoverageStats } from "@/lib/coverage-stats";
 
 export const runtime = "nodejs";
-/** Match the layout's ISR window so the card and the meta tags never disagree. */
-export const revalidate = 3600;
+/**
+ * Rendered on request, not at build.
+ *
+ * This used to be `revalidate = 3600`, which makes Next prerender the image
+ * during the build. Drawing it needs getCoverageStats(), which runs four
+ * aggregates over the ~1.4M-row `contracts` table — currently ~75s against this
+ * project's Neon compute, well past the 60s budget Next allows a single page
+ * during static generation. Every build failed on this route, three attempts
+ * each, and took the whole deployment down with it: a shareable social card was
+ * blocking releases.
+ *
+ * Serving it per-request removes it from the build's critical path entirely. The
+ * hourly cache the ISR window was there to provide is preserved by the
+ * Cache-Control header below, so the card and the layout's meta tags still agree
+ * within the same window, and the CDN still absorbs the traffic.
+ */
+export const dynamic = "force-dynamic";
 export const alt = "Ethereum History coverage dashboard";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -142,6 +157,15 @@ export default async function OGImage() {
         )}
       </div>
     ),
-    { ...size }
+    {
+      ...size,
+      headers: {
+        // Same one-hour window the ISR setting used to give this route, now
+        // enforced at the CDN instead of at build time. stale-while-revalidate
+        // means a cold hour boundary serves the previous card rather than
+        // waiting on the aggregates.
+        "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    }
   );
 }

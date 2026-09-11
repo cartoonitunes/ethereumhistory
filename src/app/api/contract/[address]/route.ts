@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getContractPageData } from "@/lib/db";
 import { resolveContract, buildContractFromResolved } from "@/lib/contract-resolver";
-import { isTursoConfigured } from "@/lib/turso";
+import { isIndexConfigured } from "@/lib/index-source";
 import {
   DEFAULT_RETRY_AFTER_SECONDS,
   isRpcUnavailable,
@@ -72,16 +72,17 @@ export async function GET(
         { status: 500 }
       );
     }
-    // The contract may still be in the Turso index — fall through to it.
+    // The contract may still be in the contract index — fall through to it.
     console.warn("[rpc] contract enrichment unavailable:", error.message);
     rpcError = error;
   }
 
-  // Neon + RPC came up empty — fall back to Turso index.
+  // Neon + RPC came up empty — fall back to the contract index
+  // (Turso, or neon_contract_index when INDEX_SOURCE=neon).
   // Covers self-destructed contracts and historical contracts not yet seeded into Neon.
   let resolved: Awaited<ReturnType<typeof resolveContract>> = null;
   try {
-    if (isTursoConfigured()) resolved = await resolveContract(address);
+    if (isIndexConfigured()) resolved = await resolveContract(address);
   } catch (error) {
     // The index is the only thing that can tell a self-destructed archived
     // contract from an address that never held code, so when it is down we

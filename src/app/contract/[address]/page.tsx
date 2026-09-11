@@ -12,7 +12,7 @@ import { isValidAddress, formatAddress } from "@/lib/utils";
 import { tokenIdentity } from "@/lib/token-display";
 import { detectProxyTarget } from "@/lib/proxy-utils";
 import { resolveContract } from "@/lib/contract-resolver";
-import { isTursoConfigured } from "@/lib/turso";
+import { isIndexConfigured } from "@/lib/index-source";
 import { getCollectionForContractFromDb } from "@/lib/db-client";
 
 // Historical contracts are essentially immutable — cache for 10 min at the CDN/ISR layer
@@ -174,8 +174,8 @@ export default async function ContractPage({ params }: Props) {
   }
 
   if (!data) {
-    // Not in Neon — try the Turso index for Layer 2/3 contracts
-    if (isTursoConfigured()) {
+    // Not in Neon's editorial table — try the contract index for Layer 2/3
+    if (isIndexConfigured()) {
       try {
         const resolved = await resolveContract(address.toLowerCase());
         if (resolved && resolved.layer !== "on-chain") {

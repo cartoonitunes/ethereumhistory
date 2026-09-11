@@ -6,7 +6,8 @@
  * Default mode: documented contracts from Neon (has short_description).
  * Pass undocumented=1 for contracts without documentation.
  *
- * Pass source=index to query the full Turso contract index (12M+ contracts).
+ * Pass source=index to query the full contract index (12M+ contracts) — served
+ * by Turso, or by Neon's neon_contract_index when INDEX_SOURCE=neon.
  * Index mode supports: era, year, deployer, min_size, max_size, min_siblings.
  */
 
@@ -19,6 +20,8 @@ import {
   getUndocumentedContractsCountFromDb,
 } from "@/lib/db-client";
 import { turso, isTursoConfigured } from "@/lib/turso";
+import { isNeonIndex } from "@/lib/index-source";
+import { countBrowseIndex, listBrowseIndex, type BrowseIndexFilters } from "@/lib/neon-index";
 import { cached, CACHE_TTL } from "@/lib/cache";
 import { CAPABILITY_CATEGORIES } from "@/types";
 
@@ -139,7 +142,13 @@ async function browseNeon(searchParams: URLSearchParams): Promise<NextResponse> 
 }
 
 // =============================================================================
-// Turso index browse (full 12M+ contract index)
+// Contract index browse (full 12M+ contract index)
+//
+// Two interchangeable backends behind INDEX_SOURCE. Both produce byte-identical
+// JSON: the same filters, the same sort whitelist, the same clamps, the same
+// row mapping below. The Neon branch deliberately reproduces the Turso
+// semantics including the exact-match `era` comparison — see
+// docs/turso-to-neon-index-migration-audit.md, finding E4.
 // =============================================================================
 
 interface TursoIndexRow {
@@ -155,7 +164,7 @@ interface TursoIndexRow {
 }
 
 async function browseIndex(searchParams: URLSearchParams): Promise<NextResponse> {
-  if (!isTursoConfigured()) {
+  if (!isNeonIndex() && !isTursoConfigured()) {
     return NextResponse.json(
       { data: null, error: "Contract index is not available (TURSO_DATABASE_URL not configured)." },
       { status: 503 }
@@ -185,6 +194,8 @@ async function browseIndex(searchParams: URLSearchParams): Promise<NextResponse>
   if (isInternal === "1") { conditions.push("ci.is_internal = 1"); }
   else if (isInternal === "0") { conditions.push("ci.is_internal = 0"); }
 
+  // SQL fragments below are the Turso branch's; the Neon branch builds its own
+  // parameterized equivalents in lib/neon-index from the same parsed values.
   const needsFamily = minSiblings !== null;
   const fromClause = needsFamily
     ? "FROM contract_index ci LEFT JOIN bytecode_families bf ON ci.bytecode_hash = bf.bytecode_hash"
@@ -201,19 +212,34 @@ async function browseIndex(searchParams: URLSearchParams): Promise<NextResponse>
     "ci.block_number ASC";
 
   try {
-    const [countResult, rowsResult] = await Promise.all([
-      turso.execute({ sql: `SELECT COUNT(*) as total ${fromClause} ${whereClause}`, args }),
-      turso.execute({
-        sql: `SELECT ci.address, ci.deployer, ci.block_number, ci.timestamp, ci.bytecode_hash, ci.code_size, ci.era, ci.year, ci.is_internal
+    let total: number;
+    let rows: TursoIndexRow[];
+
+    if (isNeonIndex()) {
+      const filters: BrowseIndexFilters = {
+        era, year, deployer, minSize, maxSize, minSiblings, isInternal, sort, limit, offset,
+      };
+      const [neonTotal, neonRows] = await Promise.all([
+        countBrowseIndex(filters),
+        listBrowseIndex(filters),
+      ]);
+      total = neonTotal;
+      rows = neonRows as unknown as TursoIndexRow[];
+    } else {
+      const [countResult, rowsResult] = await Promise.all([
+        turso.execute({ sql: `SELECT COUNT(*) as total ${fromClause} ${whereClause}`, args }),
+        turso.execute({
+          sql: `SELECT ci.address, ci.deployer, ci.block_number, ci.timestamp, ci.bytecode_hash, ci.code_size, ci.era, ci.year, ci.is_internal
               ${fromClause} ${whereClause}
               ORDER BY ${orderExpr}
               LIMIT ? OFFSET ?`,
-        args: [...args, limit, offset],
-      }),
-    ]);
+          args: [...args, limit, offset],
+        }),
+      ]);
+      total = Number(countResult.rows[0]?.total ?? 0);
+      rows = rowsResult.rows as unknown as TursoIndexRow[];
+    }
 
-    const total = Number(countResult.rows[0]?.total ?? 0);
-    const rows = rowsResult.rows as unknown as TursoIndexRow[];
     const totalPages = Math.ceil(total / limit);
 
     const list = rows.map((r) => ({

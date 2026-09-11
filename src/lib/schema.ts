@@ -793,3 +793,119 @@ export const collectorCards = pgTable(
 
 export type CollectorCard = typeof collectorCards.$inferSelect;
 export type NewCollectorCard = typeof collectorCards.$inferInsert;
+
+// =============================================================================
+// Contract index (Neon copy of the Turso index)
+// =============================================================================
+
+/**
+ * `neon_contract_index` — the Neon-resident copy of the 12M-row Turso
+ * `contract_index`. Written by the enrichment pipeline, read by
+ * `lib/neon-index.ts` when `INDEX_SOURCE=neon`.
+ *
+ * Column types are chosen to make the Neon rows deserialize into the SAME
+ * JavaScript values the libsql driver produces, because the call sites compare
+ * them literally:
+ *
+ *   - `is_internal` is INTEGER, not BOOLEAN. `contract-resolver.ts` tests
+ *     `row.is_internal === 1`; against a boolean that is always false and every
+ *     contract would silently be labelled external.
+ *   - `value_wei` is TEXT (see migration 090). It was NUMERIC until the load
+ *     revealed that ~23.7k of the 12M rows store the value as a hex string
+ *     rather than decimal wei — a mixed format that exists upstream and in
+ *     Turso today. TEXT stores the source verbatim; `value_wei_decimal` carries
+ *     the normalized number for anything that needs arithmetic. Either type
+ *     comes back from postgres.js as a string, which is what
+ *     `ResolvedContract.valueWei: string` already expects.
+ *   - `address` / `deployer` are lowercase in the source data (verified: zero
+ *     rows differ from their own `lower()`) and every call site lowercases
+ *     before querying, so lookups use a plain `=`. Never wrap these in
+ *     `LOWER()` — on 12M rows that turns a PK hit into a sequential scan.
+ *
+ * `bytecode_hash` is a 32-char lowercase hex digest with NO `0x` prefix, and is
+ * NULL for ~2.1M rows.
+ */
+export const neonContractIndex = pgTable(
+  "neon_contract_index",
+  {
+    address: text("address").primaryKey(),
+    deployer: text("deployer").notNull(),
+    blockNumber: integer("block_number").notNull(),
+    /** Unix seconds. */
+    timestamp: integer("timestamp").notNull(),
+    bytecodeHash: text("bytecode_hash"),
+    codeSize: integer("code_size").notNull(),
+    /** Verbose era name ("dao-fork", "spurious-dragon"), NOT the canonical app id. */
+    era: text("era").notNull(),
+    year: integer("year").notNull(),
+    isInternal: integer("is_internal").notNull().default(0),
+    gasUsed: integer("gas_used"),
+    /** Verbatim from the source: mostly decimal wei, ~23.7k rows are hex. */
+    valueWei: text("value_wei"),
+    /** `value_wei` normalized to decimal wei. Nothing reads it yet — it exists
+     *  so the mixed format above can never be summed by accident. */
+    valueWeiDecimal: numeric("value_wei_decimal"),
+
+    // --- enrichment columns (not read by the parity queries; present so the
+    // --- index can back richer surfaces without a second migration) ---
+    isDocumented: integer("is_documented").default(0),
+    isCracked: integer("is_cracked").default(0),
+    verificationMethod: text("verification_method"),
+    etherscanContractName: text("etherscan_contract_name"),
+    contractType: text("contract_type"),
+    manualCategories: text("manual_categories"),
+    hasWriteup: integer("has_writeup").default(0),
+    crackedSiblingAddress: text("cracked_sibling_address"),
+    proofUrl: text("proof_url"),
+    isErc20Like: integer("is_erc20_like").default(0),
+    isProxy: integer("is_proxy").default(0),
+    hasSelfdestruct: integer("has_selfdestruct").default(0),
+    isSelfDestructed: integer("is_self_destructed").default(0),
+    tokenName: text("token_name"),
+    tokenSymbol: text("token_symbol"),
+    tokenDecimals: integer("token_decimals"),
+    ensName: text("ens_name"),
+    deployerEnsName: text("deployer_ens_name"),
+    sourcifyVerified: integer("sourcify_verified").default(0),
+    sourcifyMatchType: text("sourcify_match_type"),
+    creationTxHash: text("creation_tx_hash"),
+  },
+  (table) => ({
+    // Deployer pages: WHERE deployer = ? [AND era = ?] ORDER BY block_number.
+    deployerBlockIdx: index("neon_contract_index_deployer_block_idx").on(
+      table.deployer,
+      table.blockNumber
+    ),
+    deployerEraIdx: index("neon_contract_index_deployer_era_idx").on(
+      table.deployer,
+      table.era
+    ),
+    // Browse index mode: era/year filters with a block_number or code_size sort.
+    eraBlockIdx: index("neon_contract_index_era_block_idx").on(table.era, table.blockNumber),
+    yearBlockIdx: index("neon_contract_index_year_block_idx").on(table.year, table.blockNumber),
+    blockIdx: index("neon_contract_index_block_idx").on(table.blockNumber),
+    codeSizeIdx: index("neon_contract_index_code_size_idx").on(table.codeSize),
+    // Family join + the cron's GROUP BY (era, year).
+    bytecodeHashIdx: index("neon_contract_index_bytecode_hash_idx").on(table.bytecodeHash),
+    eraYearIdx: index("neon_contract_index_era_year_idx").on(table.era, table.year),
+  })
+);
+
+/**
+ * `neon_bytecode_families` — Neon copy of Turso's `bytecode_families`.
+ * ~180k rows, one per distinct bytecode digest.
+ *
+ * `is_cracked` stays INTEGER for the same reason as `is_internal` above: the
+ * resolver treats it as a truthy 0/1 and the API serializes it onward.
+ */
+export const neonBytecodeFamilies = pgTable("neon_bytecode_families", {
+  bytecodeHash: text("bytecode_hash").primaryKey(),
+  /** Observed max ~1.58M — comfortably inside int32. */
+  siblingCount: integer("sibling_count").notNull().default(0),
+  isCracked: integer("is_cracked").notNull().default(0),
+  crackedAddress: text("cracked_address"),
+  proofUrl: text("proof_url"),
+});
+
+export type NeonContractIndexRow = typeof neonContractIndex.$inferSelect;
+export type NeonBytecodeFamilyRow = typeof neonBytecodeFamilies.$inferSelect;

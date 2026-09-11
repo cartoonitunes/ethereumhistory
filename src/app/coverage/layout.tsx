@@ -11,13 +11,23 @@ import type { Metadata } from "next";
 import { getCoverageStats } from "@/lib/coverage-stats";
 
 /**
- * Regenerate hourly, in step with the refresh-stats cron that feeds
- * contract_stats_cache. Without this the route prerenders once and the shared
- * percentage is frozen at build time. The dashboard body is a client component
- * that fetches /api/coverage, so what a visitor sees is always live — this
- * only governs the <head> tags and the OG image.
+ * Rendered on request rather than prerendered, for the same reason as the OG
+ * image in this directory: generateMetadata below calls getCoverageStats(),
+ * which runs four aggregates over the ~1.4M-row `contracts` table and currently
+ * takes ~75s against this project's Neon compute. Next allows a page 60s during
+ * static generation, so the build failed on this route (three attempts, then the
+ * whole deployment) — the <head> tags of one dashboard were blocking releases.
+ *
+ * This was `revalidate = 3600`, whose purpose was to keep the shared percentage
+ * from freezing at build time. Serving per-request satisfies that intent more
+ * directly, and getCoverageStats() has its own in-memory cache plus the
+ * long-lived getIndexTotals() cache underneath, so visitors are not each paying
+ * for the aggregates.
+ *
+ * The dashboard body is a client component that fetches /api/coverage, so what a
+ * visitor sees was always live regardless — this only governs the <head> tags.
  */
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 function getMetadataBaseUrl(): URL {
   const explicit =
