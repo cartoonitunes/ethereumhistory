@@ -15,14 +15,34 @@
  * band on /coverage permanently empty and folded the cracking work invisibly
  * into `documented`.
  *
+ * WHICH CORPUS
+ * ------------
+ * `documented` and the totals both come from `neon_contract_index` via
+ * getIndexTotals — the index's own is_documented flag, ~5.94M of 12.05M rows.
+ * It used to be counted from the `contracts` table instead (~980k), which made
+ * this dashboard publish ~7.6% while the progress widget published ~49% from
+ * the index, for what reads as the same claim. Same corpus on both surfaces
+ * now; see WHICH CORPUS in lib/progress-stats for the same rule stated there.
+ *
+ * The two do not print an identical percentage, and should not: `uncovered` is
+ * carved out of `documented` here and not on the widget, so this dashboard
+ * shows ~48.8% documented plus a ~0.5% amber band where the widget shows one
+ * ~49.3% figure. `documented + uncovered` equals the widget's numerator
+ * exactly — that is the invariant to check if they ever look unrelated.
+ *
+ * `uncovered` stays a `contracts` query: it is a finer editorial distinction
+ * the index does not model. Carving it out of an index-sourced `documented`
+ * is only sound because every source-only row is also is_documented IN THE
+ * INDEX — verified as 60,153 of 60,153, none missing from the index and none
+ * flagged undocumented. If that ever stops holding, `indexed` absorbs the
+ * error silently, so re-check it before trusting this split again.
+ *
  * COST
  * ----
- * `documented` reuses the (era_id, is_documented) / (year, is_documented)
- * composite indexes. `uncovered` is an index-only scan over the ~21k
- * source-only rows via the migration 080 partial indexes. Because every
- * source-only row is also is_documented (enforced by the migration 067
- * trigger), the disjoint documented count is a subtraction rather than a
- * second filtered aggregate over ~950k rows.
+ * `documented` is now free — it rides along with the totals already being
+ * read from contract_stats_cache, replacing two grouped aggregates over the
+ * ~1.4M-row contracts table. `uncovered` is an index-only scan over the ~60k
+ * source-only rows via the migration 080 partial indexes.
  *
  * Totals come from contract_stats_cache via getIndexTotals(), NOT from a live
  * contract_index scan. The old scan burned the Turso read quota and then took
@@ -98,7 +118,7 @@ function split(total: number, documentedRaw: number, uncoveredRaw: number): Cove
 }
 
 export async function getCoverageStats(): Promise<CoverageData> {
-  return cached<CoverageData>("coverage:v4", CACHE_TTL.SHORT, async () => {
+  return cached<CoverageData>("coverage:v5", CACHE_TTL.SHORT, async () => {
     // Totals are the one hard dependency: without them there are no bars to
     // draw at all, so a failure here is unavailability rather than a crash.
     let indexTotals: Awaited<ReturnType<typeof getIndexTotals>>;
@@ -111,8 +131,6 @@ export async function getCoverageStats(): Promise<CoverageData> {
       throw new CoverageUnavailableError("contract_stats_cache is empty");
     }
 
-    const neonEraMap = new Map<string, number>();
-    const neonYearMap = new Map<number, number>();
     const uncoveredEraMap = new Map<string, number>();
     const uncoveredYearMap = new Map<number, number>();
     let degraded = false;
@@ -129,22 +147,15 @@ export async function getCoverageStats(): Promise<CoverageData> {
         map.set(canonical, (map.get(canonical) ?? 0) + count);
       };
 
+      // Only `uncovered` is still a contracts-table query. The documented
+      // counts now arrive with the totals from getIndexTotals, so both halves
+      // of this dashboard's ratio are drawn from the same corpus as the
+      // progress widget's — see THE THREE BUCKETS above.
+      //
       // Each bucket is loaded independently. A transient Neon failure on one
       // of these should cost that band, not the entire page — before this,
       // any single query throwing 500'd the whole dashboard.
       const results = await Promise.allSettled([
-        db.execute(sql`
-          SELECT era_id, COUNT(*)::int as count
-          FROM contracts
-          WHERE is_documented = TRUE AND era_id IS NOT NULL
-          GROUP BY era_id
-        `),
-        db.execute(sql`
-          SELECT EXTRACT(YEAR FROM deployment_timestamp)::int as year, COUNT(*)::int as count
-          FROM contracts
-          WHERE is_documented = TRUE AND deployment_timestamp IS NOT NULL
-          GROUP BY year
-        `),
         // Source recovered, no writeup yet. Matches the migration 080 partial
         // index exactly — keep the predicates in sync or this silently
         // degrades to a seq scan over the contracts table.
@@ -166,7 +177,7 @@ export async function getCoverageStats(): Promise<CoverageData> {
         `),
       ]);
 
-      const [documentedEra, documentedYear, uncoveredEra, uncoveredYear] = results;
+      const [uncoveredEra, uncoveredYear] = results;
 
       for (const r of results) {
         if (r.status === "rejected") {
@@ -175,18 +186,6 @@ export async function getCoverageStats(): Promise<CoverageData> {
         }
       }
 
-      if (documentedEra.status === "fulfilled") {
-        for (const raw of rowsOf(documentedEra.value)) {
-          const row = raw as NeonEraRow;
-          if (row.era_id) addEra(neonEraMap, row.era_id, Number(row.count));
-        }
-      }
-      if (documentedYear.status === "fulfilled") {
-        for (const raw of rowsOf(documentedYear.value)) {
-          const row = raw as NeonYearRow;
-          if (row.year) neonYearMap.set(Number(row.year), Number(row.count));
-        }
-      }
       if (uncoveredEra.status === "fulfilled") {
         for (const raw of rowsOf(uncoveredEra.value)) {
           const row = raw as NeonEraRow;
@@ -203,14 +202,22 @@ export async function getCoverageStats(): Promise<CoverageData> {
 
     const eras = ERA_ORDER.filter((id) => indexTotals.byEra.has(id)).map((id) => ({
       eraId: id,
-      ...split(indexTotals.byEra.get(id)!, neonEraMap.get(id) ?? 0, uncoveredEraMap.get(id) ?? 0),
+      ...split(
+        indexTotals.byEra.get(id)!,
+        indexTotals.documentedByEra.get(id) ?? 0,
+        uncoveredEraMap.get(id) ?? 0
+      ),
     }));
 
     const years = [...indexTotals.byYear.keys()]
       .sort((a, b) => a - b)
       .map((year) => ({
         year,
-        ...split(indexTotals.byYear.get(year)!, neonYearMap.get(year) ?? 0, uncoveredYearMap.get(year) ?? 0),
+        ...split(
+          indexTotals.byYear.get(year)!,
+          indexTotals.documentedByYear.get(year) ?? 0,
+          uncoveredYearMap.get(year) ?? 0
+        ),
       }));
 
     const total = eras.reduce((s, e) => s + e.total, 0);
