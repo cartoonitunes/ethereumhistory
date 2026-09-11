@@ -16,11 +16,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHistorianMeFromRequest } from "@/lib/historian-auth";
 import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { refreshTursoIndexTotals } from "@/lib/progress-stats";
+import { getIndexSource } from "@/lib/index-source";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-// The Turso leg of this job scans the full 12M-row contract_index. Under the
+// The full-index leg of this job scans all 12M rows — from Turso, or from
+// neon_contract_index when INDEX_SOURCE=neon. Under the
 // platform default the function was killed mid-scan on almost every run, so the
 // `turso:*` totals only landed once every day or so — and because the failure is
 // swallowed below, nothing surfaced except a stale denominator. The scan is now
@@ -58,16 +60,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const started = Date.now();
     await db.execute(sql`SELECT refresh_contract_stats_cache()`);
 
-    // Precompute the expensive full-index totals from Turso ONCE here (Node
-    // runtime can reach Turso) and store them in Neon so request handlers never
-    // scan the 12M-row contract_index. Non-fatal: the Neon cache still refreshes
-    // even if Turso is briefly unavailable.
+    // Precompute the expensive full-index totals ONCE here and store them in
+    // Neon so request handlers never scan the 12M-row index. Which backend is
+    // scanned, and which `contract_stats_cache` scope prefix is written, both
+    // follow INDEX_SOURCE. Non-fatal: the base Neon scopes above still refresh
+    // even when the index leg fails.
+    const indexSource = getIndexSource();
     let tursoError: string | null = null;
     try {
       await refreshTursoIndexTotals();
     } catch (err) {
       tursoError = err instanceof Error ? err.message : String(err);
-      console.error("[cron/refresh-stats] Turso index totals refresh failed:", err);
+      console.error(
+        `[cron/refresh-stats] ${indexSource} index totals refresh failed:`,
+        err
+      );
     }
 
     const rowsRaw = await db.execute<{ scope: string; total: number; documented: number; updated_at: string }>(
@@ -77,6 +84,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       data: {
         elapsedMs: Date.now() - started,
+        indexSource,
+        // Kept under its original key so existing monitoring keeps working;
+        // it now reports the active index source's error, whichever that is.
         tursoError,
         rows,
       },

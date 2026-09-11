@@ -1,4 +1,6 @@
 import { turso } from './turso';
+import { isNeonIndex } from './index-source';
+import { getIndexRowByAddress, getFamilyByHash } from './neon-index';
 import { getContractByAddress } from './db/contracts';
 import { ERAS } from '@/types';
 import type { Contract as AppContract, EthereumEra } from '@/types';
@@ -53,16 +55,41 @@ interface TursoFamilyRow {
   proof_url: string | null;
 }
 
+/**
+ * Read one index row from whichever backend `INDEX_SOURCE` selects. Both
+ * branches return the same row shape (see lib/neon-index for why the flag
+ * columns must stay 0/1 numbers rather than booleans).
+ */
+async function fetchIndexRow(addr: string): Promise<TursoIndexRow | undefined> {
+  if (isNeonIndex()) {
+    return (await getIndexRowByAddress(addr)) ?? undefined;
+  }
+  const indexResult = await turso.execute({
+    sql: 'SELECT * FROM contract_index WHERE address = ?',
+    args: [addr],
+  });
+  return indexResult.rows[0] as unknown as TursoIndexRow | undefined;
+}
+
+async function fetchFamilyRow(bytecodeHash: string): Promise<TursoFamilyRow | undefined> {
+  if (isNeonIndex()) {
+    return (await getFamilyByHash(bytecodeHash)) ?? undefined;
+  }
+  const familyResult = await turso.execute({
+    sql: 'SELECT sibling_count, is_cracked, cracked_address, proof_url FROM bytecode_families WHERE bytecode_hash = ?',
+    args: [bytecodeHash],
+  });
+  return familyResult.rows[0] as unknown as TursoFamilyRow | undefined;
+}
+
 export async function resolveContract(address: string): Promise<ResolvedContract | null> {
   const addr = address.toLowerCase();
 
-  // Query Turso and Neon in parallel
-  const [indexResult, neonContract] = await Promise.all([
-    turso.execute({ sql: 'SELECT * FROM contract_index WHERE address = ?', args: [addr] }),
+  // Query the index and Neon's editorial table in parallel
+  const [indexRow, neonContract] = await Promise.all([
+    fetchIndexRow(addr),
     getContractByAddress(addr).catch(() => null),
   ]);
-
-  const indexRow = indexResult.rows[0] as unknown as TursoIndexRow | undefined;
 
   // Layer 4: documented in Neon with editorial content
   if (neonContract?.shortDescription) {
@@ -78,11 +105,7 @@ export async function resolveContract(address: string): Promise<ResolvedContract
   if (indexRow) {
     let familyRow: TursoFamilyRow | undefined;
     if (indexRow.bytecode_hash) {
-      const familyResult = await turso.execute({
-        sql: 'SELECT sibling_count, is_cracked, cracked_address, proof_url FROM bytecode_families WHERE bytecode_hash = ?',
-        args: [indexRow.bytecode_hash],
-      });
-      familyRow = familyResult.rows[0] as unknown as TursoFamilyRow | undefined;
+      familyRow = await fetchFamilyRow(indexRow.bytecode_hash);
     }
 
     const base = buildFromIndex(addr, indexRow);
