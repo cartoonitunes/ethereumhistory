@@ -66,16 +66,28 @@ async function main() {
   ok("turso mode: era:frontier = 14201", tursoTotals.byEra.get("frontier") === 14201, tursoTotals.byEra.get("frontier"));
   ok("turso mode: year:2019 still 36 from the base scope", tursoTotals.byYear.get(2019) === 36);
 
-  // ---- the progress widget must ignore BOTH full-index prefixes ----
+  // ---- the progress widget: full-index denominator, editorial numerator ----
+  // Reversed deliberately at the Neon cutover (see WHICH DENOMINATOR in
+  // lib/progress-stats). The pairing is the whole point: if the numerator ever
+  // starts tracking the denominator, a full-index prefix has reached the
+  // documented counts and every bucket will read 0.
   await db.execute(sql`CREATE TABLE IF NOT EXISTS historians (id serial primary key, active boolean default true)`);
   await db.execute(sql`CREATE TABLE IF NOT EXISTS contract_edits (id serial primary key)`);
   process.env.INDEX_SOURCE = "neon";
   const progress = await ps.getProgressStats();
-  ok("progress denominator is the Neon base scope, not index:*",
-     progress.overall.total === 1368030, progress.overall);
-  ok("progress documented is the Neon base scope", progress.overall.documented === 980744);
-  ok("progress era:frontier total is Neon's 12753, not the index total",
-     progress.byEra.frontier.total === 12753, progress.byEra.frontier);
+  ok("progress denominator is index:overall, not the Neon base scope",
+     progress.overall.total === 40157, progress.overall);
+  ok("progress documented still comes from the Neon base scope",
+     progress.overall.documented === 980744, progress.overall);
+  ok("progress era:frontier total is the index value, not Neon's 12753",
+     progress.byEra.frontier.total === byScope.get("index:era:frontier"),
+     [progress.byEra.frontier.total, byScope.get("index:era:frontier")]);
+  ok("progress era:frontier documented still editorial (7820)",
+     progress.byEra.frontier.documented === 7820, progress.byEra.frontier);
+  // year:2019 is written by no full-index refresh; without getIndexTotals'
+  // base-scope tier this bucket would render 0% instead of its real total.
+  ok("progress year:2019 falls back to the base scope total (36)",
+     progress.byYear["2019"].total === 36, progress.byYear["2019"]);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

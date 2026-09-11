@@ -23,21 +23,29 @@
  *
  * WHICH DENOMINATOR
  * -----------------
- * Both numerator and denominator come from Neon's `contracts` table: of the
- * contracts we have ingested, how many are documented. That is the published,
- * external-facing coverage figure and it must stay stable.
+ * DELIBERATELY MIXED, as of the Neon index cutover. The denominator is the
+ * FULL INDEX (`getIndexTotals`, ~12.05M rows); the numerator is the EDITORIAL
+ * layer (Neon `contracts`, ~1.37M ingested rows, of which ~980k documented).
+ * The widget therefore answers "how much of every contract ever deployed have
+ * we documented", and publishes ~8%, not the ~72% it showed while both halves
+ * came from `contracts`.
  *
- * This module used to prefer the `turso:*` scopes for the denominator and fall
- * back to Neon only until "the first Turso refresh lands". That made the
- * headline metric depend on whether an unrelated cron job had finished: the
- * numerator counts Neon's ~1.4M ingested rows while the Turso index holds ~12M,
- * so the moment a refresh succeeded the published number silently dropped from
- * ~70% to ~8% with no code change and no data loss. Two different universes
- * were being divided by each other.
+ * This is a reversal, and the history matters because the same shape was once
+ * a bug. This module used to PREFER `turso:*` for the denominator and fall back
+ * to Neon only until "the first Turso refresh lands", which made the headline
+ * metric depend on whether an unrelated cron had finished: the published number
+ * dropped from ~70% to ~8% the moment a refresh succeeded, with no code change
+ * and no data loss. The objection then was not that ~8% is wrong — it is the
+ * honest full-index figure — but that the number moved on its own, silently,
+ * as a side effect of cron timing.
  *
- * The `turso:*` scopes are still refreshed, and `getIndexTotals` below serves
- * them to /coverage, which is deliberately a full-index view. They must simply
- * never drive THIS widget. See `totalFor` in getProgressStats.
+ * What makes the mix safe to publish now is that the denominator no longer
+ * depends on a race: `index:*` is populated and `getIndexTotals` resolves
+ * through a fixed tier order (active source, then the other, then base scopes),
+ * so the figure is stable across cron runs and across a flag rollback. If the
+ * intent ever reverts to an editorial-only ratio, take BOTH halves from the
+ * base scopes again — never leave the two halves drawn from different corpora
+ * by accident. See `totalFor` in getProgressStats.
  */
 
 import { getDb } from "@/lib/db-client";
@@ -259,72 +267,79 @@ export async function getIndexTotals(): Promise<{
 
 /**
  * Assemble the progress stats for the widget. Reads ONLY Neon:
- *  - documented counts + totals from the `contract_stats_cache` base scopes
+ *  - documented counts from the `contract_stats_cache` base scopes (editorial)
+ *  - totals from `getIndexTotals` (full index — see WHICH DENOMINATOR above)
  *  - live historian / edit counts (small, indexed)
- *
- * The `turso:*` scopes in the same table are deliberately ignored here.
  *
  * Never queries Turso. Wrapped in the in-memory cache so repeated hits within a
  * warm instance don't even touch Neon.
  */
 export async function getProgressStats(): Promise<ProgressStats> {
-  // v9: denominator pinned to Neon; zero treated as absent; `index:*` scopes
-  // excluded alongside `turso:*`. Every bump here is required — warm instances
-  // hold the previous entry for up to an hour, so a fix that only changes the
-  // computation would keep serving the old number after deploy.
-  return cached<ProgressStats>("stats:progress:v9", CACHE_TTL.LONG, async () => {
+  // v10: denominator switched from the Neon base scopes to the full index via
+  // getIndexTotals; numerator still the base scopes. Every bump here is
+  // required — warm instances hold the previous entry for up to an hour, so a
+  // change that only touches the computation would keep serving the old number
+  // after deploy. v10 is what makes the cutover visible at all.
+  return cached<ProgressStats>("stats:progress:v10", CACHE_TTL.LONG, async () => {
     const db = getDb();
 
-    const [cacheRowsRaw, historianCountResult, totalEditsResult] = await Promise.all([
+    const [cacheRowsRaw, historianCountResult, totalEditsResult, indexTotals] = await Promise.all([
       db.execute<CacheRow>(sql`SELECT scope, total, documented FROM contract_stats_cache`),
       db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(schema.historians)
         .where(eq(schema.historians.active, true)),
       db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.contractEdits),
+      getIndexTotals(),
     ]);
 
     const rows = toRows<CacheRow>(cacheRowsRaw);
     const documented = new Map<string, number>(); // base scope -> documented
-    const neonTotal = new Map<string, number>(); // base scope -> Neon total
     for (const r of rows) {
-      // `turso:*` and `index:*` rows are full-index totals from a different
-      // corpus (12M rows vs Neon's ~1.4M). They are read by /coverage and by
-      // the cron's own reporting, never here — skip BOTH prefixes so neither
-      // can reach the denominator by accident. Missing `index:` here would let
-      // `index:overall` land in `neonTotal` under the bare scope name after the
-      // cutover and drop the published figure from ~70% to ~8%, which is the
-      // exact regression the module header describes.
+      // Only the NUMERATOR is read here, and only the editorial layer can
+      // supply it: `turso:*` and `index:*` rows carry documented = 0 by
+      // construction (refreshTursoIndexTotals writes totals and a literal 0),
+      // so letting either prefix through would zero the documented counts
+      // rather than enlarge them. The denominator comes from getIndexTotals.
       if (r.scope.startsWith("turso:") || r.scope.startsWith("index:")) continue;
       documented.set(r.scope, Number(r.documented));
-      neonTotal.set(r.scope, Number(r.total));
     }
 
-    // Neon is the ONLY source for the denominator, so the published percentage
-    // is stable and always divides two counts drawn from the same corpus.
-    //
     // A zero (or a missing row) counts as ABSENT rather than as a real
     // denominator: `??` only bridges null and undefined, so a 0 that reached the
     // table would previously have been served as a genuine total and rendered
     // the widget as 0%. Nothing should write a 0 (see the guard in
     // refreshTursoIndexTotals), but a denominator is exactly the wrong place to
     // trust that.
+    //
+    // getIndexTotals already falls back to the base scope for any era or year
+    // no full-index refresh writes (constantinople, year:2019+), so a bucket
+    // the index does not carry still renders its editorial total instead of
+    // collapsing to 0%.
     const asDenominator = (value: number | undefined): number =>
       typeof value === "number" && value > 0 ? value : 0;
-    const totalFor = (scope: string): number => asDenominator(neonTotal.get(scope));
 
     const byEra: Record<string, { total: number; documented: number }> = {};
     for (const id of ERA_IDS) {
-      byEra[id] = { total: totalFor(`era:${id}`), documented: documented.get(`era:${id}`) ?? 0 };
+      byEra[id] = {
+        total: asDenominator(indexTotals.byEra.get(id)),
+        documented: documented.get(`era:${id}`) ?? 0,
+      };
     }
 
     const byYear: Record<string, { total: number; documented: number }> = {};
     for (const y of YEARS) {
-      byYear[String(y)] = { total: totalFor(`year:${y}`), documented: documented.get(`year:${y}`) ?? 0 };
+      byYear[String(y)] = {
+        total: asDenominator(indexTotals.byYear.get(y)),
+        documented: documented.get(`year:${y}`) ?? 0,
+      };
     }
 
     return {
-      overall: { total: totalFor("overall"), documented: documented.get("overall") ?? 0 },
+      overall: {
+        total: asDenominator(indexTotals.overall),
+        documented: documented.get("overall") ?? 0,
+      },
       byEra,
       byYear,
       community: {
