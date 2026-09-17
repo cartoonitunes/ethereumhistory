@@ -203,7 +203,7 @@ export default function AssetsClient() {
           setNotice(
             d.holdingsSaved && (d.holdingCount ?? 0) > 0
               ? `Saved ${short} with ${d.holdingCount} documented ${
-                  d.holdingCount === 1 ? "holding" : "holdings"
+                  d.holdingCount === 1 ? "contract match" : "contract matches"
                 }.${d.shareSlug ? " Your card is ready." : ""}`
               : `Saved ${short}. Scan it to find archive holdings.`
           );
@@ -371,7 +371,7 @@ export default function AssetsClient() {
           setNotice(body.meta.warning);
         } else {
           const n = body.data?.holdings.length ?? 0;
-          setNotice(`Scan complete. ${n} documented ${n === 1 ? "holding" : "holdings"} found.`);
+          setNotice(`Scan complete. ${n} documented ${n === 1 ? "contract match" : "contract matches"} found.`);
         }
 
         // Apply the scan's own result straight away. The refetch below is the
@@ -603,7 +603,7 @@ export default function AssetsClient() {
                 </div>
                 <p className="mt-1 text-xs text-obsidian-400">
                   {w.label ? `${w.label} · ` : ""}
-                  {w.holdingCount} documented {w.holdingCount === 1 ? "holding" : "holdings"}
+                  {w.holdingCount} documented {w.holdingCount === 1 ? "contract match" : "contract matches"}
                   {w.lastScannedAt ? ` · scanned ${new Date(w.lastScannedAt).toLocaleDateString()}` : " · never scanned"}
                 </p>
               </div>
@@ -679,7 +679,7 @@ export default function AssetsClient() {
           </div>
         </div>
         <p className="text-xs text-obsidian-400">
-          {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} holdings,{" "}
+          {withHoldings} {withHoldings === 1 ? "wallet has" : "wallets have"} documented contract matches,{" "}
           {verifiedCount} verified.
           {(wallets ?? []).length > 0 && !allVerified
             ? " Verify every wallet to show the badge."
@@ -690,7 +690,12 @@ export default function AssetsClient() {
       ) : null}
 
       {signedOut ? null : holdings && holdings.length > 0 ? (
-        <HoldingsList holdings={holdings} showBalances compact title="What you hold" />
+        <div className="space-y-2">
+          <p className="text-xs text-obsidian-400">
+            Wallet contracts and their forwarding proxies count as activity on your card, not collectibles here.
+          </p>
+          <HoldingsList holdings={holdings} showBalances compact title="What you hold" />
+        </div>
       ) : holdings ? (
         <p className="text-sm text-obsidian-400">
           No documented holdings yet. Add a wallet above and scan it.

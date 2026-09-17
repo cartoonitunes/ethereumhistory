@@ -13,7 +13,7 @@ import { getDb, isDatabaseConfigured } from "@/lib/db-client";
 import { collectorCards, contracts, userWallets, walletHoldings } from "@/lib/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { normalizeCardData, withAccountName } from "@/lib/collector-card";
-import { tokenIdentity } from "@/lib/token-display";
+import { isCollectibleContract, tokenIdentity } from "@/lib/token-display";
 import { NO_STORE_HEADERS } from "@/lib/no-store";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +65,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         deploymentTimestamp: contracts.deploymentTimestamp,
         shortDescription: contracts.shortDescription,
         etherscanContractName: contracts.etherscanContractName,
+        archiveTokenName: contracts.tokenName,
+        archiveTokenSymbol: contracts.tokenSymbol,
         isDocumented: contracts.isDocumented,
       })
       .from(walletHoldings)
@@ -76,28 +78,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const merged = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
       if (!r.isDocumented) continue;
+      // Match the public collection and card. Stored holding names may already
+      // have been cleaned, so classify using the archive's raw token metadata.
+      if (!isCollectibleContract({
+        tokenName: r.archiveTokenName,
+        tokenSymbol: r.archiveTokenSymbol,
+        contractName: r.etherscanContractName,
+        hasDescription: (r.shortDescription ?? "").trim().length > 0,
+      })) continue;
       const existing = merged.get(r.contractAddress) as { balance: string; viaWrapper: string | null } | undefined;
       if (existing) {
         existing.balance = (BigInt(existing.balance) + BigInt(r.balance)).toString();
         if (!r.viaWrapper) existing.viaWrapper = null;
         continue;
       }
+      const identity = tokenIdentity({
+        tokenName: r.tokenName,
+        tokenSymbol: r.tokenSymbol,
+        contractName: r.etherscanContractName,
+        address: r.contractAddress,
+      });
       merged.set(r.contractAddress, {
         contractAddress: r.contractAddress,
         // Same cleanup the public collection applies, so the owner's private
         // view and the page they share never disagree about a name.
-        name: tokenIdentity({
-          tokenName: r.tokenName,
-          tokenSymbol: r.tokenSymbol,
-          contractName: r.etherscanContractName,
-          address: r.contractAddress,
-        }).name,
-        symbol: tokenIdentity({
-          tokenName: r.tokenName,
-          tokenSymbol: r.tokenSymbol,
-          contractName: r.etherscanContractName,
-          address: r.contractAddress,
-        }).symbol,
+        name: identity.name,
+        symbol: identity.symbol,
         balance: r.balance,
         tokenDecimals: r.tokenDecimals,
         tokenType: r.tokenType,

@@ -75,6 +75,34 @@ const NFT_ENUMERATION_BUDGET_MS = 20_000;
  */
 export type TokenType = "erc20" | "erc721" | "erc1155" | "unknown";
 
+type RawHolding = {
+  contractAddress: string;
+  balance: string;
+  tokenType: TokenType;
+  name?: string | null;
+  symbol?: string | null;
+};
+
+/**
+ * Alchemy can report an NFT in both getTokenBalances and getContractsForOwner:
+ * ERC-721 balanceOf(address) has the same selector as ERC-20 balanceOf(address).
+ * The NFT result counts distinct items, so it is the authoritative observation
+ * for a contract present in both responses. Summing the two counts makes one
+ * Etheria tile look like two assets.
+ */
+export function combineProviderHoldings(
+  erc20: { contractAddress: string; balance: string }[],
+  nfts: RawHolding[]
+): RawHolding[] {
+  const nftAddresses = new Set(nfts.map((nft) => nft.contractAddress.toLowerCase()));
+  return [
+    ...erc20
+      .filter((token) => !nftAddresses.has(token.contractAddress.toLowerCase()))
+      .map((token) => ({ ...token, contractAddress: token.contractAddress.toLowerCase(), tokenType: "erc20" as const })),
+    ...nfts.map((nft) => ({ ...nft, contractAddress: nft.contractAddress.toLowerCase() })),
+  ];
+}
+
 export interface DetectedHolding {
   contractAddress: string;
   tokenSymbol: string | null;
@@ -508,30 +536,24 @@ export async function scanWallet(address: string): Promise<ScanResult> {
   ]);
 
   const failures: string[] = [];
-  const raw: {
-    contractAddress: string;
-    balance: string;
-    tokenType: TokenType;
-    name?: string | null;
-    symbol?: string | null;
-  }[] = [];
-
-  if (erc20.status === "fulfilled") {
-    for (const t of erc20.value) raw.push({ ...t, tokenType: "erc20" });
-  } else {
+  if (erc20.status === "rejected") {
     failures.push("ERC-20 balances");
   }
 
   let nftTruncated = false;
   if (nfts.status === "fulfilled") {
-    // Keep the kind the provider reported rather than stamping erc721 on
-    // everything, which is what made an ERC-1155 wrapper indistinguishable
-    // from a plain NFT in stored holdings.
-    for (const c of nfts.value.contracts) raw.push(c);
     nftTruncated = nfts.value.truncated;
   } else {
     failures.push("NFT holdings");
   }
+
+  // Keep the kind reported by the NFT provider, including unknown for
+  // pre-standard collectibles. A contract seen by both provider endpoints is
+  // one holding, not two balances to add together.
+  const raw = combineProviderHoldings(
+    erc20.status === "fulfilled" ? erc20.value : [],
+    nfts.status === "fulfilled" ? nfts.value.contracts : []
+  );
 
   const firstTxDate = firstTx.status === "fulfilled" ? firstTx.value : null;
   if (firstTx.status === "rejected") failures.push("first transaction date");
