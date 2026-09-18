@@ -833,6 +833,24 @@ export default function HomePageClient({
                   Sourcify
                 </span>
               </a>
+
+              {/* Bureau of Internet Culture */}
+              <a
+                href="https://www.bureauofinternetculture.art/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-2.5 opacity-50 hover:opacity-100 transition-opacity"
+                title="Bureau of Internet Culture"
+              >
+                <img
+                  src="/partners/bic-logo.svg"
+                  alt="Bureau of Internet Culture"
+                  className="h-7 w-7"
+                />
+                <span className="text-sm font-semibold text-obsidian-300 group-hover:text-obsidian-100 transition-colors tracking-tight">
+                  Bureau of Internet Culture
+                </span>
+              </a>
             </div>
           </motion.div>
         </div>
